@@ -1,0 +1,68 @@
+{
+  "pins" : [
+    {
+      "identity" : "asn1decoder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/filom/ASN1Decoder",
+      "state" : {
+        "revision" : "d30708c89cbbf8f0f27122a53fbd98d0cda079fd",
+        "version" : "1.9.0"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-iso18013-data-model",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
+      "state" : {
+        "branch" : "develop",
+        "revision" : "007fd011160522c7bbaedc78b83f5869dadf6c33"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-iso18013-data-transfer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
+      "state" : {
+        "branch" : "develop",
+        "revision" : "fe0b0204635862425269eb74302e1410257c4ad4"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-iso18013-security",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
+      "state" : {
+        "branch" : "develop",
+        "revision" : "e43b4cf893b11d7e9958258a00f0a07825db78d3"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "60f13f60c4d093691934dc6cfdf5f508ada1f894",
+        "version" : "2.6.0"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "cb28750240a9389e0023ee3e3cb6c83ce0960f5c"
+      }
+    },
+    {
+      "identity" : "swiftcbor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/valpackett/SwiftCBOR.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "edc01765cf6b3685bb622bb09242ef5964fb991b"
+      }
+    }
+  ],
+  "version" : 2
+}
