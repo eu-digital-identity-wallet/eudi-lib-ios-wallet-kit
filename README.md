@@ -7,10 +7,10 @@
 # EUDI ISO 18013-5 iOS Wallet Kit library
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Swift](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/actions/workflows/swift.yml/badge.svg)](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/actions/workflows/swift.yml)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=ncloc&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
-[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=duplicated_lines_density&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=reliability_rating&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=vulnerabilities&token=51e16407ebdedc85d6e978d8bc40b0ad3cf61216)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=ncloc&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=duplicated_lines_density&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=reliability_rating&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=vulnerabilities&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
 
 The initial implementation provides Proximity and Remote Flows for the EUDI Wallet. It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
@@ -22,35 +22,37 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 The ``UserWallet`` class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) and a [sample-data](Documentation/Reference/classes/DataSampleStorageService.md) implementation of document storage are available.
 
 ```swift
-			let storageSvc = DataSampleStorageService()
-			let wallet = UserWallet(storageService: storageSvc)
+let storageSvc = DataSampleStorageService()
+let wallet = UserWallet(storageService: storageSvc)
 ```	
 
 ## Presentation Service
 The [presentation service protocol](Documentation/Reference/protocols/PresentationService.md) abstracts the presentation flow. The [BlePresentationService](Documentation/Reference/classes/BlePresentationService.md) and [OpenId4VpService](Documentation/Reference/classes/OpenId4VpService.md) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](Documentation/Reference/classes/PresentationSession.md) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](Documentation/Reference/enums/FlowType.md).
 
 ```swift
-		let session = PresentationSession(presentationService: userWallet.beginPresentation(flow: flow))
-		ShareView(presentationSession: session)
+let session = PresentationSession(presentationService: userWallet.beginPresentation(flow: flow))
+ShareView(presentationSession: session)
 ```
 
 On view appearance the attestations are presented with the presentAttestations method. For the BLE (proximity) case the deviceEngagement property is populated with the QR code to be displayed on the holder device.
 
 ```swift
-		.task {
-			try? await presentationSession.presentAttestations()
-		}
+.task {
+ try? await presentationSession.presentAttestations()
+}
 ```
 After the request is received the selectedRequestItems contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
 
 ```swift
-		Task { try await presentationSession.sendResponse(userAccepted: true, itemsToSend: presentationSession.selectedRequestItems.docSelectedDictionary) }
+Task { try await presentationSession.sendResponse(userAccepted: true, itemsToSend: presentationSession.selectedRequestItems.docSelectedDictionary) }
 ```
 ### Dependencies
 
 The detailed functionality of the wallet kit is implemented in the following Swift Packages: [MdocDataModel18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git), [MdocSecurity18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git),  [MdocDataTransfer18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git) and
   [SiopOpenID4VP](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git)
 
+### Sample application  
+A sample application that demonstrates the usage of this library is [Holder Demo](https://github.com/eu-digital-identity-wallet/eudi-app-ios-iso18013-holder-demo).
 
 ### Disclaimer
 The released software is a initial development release version: 
