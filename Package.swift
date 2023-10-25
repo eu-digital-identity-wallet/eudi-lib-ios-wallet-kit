@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "EudiWalletKit",
-    platforms: [.macOS(.v12), .iOS("13.1")],
+	platforms: [.macOS(.v12), .iOS(.v14)],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
@@ -14,6 +14,7 @@ let package = Package(
     ],
     dependencies: [
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", branch: "develop"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", branch: "main"),
 		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
 	],
     targets: [
@@ -22,6 +23,7 @@ let package = Package(
         .target(
             name: "EudiWalletKit", dependencies: [
 		    	.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
+				.product(name: "SiopOpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
 	    	    .product(name: "Logging", package: "swift-log"),
 	        ]
         ),

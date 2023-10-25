@@ -14,11 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
-
-import Logging
+import Foundation
 import MdocDataModel18013
-// abstract logger. By default writes to console
-let logger = Logger(label: "EudiWalletKit")
+
+public typealias RequestItems = [String: [String: [String]]]
+
+public protocol PresentationService {
+	var status: TransferStatus { get }
+	var flow: FlowType { get }
+	func generateQRCode() async throws -> Data?
+	func receiveRequest() async throws -> [String: Any]
+	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+}
+
 

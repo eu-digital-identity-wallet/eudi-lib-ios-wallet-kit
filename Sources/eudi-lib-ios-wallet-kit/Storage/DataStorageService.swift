@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
+import Foundation
 
-import Logging
-import MdocDataModel18013
-// abstract logger. By default writes to console
-let logger = Logger(label: "EudiWalletKit")
-
+public protocol DataStorageService {
+	func loadDocument(id: String) throws -> Data
+	func saveDocument(id: String, value: inout Data) throws
+	func deleteDocument(id: String) throws
+	static var defaultId: String { get set }
+}
