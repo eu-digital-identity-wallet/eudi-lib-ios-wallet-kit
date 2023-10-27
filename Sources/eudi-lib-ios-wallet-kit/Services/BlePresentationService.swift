@@ -1,9 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by ffeli on 23/10/2023.
-//
 /*
 Copyright (c) 2023 European Commission
 
@@ -24,6 +18,7 @@ import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
 
+/// Implements attestation presentation with QR to BLE data transfer (proximity use case)
 class BlePresentationService : PresentationService {
 	var bleServerTransfer: MdocGattServer
 	var status: TransferStatus = .initializing
@@ -40,6 +35,10 @@ class BlePresentationService : PresentationService {
 		bleServerTransfer.delegate = self
 	}
 
+	/// Generate device engagement QR code 
+
+	/// The holder app should present the returned code to the verifier
+	/// - Returns: The image data for the QR code
 	public func generateQRCode() async throws -> Data? {
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
@@ -47,12 +46,20 @@ class BlePresentationService : PresentationService {
 		}
 	}
 	
+	///  Receive request via BLE
+	/// 
+	/// - Returns: The requested items. 
 	public func receiveRequest() async throws -> [String: Any] {
 		return try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
 	}
 	
+	/// Send response via BLE
+	/// 
+	/// - Parameters:
+	///   - userAccepted: True if user accepted to send the response
+	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
 		return try await withCheckedThrowingContinuation { c in
 			continuationResponse = c
@@ -63,7 +70,10 @@ class BlePresentationService : PresentationService {
 
 }
 
+/// handle events from underlying BLE service
 extension BlePresentationService: MdocOfflineDelegate {
+	/// BLE transfer changed status
+	/// - Parameter newStatus: New status
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
 		status = if let st = TransferStatus(rawValue: newStatus.rawValue) { st } else { .error }
 				switch newStatus {
@@ -79,13 +89,18 @@ extension BlePresentationService: MdocOfflineDelegate {
 		default: break
 				}
 	}
-	
+	/// Transfer finished with error
+	/// - Parameter error: The error description
 	public func didFinishedWithError(_ error: Error) {
 		continuationQrCode?.resume(throwing: error); continuationQrCode = nil
 		continuationRequest?.resume(throwing: error); continuationRequest = nil
 		continuationResponse?.resume(throwing: error); continuationResponse = nil
 	}
 	
+	/// Received request handler
+	/// - Parameters:
+	///   - request: Request items keyed by §UserRequestKeys§
+	///   - handleSelected: Callback function to call after user selection of items to send
 	public func didReceiveRequest(_ request: [String : Any], handleSelected: @escaping (Bool, MdocDataTransfer18013.RequestItems?) -> Void) {
 		self.handleSelected = handleSelected
 		self.request = request
