@@ -18,7 +18,6 @@ limitations under the License.
 // https://docs.swift.org/swift-book
 
 import Logging
-import MdocDataModel18013
 // abstract logger. By default writes to console
 let logger = Logger(label: "EudiWalletKit")
 

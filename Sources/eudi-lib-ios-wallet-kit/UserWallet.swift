@@ -18,6 +18,7 @@ import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
 
+/// User wallet implementation
 public class UserWallet: ObservableObject {
 	public var storageService: any DataStorageService
 	
@@ -25,6 +26,11 @@ public class UserWallet: ObservableObject {
 		self.storageService = storageService
 	}
 	
+	/// Begin attestation presentation to a verifier
+	/// - Parameters:
+	///   - flow: Presentation ``FlowType`` instance
+	///   - dataFormat: Exchanged data ``Format`` type
+	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		var parameters: [String: Any]
 		do {

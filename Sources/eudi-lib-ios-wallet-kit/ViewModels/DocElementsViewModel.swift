@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 
+/// View model used in SwiftUI for presentation request elements
 public struct DocElementsViewModel: Identifiable {
 	public var id: String { docType }
 	public let docType: String

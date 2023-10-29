@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 
+/// Fault presentation service. Used to communicate error state to the user
 class FaultPresentationService: PresentationService {
 	var status: TransferStatus = .error
 	var flow: FlowType = .ble

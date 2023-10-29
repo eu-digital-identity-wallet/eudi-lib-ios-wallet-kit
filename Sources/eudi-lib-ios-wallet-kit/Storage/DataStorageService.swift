@@ -16,6 +16,8 @@ limitations under the License.
 
 import Foundation
 
+
+/// Data storage protocol
 public protocol DataStorageService {
 	func loadDocument(id: String) throws -> Data
 	func saveDocument(id: String, value: inout Data) throws

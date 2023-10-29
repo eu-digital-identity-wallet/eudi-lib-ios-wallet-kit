@@ -17,24 +17,36 @@ limitations under the License.
 import Foundation
 import SwiftUI
 import Logging
-import MdocDataTransfer18013
+@_exported import MdocDataTransfer18013
 
+/// Presentation session
+///
+/// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 public class PresentationSession: ObservableObject {
 	var presentationService: any PresentationService
-	@Published public var readerCertIsserMessage: String?
+	/// Reader certificate issuer (only for BLE flow wih verifier using reader authentication)
+	@Published public var readerCertIssuerMessage: String?
+	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
+	/// Error message when the ``status`` is in the error state.
 	@Published public var errorMessage: String = ""
+	/// Request items selected by the user to be sent to verifier.
 	@Published public var selectedRequestItems: [DocElementsViewModel] = []
+	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
+	/// The ``FlowType`` instance
 	public var flow: FlowType { presentationService.flow }
-	public var handleSelected: ((Bool, RequestItems?) -> Void)?
-	@Published public var deviceEngagement: Data? 
+	var handleSelected: ((Bool, RequestItems?) -> Void)?
+	/// Device engagement data (QR image data for the BLE flow)
+	@Published public var deviceEngagement: Data?
 	
 	public init(presentationService: any PresentationService) {
 		self.presentationService = presentationService
 	}
 	
 	@MainActor
+	/// Decodes a presentation request
+	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
 	public func decodeRequest(_ request: [String: Any]) {
 		// show the items as checkboxes
 		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
@@ -45,7 +57,7 @@ public class PresentationSession: ObservableObject {
 		selectedRequestItems = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			//let bAuthenticated = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool ?? false
-			readerCertIsserMessage = "Reader Certificate Issuer:\n\(readerAuthority)"
+			readerCertIssuerMessage = "Reader Certificate Issuer:\n\(readerAuthority)"
 			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String ?? ""
 		}
 	}
@@ -54,7 +66,7 @@ public class PresentationSession: ObservableObject {
 		errorMessage = error.localizedDescription
 	}
 	
-	public static func makeError(str: String) -> NSError {
+	static func makeError(str: String) -> NSError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
 	}

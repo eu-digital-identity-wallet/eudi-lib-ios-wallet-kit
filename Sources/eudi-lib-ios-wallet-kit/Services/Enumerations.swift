@@ -18,27 +18,16 @@ limitations under the License.
 
 import Foundation
 
-/// Transfer status enumeration
-public enum TransferStatus: String {
-	case initializing
-	case initialized
-	case qrEngagementReady
-	case connected
-	case started
-	case requestReceived
-	case userSelected
-	case responseSent
-	case disconnected
-	case error
-}
-
+/// Data exchange flow type
 public enum FlowType: Codable, Hashable {
+	
 	case ble
 	case openid4vp(qrCode: Data)
-	
+	/// True if proximity flow type (currently ``ble``)
 	public var isProximity: Bool { switch self { case .ble: true; default: false } }
 }
 
+/// Data format of the exchanged data
 public enum DataFormat {
 	case cbor
 	case jwt

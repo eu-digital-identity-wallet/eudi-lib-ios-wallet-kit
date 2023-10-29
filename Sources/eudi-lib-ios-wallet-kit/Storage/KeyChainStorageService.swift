@@ -15,6 +15,7 @@
  */
 
 import Foundation
+/// Implements key-chain storage
 public class KeyChainStorageService: DataStorageService {
 	public static var defaultId: String = "eudiw"
 	var vcService = "eudiw"

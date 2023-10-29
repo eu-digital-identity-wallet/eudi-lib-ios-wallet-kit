@@ -19,6 +19,7 @@ import MdocDataModel18013
 import SwiftUI
 import Logging
 
+/// Sample data storage service
 public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	@Published public var euPidModel: EuPidModel?

@@ -26,6 +26,9 @@ import SiopOpenID4VP
 import JOSESwift
 import Logging
 
+/// Implements remote attestation presentation to online verifier
+
+/// Implementation is based on the OpenID4VP – Draft 18 specification
 class OpenId4VpService: PresentationService {
 	var status: TransferStatus = .initialized
 	var openid4VPlink: String
@@ -56,6 +59,9 @@ class OpenId4VpService: PresentationService {
 	
 	func generateQRCode() async throws -> Data? { nil }
 	
+	///  Receive request from an openid4vp URL
+	///
+	/// - Returns: The requested items.
 	func receiveRequest() async throws -> [String: Any] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
@@ -74,6 +80,11 @@ class OpenId4VpService: PresentationService {
 			}
 	}
 	
+	/// Send response via openid4vp
+	///
+	/// - Parameters:
+	///   - userAccepted: True if user accepted to send the response
+	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
 		guard let pd = presentationDefinition, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
@@ -102,6 +113,7 @@ class OpenId4VpService: PresentationService {
 		}
 	}
 	
+	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
 	func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) -> RequestItems? {
 		guard let fieldConstraints = presentationDefinition.inputDescriptors.first?.constraints.fields else { return nil }
 		guard let docType = fieldConstraints.first(where: {$0.paths.first == "$.mdoc.doctype" })?.filter?["const"] as? String else { return nil }
@@ -110,6 +122,7 @@ class OpenId4VpService: PresentationService {
 		return [docType:[namespace:requestedFields]]
 	}
 	
+	/// OpenId4VP wallet configuration
 	static var walletConf: WalletOpenId4VPConfiguration? = {
 		let VERIFIER_API = ProcessInfo.processInfo.environment["VERIFIER_API"] ?? "http://localhost:8080"
 		let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(VERIFIER_API)/wallet/public-keys.json")!))

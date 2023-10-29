@@ -18,7 +18,9 @@ import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
 
-/// Implements attestation presentation with QR to BLE data transfer (proximity use case)
+/// Implements proximity attestation presentation with QR to BLE data transfer
+
+/// Implementation is based on the ISO/IEC 18013-5 specification
 class BlePresentationService : PresentationService {
 	var bleServerTransfer: MdocGattServer
 	var status: TransferStatus = .initializing
