@@ -22,3 +22,15 @@ jobs:
         run: swift build
       - name: Run tests
         run: swift test
+      - name: Generate Docs
+            uses: fwcd/swift-docc-action@v1
+            with:
+              target: EudiWalletKit
+              output: ./docs
+              transform-for-static-hosting: 'true'
+              disable-indexing: 'true'
+              hosting-base-path: eudi-lib-ios-wallet-kit
+          - name: Upload artifact
+            uses: actions/upload-pages-artifact@v1
+            with:
+              path: ./docs
