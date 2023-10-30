@@ -18,7 +18,15 @@ jobs:
       - name: Fix Up Private GitHub URLs
         # Add personal access token to all private repo URLs 
         run: find . -type f \( -name 'Package.swift' -o -name 'Package.resolved' \) -exec sed -i '' "s/https:\/\/github.com\/eu-digital-identity-wallet/https:\/\/${{ secrets.USER_NAME }}:${{ secrets.USER_GITHUB_TOKEN }}@github.com\/eu-digital-identity-wallet/g" {} \;
-      - name: Build
-        run: swift build
-      - name: Run tests
-        run: swift test
+      - name: Generate Docs
+        uses: fwcd/swift-docc-action@v1
+        with:
+          target: EudiWalletKit
+          output: ./docs
+          transform-for-static-hosting: 'true'
+          disable-indexing: 'true'
+          hosting-base-path: eudi-lib-ios-wallet-kit
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./docs
