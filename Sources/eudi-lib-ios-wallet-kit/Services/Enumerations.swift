@@ -25,6 +25,7 @@ public enum FlowType: Codable, Hashable {
 	case openid4vp(qrCode: Data)
 	/// True if proximity flow type (currently ``ble``)
 	public var isProximity: Bool { switch self { case .ble: true; default: false } }
+	public var qrCode: Data? { if case let .openid4vp(qrCode) = self { qrCode} else { nil} }
 }
 
 /// Data format of the exchanged data
