@@ -24,9 +24,11 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	@Published public var euPidModel: EuPidModel?
 	@Published public var isoMdlModel: IsoMdlModel?
+	@Published public var conferenceModel: ConferenceBadgeModel?
 	var sampleData: Data?
 	@AppStorage("pidLoaded") public var pidLoaded: Bool = false
 	@AppStorage("mdlLoaded") public var mdlLoaded: Bool = false
+	@AppStorage("conferenceLoaded") public var conferenceLoaded: Bool = false
 	@AppStorage("DebugDisplay") var debugDisplay: Bool = false
 	let logger: Logger
 
@@ -34,13 +36,14 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 		logger = Logger(label: "logger")
 	}
 
-	public func getDoc(i: Int) -> MdocDecodable? { i == 0 ? euPidModel : isoMdlModel}
+	public func getDoc(i: Int) -> MdocDecodable? { switch i { case 0: euPidModel; case 1: isoMdlModel; case 2: conferenceModel; default: nil} }
 	public func removeDoc(i: Int) {
 		if i == 0 { euPidModel = nil; pidLoaded = false }
-		else { isoMdlModel = nil; mdlLoaded = false }
+		else if i == 1 { isoMdlModel = nil; mdlLoaded = false }
+		else { conferenceModel = nil; conferenceLoaded = false }
 	}
 	
-	public var hasData: Bool { pidLoaded && getDoc(i: 0) != nil || mdlLoaded && getDoc(i: 1) != nil }
+	public var hasData: Bool { pidLoaded && getDoc(i: 0) != nil || mdlLoaded && getDoc(i: 1) != nil || conferenceLoaded && getDoc(i: 2) != nil }
 	
 	public func loadSampleData(force: Bool = false) {
 		debugDisplay = true
@@ -51,6 +54,8 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 		pidLoaded = euPidModel != nil
 		if force || mdlLoaded { isoMdlModel = IsoMdlModel(response: dr, devicePrivateKey: dpk) }
 		mdlLoaded = isoMdlModel != nil
+		if force || conferenceLoaded { conferenceModel = ConferenceBadgeModel(response: dr, devicePrivateKey: dpk) }
+		conferenceLoaded = conferenceModel != nil
 	}
 	
 	public static var defaultId: String = "EUDI_sample_data"
