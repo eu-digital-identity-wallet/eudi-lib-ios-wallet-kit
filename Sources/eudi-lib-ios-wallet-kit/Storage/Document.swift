@@ -16,11 +16,10 @@ limitations under the License.
 
 import Foundation
 
-
-/// Data storage protocol
-public protocol DataStorageService {
-	func loadDocument(id: String) throws -> Document
-	func saveDocument(id: String, label: String, value: inout Data) throws
-	func deleteDocument(id: String) throws
-	static var defaultId: String { get set }
+public struct Document {
+	let id: String
+	let label: String
+	let data: Data
+	let createdAt: Date
+	let modifiedAt: Date?
 }

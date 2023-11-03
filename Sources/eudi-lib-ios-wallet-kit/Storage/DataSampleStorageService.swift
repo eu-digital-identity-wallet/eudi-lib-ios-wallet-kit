@@ -24,7 +24,7 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	@Published public var euPidModel: EuPidModel?
 	@Published public var isoMdlModel: IsoMdlModel?
-	var sampleData: Data?
+	var sampleData: Document?
 	@AppStorage("pidLoaded") public var pidLoaded: Bool = false
 	@AppStorage("mdlLoaded") public var mdlLoaded: Bool = false
 	@AppStorage("DebugDisplay") var debugDisplay: Bool = false
@@ -45,7 +45,7 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	public func loadSampleData(force: Bool = false) {
 		debugDisplay = true
 		guard let sd = try? loadDocument(id: Self.defaultId) else { return }
-		let sr = sd.decodeJSON(type: SignUpResponse.self)!
+		let sr = sd.data.decodeJSON(type: SignUpResponse.self)!
 		guard let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { return }
 		if force || pidLoaded { euPidModel = EuPidModel(response: dr, devicePrivateKey: dpk) }
 		pidLoaded = euPidModel != nil
@@ -55,13 +55,13 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	public static var defaultId: String = "EUDI_sample_data"
 	
-	public func loadDocument(id: String) throws -> Data {
+	public func loadDocument(id: String) throws -> Document {
 		if let sampleData { return sampleData }
-		sampleData = Data(name: id) ?? Data()
+		sampleData = Document(id: Self.defaultId, label: "", data: Data(name: id) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil) 
 		return sampleData!
 	}
 	
-	public func saveDocument(id: String, value: inout Data) throws {
+	public func saveDocument(id: String, label: String, value: inout Data) throws {
 	}
 	
 	public func deleteDocument(id: String) throws {

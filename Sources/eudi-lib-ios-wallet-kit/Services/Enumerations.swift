@@ -34,4 +34,9 @@ public enum DataFormat {
 	case jwt
 }
 
+public enum StorageType {
+	case keyChain
+	case sample
+}
+
 

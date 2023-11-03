@@ -22,8 +22,8 @@ import MdocDataTransfer18013
 public class UserWallet: ObservableObject {
 	public var storageService: any DataStorageService
 	
-	public init(storageService: any DataStorageService = KeyChainStorageService()) {
-		self.storageService = storageService
+	public init(storageType: StorageType = .keyChain) {
+		self.storageService = switch storageType { case .sample: DataSampleStorageService(); default: KeyChainStorageService() }
 	}
 	
 	/// Begin attestation presentation to a verifier
@@ -36,8 +36,8 @@ public class UserWallet: ObservableObject {
 		do {
 			switch dataFormat {
 			case .cbor:
-				let data = try storageService.loadDocument(id: type(of: storageService).defaultId)
-				guard let sr = data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw NSError(domain: "\(UserWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "Error in document data"]) }
+				let doc = try storageService.loadDocument(id: type(of: storageService).defaultId)
+				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw NSError(domain: "\(UserWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "Error in document data"]) }
 				parameters = [InitializeKeys.document_signup_response_data.rawValue: [dr],
 							  InitializeKeys.device_private_key.rawValue: dpk,
 							  InitializeKeys.trusted_certificates.rawValue: [Data(name: "scytales_root_ca", ext: "der")!]
