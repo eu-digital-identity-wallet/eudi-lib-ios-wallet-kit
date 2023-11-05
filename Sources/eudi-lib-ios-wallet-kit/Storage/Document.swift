@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 
+/// wallet document structure
 public struct Document {
 	let id: String
 	let label: String

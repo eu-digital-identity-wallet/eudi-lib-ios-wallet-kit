@@ -17,6 +17,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", branch: "develop"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", branch: "main"),
 		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
+		.package(url: "https://github.com/apple/swift-certificates.git", branch: "main")
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -26,6 +27,7 @@ let package = Package(
 		    	.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
 				.product(name: "SiopOpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
 	    	    .product(name: "Logging", package: "swift-log"),
+				.product(name: "X509", package: "swift-certificates")
 	        ]
         ),
         .testTarget(

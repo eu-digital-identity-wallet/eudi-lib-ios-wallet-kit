@@ -23,7 +23,14 @@ public class UserWallet: ObservableObject {
 	public var storageService: any DataStorageService
 	
 	public init(storageType: StorageType = .keyChain) {
-		self.storageService = switch storageType { case .sample: DataSampleStorageService(); default: KeyChainStorageService() }
+		let keyChain = KeyChainStorageService()
+		self.storageService = switch storageType { case .sample: DataSampleStorageService(storageService: keyChain); default: keyChain }
+	}
+	
+	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> Document) async throws {
+		let request = try IssueRequest()
+		var document = try await issuer(request)
+		try self.storageService.saveDocument(document)
 	}
 	
 	/// Begin attestation presentation to a verifier

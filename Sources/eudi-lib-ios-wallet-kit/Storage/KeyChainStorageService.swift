@@ -20,6 +20,7 @@ public class KeyChainStorageService: DataStorageService {
 	public static var defaultId: String = "eudiw"
 	var vcService = "eudiw"
 	var accessGroup: String?
+	var issuerFetching: ()
 	
 	public init() {}
 	
@@ -50,17 +51,18 @@ public class KeyChainStorageService: DataStorageService {
 	/// Note: the value passed in will be zeroed out after the secret is saved
 	/// - Parameters:
 	///   - id: The Id of the secret
-	///   - itemTypeCode: The secret type code (4 chars)
 	///   - accessGroup: The access group to use to save secret.
 	///   - value: The value of the secret
-	public func saveDocument(id: String, label: String, value: inout Data) throws {
-		defer { let c = value.count; value.withUnsafeMutableBytes { memset_s($0.baseAddress, c, 0, c); return } }
+	///   - label: label of the document
+	public func saveDocument(_ document: Document) throws {
 		// kSecAttrAccount is used to store the secret Id so that we can look it up later
 		// kSecAttrService is always set to vcService to enable us to lookup all our secrets later if needed
 		// kSecAttrType is used to store the secret type to allow us to cast it to the right Type on search
 		var query: [String: Any]
-		
-		query = [kSecClass: kSecClassGenericPassword, kSecAttrAccount: id, kSecAttrService: vcService, kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecValueData: value, kSecAttrLabel: label] as [String: Any]
+		query = [kSecClass: kSecClassGenericPassword, kSecAttrAccount: document.id, kSecAttrService: vcService, kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecValueData: document.data, kSecAttrLabel: document.label] as [String: Any]
+		#if os(macOS)
+		   		 [kSecUseDataProtectionKeychain as String] = kCFBooleanTrue
+	   #endif
 		
 		if let accessGroup, !accessGroup.isEmpty { query[kSecAttrAccessGroup as String] = accessGroup}
 		let status = SecItemAdd(query as CFDictionary, nil)

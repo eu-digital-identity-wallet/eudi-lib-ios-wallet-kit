@@ -24,14 +24,16 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	@Published public var euPidModel: EuPidModel?
 	@Published public var isoMdlModel: IsoMdlModel?
+	var storageService: any DataStorageService
 	var sampleData: Document?
 	@AppStorage("pidLoaded") public var pidLoaded: Bool = false
 	@AppStorage("mdlLoaded") public var mdlLoaded: Bool = false
 	@AppStorage("DebugDisplay") var debugDisplay: Bool = false
 	let logger: Logger
 
-	public init() {
+	public init(storageService: any DataStorageService) {
 		logger = Logger(label: "logger")
+		self.storageService = storageService
 	}
 
 	public func getDoc(i: Int) -> MdocDecodable? { i == 0 ? euPidModel : isoMdlModel}
@@ -57,11 +59,15 @@ public class DataSampleStorageService: ObservableObject, DataStorageService {
 	
 	public func loadDocument(id: String) throws -> Document {
 		if let sampleData { return sampleData }
-		sampleData = Document(id: Self.defaultId, label: "", data: Data(name: id) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil) 
+		do {sampleData = try storageService.loadDocument(id: id) }
+		catch { 
+			sampleData = Document(id: Self.defaultId, label: "sample", data: Data(name: id) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil)
+			try storageService.saveDocument(sampleData!)
+		}
 		return sampleData!
 	}
 	
-	public func saveDocument(id: String, label: String, value: inout Data) throws {
+	public func saveDocument(_ document: Document) throws {
 	}
 	
 	public func deleteDocument(id: String) throws {

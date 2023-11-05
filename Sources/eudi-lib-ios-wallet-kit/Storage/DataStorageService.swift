@@ -20,7 +20,7 @@ import Foundation
 /// Data storage protocol
 public protocol DataStorageService {
 	func loadDocument(id: String) throws -> Document
-	func saveDocument(id: String, label: String, value: inout Data) throws
+	func saveDocument(_ document: Document) throws
 	func deleteDocument(id: String) throws
 	static var defaultId: String { get set }
 }
