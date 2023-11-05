@@ -61,7 +61,7 @@ public class KeyChainStorageService: DataStorageService {
 		var query: [String: Any]
 		query = [kSecClass: kSecClassGenericPassword, kSecAttrAccount: document.id, kSecAttrService: vcService, kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecValueData: document.data, kSecAttrLabel: document.label] as [String: Any]
 		#if os(macOS)
-		   		 [kSecUseDataProtectionKeychain as String] = kCFBooleanTrue
+		query[kSecUseDataProtectionKeychain as String] = true
 	   #endif
 		
 		if let accessGroup, !accessGroup.isEmpty { query[kSecAttrAccessGroup as String] = accessGroup}

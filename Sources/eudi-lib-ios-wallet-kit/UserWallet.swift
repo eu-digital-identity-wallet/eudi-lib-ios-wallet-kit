@@ -29,7 +29,7 @@ public class UserWallet: ObservableObject {
 	
 	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> Document) async throws {
 		let request = try IssueRequest()
-		var document = try await issuer(request)
+		let document = try await issuer(request)
 		try self.storageService.saveDocument(document)
 	}
 	
