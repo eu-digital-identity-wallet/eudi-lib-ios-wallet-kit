@@ -36,7 +36,6 @@ public enum DataFormat {
 
 public enum StorageType {
 	case keyChain
-	case sample
 }
 
 

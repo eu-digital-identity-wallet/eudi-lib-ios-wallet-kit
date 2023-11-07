@@ -17,20 +17,41 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
+import WalletStorage
 
 /// User wallet implementation
-public class UserWallet: ObservableObject {
-	public var storageService: any DataStorageService
+@dynamicMemberLookup
+public class EudiWallet: ObservableObject {
+	var storageService: any DataStorageService
+	public var documentsViewModel: DocumentsViewModel
 	
 	public init(storageType: StorageType = .keyChain) {
-		let keyChain = KeyChainStorageService()
-		self.storageService = switch storageType { case .sample: DataSampleStorageService(storageService: keyChain); default: keyChain }
+		let keyChainObj = KeyChainStorageService()
+		self.storageService = switch storageType { case .keyChain:keyChainObj }
+		documentsViewModel = DocumentsViewModel(storageService: keyChainObj)
+		for (i,_) in DocumentsViewModel.knownDocTypes.enumerated() {
+			_ = documentsViewModel.getDoc(i: i)
+		}
 	}
 	
-	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> Document) async throws {
+	public subscript<T>(dynamicMember keyPath: KeyPath<DataStorageService, T>) -> T {
+		storageService[keyPath: keyPath]
+	}
+	
+	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> WalletStorage.Document) async throws {
 		let request = try IssueRequest()
 		let document = try await issuer(request)
 		try self.storageService.saveDocument(document)
+	}
+	
+	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
+		for (i,docType) in DocumentsViewModel.knownDocTypes.enumerated() {
+			documentsViewModel.hasModels[i] = nil; documentsViewModel.mdocModels[i] = nil // force refresh
+			let sampleDataFile = if let sampleDataFiles { sampleDataFiles[i] } else { "EUDI_sample_data" }
+			let docSample = Document(docType: docType, data: Data(name: sampleDataFile) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil)
+			try storageService.saveDocument(docSample)
+			_ = documentsViewModel.getDoc(i: i)
+		}
 	}
 	
 	/// Begin attestation presentation to a verifier
@@ -43,8 +64,8 @@ public class UserWallet: ObservableObject {
 		do {
 			switch dataFormat {
 			case .cbor:
-				let doc = try storageService.loadDocument(id: type(of: storageService).defaultId)
-				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw NSError(domain: "\(UserWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "Error in document data"]) }
+				guard let docs = try storageService.loadDocuments(), let doc = docs.first else { throw NSError(domain: "\(EudiWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "No documents found"]) }
+				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw NSError(domain: "\(EudiWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "Error in document data"]) }
 				parameters = [InitializeKeys.document_signup_response_data.rawValue: [dr],
 							  InitializeKeys.device_private_key.rawValue: dpk,
 							  InitializeKeys.trusted_certificates.rawValue: [Data(name: "scytales_root_ca", ext: "der")!]

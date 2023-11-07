@@ -24,7 +24,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "a0c5a37fbc689be66ed26519cbd66c44cb27bf5d"
+        "revision" : "518c7f2dd32e1ae014bf30685df1fd4d59a344d3"
       }
     },
     {
@@ -60,7 +60,16 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
         "branch" : "main",
-        "revision" : "66fe1eda233c6a76950d55443290d51f5a56f18e"
+        "revision" : "517e9f38f53dc0fcf8924086a473b1c2555bb848"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-wallet-storage",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "b1a932c86d003edc58c7305736d7f439aa87ef40"
       }
     },
     {
@@ -104,8 +113,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Sextant.git",
       "state" : {
-        "revision" : "49b567226e72ba4f22943e352e1ee3bf3bf4824e",
-        "version" : "0.4.24"
+        "revision" : "ac9f9feaab9563559d26e00a8c03fbab7e02c60a",
+        "version" : "0.4.25"
       }
     },
     {
