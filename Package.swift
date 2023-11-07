@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
 		.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", branch: "develop"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", branch: "main"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", branch: "develop"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", branch: "main"),
 		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
 		.package(url: "https://github.com/apple/swift-certificates.git", branch: "main")
