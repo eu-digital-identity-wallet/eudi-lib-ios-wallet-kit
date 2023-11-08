@@ -29,7 +29,7 @@ public class PresentationSession: ObservableObject {
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
 	/// Error message when the ``status`` is in the error state.
-	@Published public var errorMessage: String = ""
+	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
 	@Published public var disclosedDocuments: [DocElementsViewModel] = []
 	/// Status of the data transfer.
@@ -63,7 +63,7 @@ public class PresentationSession: ObservableObject {
 	}
 
 	public func didFinishedWithError(_ error: Error) {
-		errorMessage = error.localizedDescription
+		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
 	}
 	
 	static func makeError(str: String) -> NSError {
@@ -76,12 +76,6 @@ public class PresentationSession: ObservableObject {
 
 extension PresentationSession: PresentationService {
 	
-   @MainActor
-   @discardableResult	public func presentAttestations() async throws -> [String: Any] {
-		deviceEngagement = try await generateQRCode()
-		return try await receiveRequest()
-	}
-	
 	@MainActor
 	public func generateQRCode() async throws -> Data? {
 		do {
@@ -90,7 +84,7 @@ extension PresentationSession: PresentationService {
 			return data
 		} catch {
 			status = .error
-			self.errorMessage = error.localizedDescription
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
 			return nil
 		}
 	}
@@ -104,7 +98,7 @@ extension PresentationSession: PresentationService {
 			return request
 		} catch {
 			status = .error
-			self.errorMessage = error.localizedDescription
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
 			return [:]
 		}
 	}
@@ -117,7 +111,7 @@ extension PresentationSession: PresentationService {
 			status = .responseSent
 		} catch {
 			status = .error
-			self.errorMessage = error.localizedDescription
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
 		}
 	}
 }
