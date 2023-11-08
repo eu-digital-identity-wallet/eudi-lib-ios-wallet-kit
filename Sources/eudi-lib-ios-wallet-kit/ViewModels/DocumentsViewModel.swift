@@ -17,16 +17,14 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import WalletStorage
-import SwiftUI
 import Logging
 
 /// Sample data storage service
 public class DocumentsViewModel: ObservableObject {
 	public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
-	public var mdocModels: [MdocDecodable?]
-	@Published public var hasModels: [Bool?]
+	@Published  public var mdocModels: [MdocDecodable?] = []
+	public var modelIds: [String?] = []
 	var storageService: any DataStorageService
-	@AppStorage("DebugDisplay") var debugDisplay: Bool = false
 	@Published public var hasData: Bool = false
 	@Published public var docCount: Int = 0
 	let logger: Logger
@@ -34,37 +32,40 @@ public class DocumentsViewModel: ObservableObject {
 	public init(storageService: any DataStorageService) {
 		logger = Logger(label: "logger")
 		self.storageService = storageService
-		mdocModels = Self.knownDocTypes.map { _ in nil }
-		hasModels = Self.knownDocTypes.map { _ in nil }
 	}
 
 	fileprivate func refreshStatistics() {
-		hasData = !hasModels.compactMap { $0 }.allSatisfy { $0 == false}
-		docCount = hasModels.filter { $0 == true }.count
+		hasData = modelIds.compactMap { $0 }.count > 0
+		docCount = modelIds.compactMap { $0 }.count
+	}
+	
+	func loadDocuments() {
+		guard let docs = try? storageService.loadDocuments() else { return }
+		mdocModels = Self.knownDocTypes.map { _ in nil }
+		modelIds = Self.knownDocTypes.map { _ in nil }
+		for (i, docType) in DocumentsViewModel.knownDocTypes.enumerated() {
+			guard let doc = docs.first(where: { $0.docType == docType}) else { continue }
+			guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { continue
+			}
+			modelIds[i] = doc.id
+			mdocModels[i] = switch i {
+			case 0: EuPidModel(response: dr, devicePrivateKey: dpk)
+			case 1: IsoMdlModel(response: dr, devicePrivateKey: dpk)
+			default: nil
+			}
+		}
+		refreshStatistics()
 	}
 	
 	public func getDoc(i: Int) -> MdocDecodable? {
-		guard i < Self.knownDocTypes.count else { return nil }
-		if hasModels[i] == false { return nil }
-		if let model = mdocModels[i] { if hasModels[i] == nil { hasModels[i] = true; refreshStatistics() }; return model }
-		var model: MdocDecodable?
-		guard let doc = try? storageService.loadDocument(docType: Self.knownDocTypes[i]) else { hasModels[i] = false; return nil }
-		guard let sr = doc.data.decodeJSON(type: SignUpResponse.self) else { hasModels[i] = false; return nil }
-		guard let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { hasModels[i] = false; return nil }
-		model = switch i {
-		case 0: EuPidModel(response: dr, devicePrivateKey: dpk)
-		case 1: IsoMdlModel(response: dr, devicePrivateKey: dpk)
-		default: nil
-		}
-		hasModels[i] = model != nil; mdocModels[i] = model
-		refreshStatistics()
-		return model
+		guard i < Self.knownDocTypes.count, i < mdocModels.count else { return nil }
+		return mdocModels[i]
 	}
 	
 	public func removeDoc(i: Int) {
-		guard i < Self.knownDocTypes.count else { return }
-		try? storageService.deleteDocument(docType: Self.knownDocTypes[i])
-		hasModels[i] = false; mdocModels[i] = nil
+		guard i < Self.knownDocTypes.count, let id = modelIds[i] else { return }
+		try? storageService.deleteDocument(id: id)
+		modelIds[i] = nil; mdocModels[i] = nil
 		refreshStatistics()
 	}
 

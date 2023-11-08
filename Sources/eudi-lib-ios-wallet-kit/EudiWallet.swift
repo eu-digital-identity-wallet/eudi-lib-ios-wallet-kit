@@ -29,9 +29,6 @@ public class EudiWallet: ObservableObject {
 		let keyChainObj = KeyChainStorageService()
 		self.storageService = switch storageType { case .keyChain:keyChainObj }
 		documentsViewModel = DocumentsViewModel(storageService: keyChainObj)
-		for (i,_) in DocumentsViewModel.knownDocTypes.enumerated() {
-			_ = documentsViewModel.getDoc(i: i)
-		}
 	}
 	
 	public subscript<T>(dynamicMember keyPath: KeyPath<DataStorageService, T>) -> T {
@@ -46,12 +43,11 @@ public class EudiWallet: ObservableObject {
 	
 	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
 		for (i,docType) in DocumentsViewModel.knownDocTypes.enumerated() {
-			documentsViewModel.hasModels[i] = nil; documentsViewModel.mdocModels[i] = nil // force refresh
 			let sampleDataFile = if let sampleDataFiles { sampleDataFiles[i] } else { "EUDI_sample_data" }
 			let docSample = Document(docType: docType, data: Data(name: sampleDataFile) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil)
 			try storageService.saveDocument(docSample)
-			_ = documentsViewModel.getDoc(i: i)
 		}
+		documentsViewModel.loadDocuments()
 	}
 	
 	/// Begin attestation presentation to a verifier
