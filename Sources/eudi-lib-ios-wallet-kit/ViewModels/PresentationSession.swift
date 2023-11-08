@@ -31,7 +31,7 @@ public class PresentationSession: ObservableObject {
 	/// Error message when the ``status`` is in the error state.
 	@Published public var errorMessage: String = ""
 	/// Request items selected by the user to be sent to verifier.
-	@Published public var selectedRequestItems: [DocElementsViewModel] = []
+	@Published public var disclosedDocuments: [DocElementsViewModel] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// The ``FlowType`` instance
@@ -54,7 +54,7 @@ public class PresentationSession: ObservableObject {
 		if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
 			tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(valid: false))
 		}
-		selectedRequestItems = tmp
+		disclosedDocuments = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			//let bAuthenticated = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool ?? false
 			readerCertIssuerMessage = "Reader Certificate Issuer:\n\(readerAuthority)"

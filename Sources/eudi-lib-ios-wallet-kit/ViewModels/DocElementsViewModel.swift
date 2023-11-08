@@ -39,7 +39,7 @@ extension RequestItems {
 }
 
 extension Array where Element == DocElementsViewModel {
-	public var docSelectedDictionary: RequestItems { Dictionary(grouping: self, by: \.docType).mapValues { $0.first!.elements.filter(\.isSelected).nsDictionary } }
+	public var items: RequestItems { Dictionary(grouping: self, by: \.docType).mapValues { $0.first!.elements.filter(\.isSelected).nsDictionary } }
 
 	func merging(with other: Self) -> Self {
 		var res = Self()
