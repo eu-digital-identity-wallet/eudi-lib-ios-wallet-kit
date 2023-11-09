@@ -7,14 +7,18 @@
 - [Properties](#properties)
   - `storageService`
   - `documentsViewModel`
+  - `standard`
+  - `userAuthenticationRequired`
+  - `trustedReaderCertificates`
 - [Methods](#methods)
-  - `init(storageType:)`
+  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:)`
   - `issueDocument(id:issuer:)`
   - `loadSampleData(sampleDataFiles:)`
   - `beginPresentation(flow:dataFormat:)`
+  - `authorizedAction(isFallBack:dismiss:action:)`
 
 ```swift
-public class EudiWallet: ObservableObject
+public final class EudiWallet: ObservableObject
 ```
 
 User wallet implementation
@@ -32,11 +36,29 @@ var storageService: any DataStorageService
 public var documentsViewModel: DocumentsViewModel
 ```
 
-## Methods
-### `init(storageType:)`
+### `standard`
 
 ```swift
-public init(storageType: StorageType = .keyChain)
+public static private(set) var standard: EudiWallet = EudiWallet()
+```
+
+### `userAuthenticationRequired`
+
+```swift
+public var userAuthenticationRequired: Bool
+```
+
+### `trustedReaderCertificates`
+
+```swift
+public var trustedReaderCertificates: [Data]?
+```
+
+## Methods
+### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:)`
+
+```swift
+init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true)
 ```
 
 ### `issueDocument(id:issuer:)`
@@ -69,3 +91,9 @@ Begin attestation presentation to a verifier
 | ---- | ----------- |
 | flow | Presentation `FlowType` instance |
 | dataFormat | Exchanged data `Format` type |
+
+### `authorizedAction(isFallBack:dismiss:action:)`
+
+```swift
+public static func authorizedAction(isFallBack: Bool = false, dismiss: () -> Void, action: () async throws -> Void) async throws
+```

@@ -20,6 +20,9 @@
   - `decodeRequest(_:)`
   - `didFinishedWithError(_:)`
   - `makeError(str:)`
+  - `startQrEngagement()`
+  - `receiveRequest()`
+  - `sendResponse(userAccepted:itemsToSend:onCancel:)`
 
 ```swift
 public class PresentationSession: ObservableObject
@@ -130,4 +133,22 @@ public func didFinishedWithError(_ error: Error)
 
 ```swift
 static func makeError(str: String) -> NSError
+```
+
+### `startQrEngagement()`
+
+```swift
+public func startQrEngagement() async throws
+```
+
+### `receiveRequest()`
+
+```swift
+public func receiveRequest() async throws
+```
+
+### `sendResponse(userAccepted:itemsToSend:onCancel:)`
+
+```swift
+public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)?) async throws
 ```

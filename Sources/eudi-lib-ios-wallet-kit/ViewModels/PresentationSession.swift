@@ -73,45 +73,43 @@ public class PresentationSession: ObservableObject {
 	}
 	
 	public static var notAvailable: PresentationSession { PresentationSession(presentationService: FaultPresentationService(error: Self.makeError(str: "N/A"))) }
-}
-
-extension PresentationSession: PresentationService {
 	
-	@discardableResult @MainActor
-	public func startQrEngagement() async throws -> Data? {
+	@MainActor
+	public func startQrEngagement() async throws {
 		do {
 			let data = try await presentationService.startQrEngagement()
 			if let data, data.count > 0 {
 				deviceEngagement = data
 				status = .qrEngagementReady
 			}
-			return data
 		} catch {
 			status = .error
 			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
-			return nil
-		}
-	}
-	
-	@discardableResult @MainActor
-	public func receiveRequest() async throws -> [String: Any] {
-		do {
-			let request = try await presentationService.receiveRequest()
-			decodeRequest(request)
-			status = .requestReceived
-			return request
-		} catch {
-			status = .error
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
-			return [:]
 		}
 	}
 	
 	@MainActor
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
+	public func receiveRequest() async throws {
+		do {
+			let request = try await presentationService.receiveRequest()
+			decodeRequest(request)
+			status = .requestReceived
+		} catch {
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
+			status = .error
+		}
+	}
+	
+	@MainActor
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)?) async throws {
 		do {
 			status = .userSelected
-			 try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend)
+			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend) }
+			if EudiWallet.standard.userAuthenticationRequired {
+				try await EudiWallet.authorizedAction(dismiss: { onCancel?()}, action: action )
+			} else {
+				try await action()
+			}
 			status = .responseSent
 		} catch {
 			status = .error
