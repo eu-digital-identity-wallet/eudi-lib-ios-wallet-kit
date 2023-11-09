@@ -19,17 +19,19 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 - SIOPv2 – Draft
 
 ## Initialization
-The ``EudiWallet`` class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) implementation of document storage is available.
+The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) implementation of document storage is available.
 
 ```swift
-let wallet = EudiWallet(storageService: storageSvc)
+		wallet = EudiWallet.standard
+		wallet.userAuthenticationRequired = true
+		wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
 ```	
 
 ## Presentation Service
 The [presentation service protocol](Documentation/Reference/protocols/PresentationService.md) abstracts the presentation flow. The [BlePresentationService](Documentation/Reference/classes/BlePresentationService.md) and [OpenId4VpService](Documentation/Reference/classes/OpenId4VpService.md) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](Documentation/Reference/classes/PresentationSession.md) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](Documentation/Reference/enums/FlowType.md).
 
 ```swift
-let session = PresentationSession(presentationService: eudiWallet.beginPresentation(flow: flow))
+let session = eudiWallet.beginPresentation(flow: flow)
 // pass the session to a SwiftUI view
 ShareView(presentationSession: session)
 ```
@@ -37,14 +39,18 @@ ShareView(presentationSession: session)
 On view appearance the attestations are presented with the presentAttestations method. For the BLE (proximity) case the deviceEngagement property is populated with the QR code to be displayed on the holder device.
 
 ```swift
-.task {
- try? await presentationSession.presentAttestations()
-}
+ .task {
+	 if isProximitySharing { try? await presentationSession.startQrEngagement() }
+	 try? await presentationSession.receiveRequest()
+	}
+
 ```
 After the request is received the selectedRequestItems contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
 
 ```swift
-Task { try await presentationSession.sendResponse(userAccepted: true, itemsToSend: presentationSession.selectedRequestItems.docSelectedDictionary) }
+// Send the disclosed document items after biometric authentication (FaceID or TouchID)
+// if the user cancels biometric authentication, onCancel method is called
+_ = try await presentationSession.sendResponse(userAccepted: true, itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
 ```
 ### Dependencies
 
@@ -52,7 +58,7 @@ The detailed functionality of the wallet kit is implemented in the following Swi
   [SiopOpenID4VP](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git)
 
 ### Sample application  
-A sample application that demonstrates the usage of this library is [Holder Demo](https://github.com/eu-digital-identity-wallet/eudi-app-ios-iso18013-holder-demo).
+A sample application that demonstrates the usage of this library is [App Wallet UI](https://github.com/eu-digital-identity-wallet/eudi-app-ios-wallet-ui).
 
 ### Disclaimer
 The released software is a initial development release version: 
