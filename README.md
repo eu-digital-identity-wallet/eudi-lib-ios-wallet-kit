@@ -19,7 +19,7 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 - SIOPv2 – Draft
 
 ## Initialization
-The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) implementation of document storage is available.
+The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
 ```swift
 let wallet = EudiWallet.standard
@@ -45,12 +45,13 @@ On view appearance the attestations are presented with the presentAttestations m
   }
 
 ```
-After the request is received the selectedRequestItems contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
+After the request is received the disclosedDocuments contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
 
 ```swift
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
-_ = try await presentationSession.sendResponse(userAccepted: true, itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
+_ = try await presentationSession.sendResponse(userAccepted: true,
+  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
 ```
 ### Dependencies
 
