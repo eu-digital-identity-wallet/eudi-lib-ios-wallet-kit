@@ -14,6 +14,8 @@
 public struct DocElementsViewModel: Identifiable
 ```
 
+View model used in SwiftUI for presentation request elements
+
 ## Properties
 ### `id`
 

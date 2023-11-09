@@ -19,18 +19,18 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 - SIOPv2 – Draft
 
 ## Initialization
-The ``UserWallet`` class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) and a [sample-data](Documentation/Reference/classes/DataSampleStorageService.md) implementation of document storage are available.
+The ``EudiWallet`` class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) implementation of document storage is available.
 
 ```swift
-let storageSvc = DataSampleStorageService()
-let wallet = UserWallet(storageService: storageSvc)
+let wallet = EudiWallet(storageService: storageSvc)
 ```	
 
 ## Presentation Service
 The [presentation service protocol](Documentation/Reference/protocols/PresentationService.md) abstracts the presentation flow. The [BlePresentationService](Documentation/Reference/classes/BlePresentationService.md) and [OpenId4VpService](Documentation/Reference/classes/OpenId4VpService.md) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](Documentation/Reference/classes/PresentationSession.md) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](Documentation/Reference/enums/FlowType.md).
 
 ```swift
-let session = PresentationSession(presentationService: userWallet.beginPresentation(flow: flow))
+let session = PresentationSession(presentationService: eudiWallet.beginPresentation(flow: flow))
+// pass the session to a SwiftUI view
 ShareView(presentationSession: session)
 ```
 

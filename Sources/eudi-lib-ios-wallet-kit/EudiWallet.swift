@@ -18,21 +18,22 @@ import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
 import WalletStorage
+import LocalAuthentication
 
 /// User wallet implementation
-@dynamicMemberLookup
-public class EudiWallet: ObservableObject {
+public final class EudiWallet: ObservableObject {
 	var storageService: any DataStorageService
 	public var documentsViewModel: DocumentsViewModel
+	public static private(set) var standard: EudiWallet = EudiWallet()
+	public var userAuthenticationRequired: Bool
+	public var trustedReaderCertificates: [Data]?
 	
-	public init(storageType: StorageType = .keyChain) {
-		let keyChainObj = KeyChainStorageService()
+	init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true) {
+		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		self.storageService = switch storageType { case .keyChain:keyChainObj }
 		documentsViewModel = DocumentsViewModel(storageService: keyChainObj)
-	}
-	
-	public subscript<T>(dynamicMember keyPath: KeyPath<DataStorageService, T>) -> T {
-		storageService[keyPath: keyPath]
+		self.trustedReaderCertificates = trustedReaderCertificates
+		self.userAuthenticationRequired = userAuthenticationRequired
 	}
 	
 	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> WalletStorage.Document) async throws {
@@ -42,6 +43,7 @@ public class EudiWallet: ObservableObject {
 	}
 	
 	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
+		try? storageService.deleteDocuments()
 		for (i,docType) in DocumentsViewModel.knownDocTypes.enumerated() {
 			let sampleDataFile = if let sampleDataFiles { sampleDataFiles[i] } else { "EUDI_sample_data" }
 			let docSample = Document(docType: docType, data: Data(name: sampleDataFile) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil)
@@ -60,12 +62,10 @@ public class EudiWallet: ObservableObject {
 		do {
 			switch dataFormat {
 			case .cbor:
-				guard let docs = try storageService.loadDocuments(), let doc = docs.first else { throw NSError(domain: "\(EudiWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "No documents found"]) }
-				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw NSError(domain: "\(EudiWallet.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "Error in document data"]) }
-				parameters = [InitializeKeys.document_signup_response_data.rawValue: [dr],
-							  InitializeKeys.device_private_key.rawValue: dpk,
-							  InitializeKeys.trusted_certificates.rawValue: [Data(name: "scytales_root_ca", ext: "der")!]
-				]
+				guard let docs = try storageService.loadDocuments(), let doc = docs.first else { throw WalletError(description: "No documents found") }
+				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw WalletError(description: "Error in document data") }
+				parameters = [InitializeKeys.document_signup_response_data.rawValue: [dr], InitializeKeys.device_private_key.rawValue: dpk]
+				if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
 			default:
 				fatalError("jwt format not implemented")
 			}
@@ -79,6 +79,28 @@ public class EudiWallet: ObservableObject {
 			}
 		} catch {
 			return PresentationSession(presentationService: FaultPresentationService(error: error))
+		}
+	}
+	
+	@MainActor
+	public static func authorizedAction(isFallBack: Bool = false, dismiss: () -> Void, action: () async throws -> Void) async throws {
+		let context = LAContext()
+		var error: NSError?
+		let policy: LAPolicy = .deviceOwnerAuthentication
+		if context.canEvaluatePolicy(policy, error: &error) {
+			do {
+				let success = try await context.evaluatePolicy(policy, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: ""))
+				if success {
+					try await action()
+				}
+				else { dismiss()}
+			} catch let laError as LAError {
+				if !isFallBack, laError.code == .userFallback {
+					try await authorizedAction(isFallBack: true, dismiss: dismiss, action: action)
+				} else { dismiss() }
+			}
+		} else if let error {
+			throw WalletError(description: error.localizedDescription, code: error.code)
 		}
 	}
 }

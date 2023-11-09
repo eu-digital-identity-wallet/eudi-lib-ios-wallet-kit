@@ -6,10 +6,10 @@
 
 - [Properties](#properties)
   - `presentationService`
-  - `readerCertIsserMessage`
+  - `readerCertIssuerMessage`
   - `readerCertValidationMessage`
-  - `errorMessage`
-  - `selectedRequestItems`
+  - `uiError`
+  - `disclosedDocuments`
   - `status`
   - `flow`
   - `handleSelected`
@@ -25,6 +25,10 @@
 public class PresentationSession: ObservableObject
 ```
 
+Presentation session
+
+This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
+
 ## Properties
 ### `presentationService`
 
@@ -32,11 +36,13 @@ public class PresentationSession: ObservableObject
 var presentationService: any PresentationService
 ```
 
-### `readerCertIsserMessage`
+### `readerCertIssuerMessage`
 
 ```swift
-@Published public var readerCertIsserMessage: String?
+@Published public var readerCertIssuerMessage: String?
 ```
+
+Reader certificate issuer (only for BLE flow wih verifier using reader authentication)
 
 ### `readerCertValidationMessage`
 
@@ -44,17 +50,23 @@ var presentationService: any PresentationService
 @Published public var readerCertValidationMessage: String?
 ```
 
-### `errorMessage`
+Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
+
+### `uiError`
 
 ```swift
-@Published public var errorMessage: String = ""
+@Published public var uiError: WalletError?
 ```
 
-### `selectedRequestItems`
+Error message when the ``status`` is in the error state.
+
+### `disclosedDocuments`
 
 ```swift
-@Published public var selectedRequestItems: [DocElementsViewModel] = []
+@Published public var disclosedDocuments: [DocElementsViewModel] = []
 ```
+
+Request items selected by the user to be sent to verifier.
 
 ### `status`
 
@@ -62,16 +74,20 @@ var presentationService: any PresentationService
 @Published public var status: TransferStatus = .initializing
 ```
 
+Status of the data transfer.
+
 ### `flow`
 
 ```swift
 public var flow: FlowType
 ```
 
+The ``FlowType`` instance
+
 ### `handleSelected`
 
 ```swift
-public var handleSelected: ((Bool, RequestItems?) -> Void)?
+var handleSelected: ((Bool, RequestItems?) -> Void)?
 ```
 
 ### `deviceEngagement`
@@ -79,6 +95,8 @@ public var handleSelected: ((Bool, RequestItems?) -> Void)?
 ```swift
 @Published public var deviceEngagement: Data?
 ```
+
+Device engagement data (QR image data for the BLE flow)
 
 ### `notAvailable`
 
@@ -99,6 +117,9 @@ public init(presentationService: any PresentationService)
 public func decodeRequest(_ request: [String: Any])
 ```
 
+Decodes a presentation request
+- Parameter request: Keys are defined in the ``UserRequestKeys``
+
 ### `didFinishedWithError(_:)`
 
 ```swift
@@ -108,5 +129,5 @@ public func didFinishedWithError(_ error: Error)
 ### `makeError(str:)`
 
 ```swift
-public static func makeError(str: String) -> NSError
+static func makeError(str: String) -> NSError
 ```

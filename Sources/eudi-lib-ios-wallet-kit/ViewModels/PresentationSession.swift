@@ -18,6 +18,7 @@ import Foundation
 import SwiftUI
 import Logging
 @_exported import MdocDataTransfer18013
+import LocalAuthentication
 
 /// Presentation session
 ///
@@ -76,11 +77,14 @@ public class PresentationSession: ObservableObject {
 
 extension PresentationSession: PresentationService {
 	
-	@MainActor
-	public func generateQRCode() async throws -> Data? {
+	@discardableResult @MainActor
+	public func startQrEngagement() async throws -> Data? {
 		do {
-			let data = try await presentationService.generateQRCode()
-			if let data, data.count > 0 { status = .qrEngagementReady }
+			let data = try await presentationService.startQrEngagement()
+			if let data, data.count > 0 {
+				deviceEngagement = data
+				status = .qrEngagementReady
+			}
 			return data
 		} catch {
 			status = .error
@@ -89,7 +93,7 @@ extension PresentationSession: PresentationService {
 		}
 	}
 	
-	@MainActor
+	@discardableResult @MainActor
 	public func receiveRequest() async throws -> [String: Any] {
 		do {
 			let request = try await presentationService.receiveRequest()
@@ -107,11 +111,14 @@ extension PresentationSession: PresentationService {
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
 		do {
 			status = .userSelected
-			try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend)
+			 try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend)
 			status = .responseSent
 		} catch {
 			status = .error
 			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
 		}
 	}
+	
+	
+
 }

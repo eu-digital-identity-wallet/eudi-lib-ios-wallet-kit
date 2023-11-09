@@ -12,6 +12,8 @@
 public enum DataFormat
 ```
 
+Data format of the exchanged data
+
 ## Cases
 ### `cbor`
 

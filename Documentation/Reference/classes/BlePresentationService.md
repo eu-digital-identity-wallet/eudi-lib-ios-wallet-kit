@@ -16,13 +16,16 @@
   - `flow`
 - [Methods](#methods)
   - `init(parameters:)`
-  - `generateQRCode()`
+  - `startQrEngagement()`
   - `receiveRequest()`
   - `sendResponse(userAccepted:itemsToSend:)`
 
 ```swift
 class BlePresentationService : PresentationService
 ```
+
+Implements proximity attestation presentation with QR to BLE data transfer
+Implementation is based on the ISO/IEC 18013-5 specification
 
 ## Properties
 ### `bleServerTransfer`
@@ -86,11 +89,15 @@ var flow: FlowType
 public init(parameters: [String: Any]) throws
 ```
 
-### `generateQRCode()`
+### `startQrEngagement()`
 
 ```swift
-public func generateQRCode() async throws -> Data?
+public func startQrEngagement() async throws -> Data?
 ```
+
+Generate device engagement QR code 
+The holder app should present the returned code to the verifier
+- Returns: The image data for the QR code
 
 ### `receiveRequest()`
 
@@ -98,8 +105,25 @@ public func generateQRCode() async throws -> Data?
 public func receiveRequest() async throws -> [String: Any]
 ```
 
+ Receive request via BLE
+
+- Returns: The requested items.
+
 ### `sendResponse(userAccepted:itemsToSend:)`
 
 ```swift
 public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
 ```
+
+Send response via BLE
+
+- Parameters:
+  - userAccepted: True if user accepted to send the response
+  - itemsToSend: The selected items to send organized in document types and namespaces
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | True if user accepted to send the response |
+| itemsToSend | The selected items to send organized in document types and namespaces |

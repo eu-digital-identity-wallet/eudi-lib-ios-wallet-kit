@@ -19,7 +19,12 @@ public struct WalletError: LocalizedError {
 	var description: String
 	var code: Int
 	
-	init(description: String, code: Int = 0) {
+	public init(key: String, code: Int = 0) {
+		self.description = key.translated()
+		self.code = code
+	}
+	
+	public init(description: String, code: Int = 0) {
 		self.description = description
 		self.code = code
 	}

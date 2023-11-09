@@ -10,13 +10,15 @@
   - `error`
 - [Methods](#methods)
   - `init(error:)`
-  - `generateQRCode()`
+  - `startQrEngagement()`
   - `receiveRequest()`
   - `sendResponse(userAccepted:itemsToSend:)`
 
 ```swift
 class FaultPresentationService: PresentationService
 ```
+
+Fault presentation service. Used to communicate error state to the user
 
 ## Properties
 ### `status`
@@ -44,10 +46,10 @@ var error: Error
 init(error: Error)
 ```
 
-### `generateQRCode()`
+### `startQrEngagement()`
 
 ```swift
-func generateQRCode() async throws -> Data?
+func startQrEngagement() async throws -> Data?
 ```
 
 ### `receiveRequest()`
@@ -61,3 +63,10 @@ func receiveRequest() async throws -> [String : Any]
 ```swift
 func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
 ```
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | True if user accepted to send the response |
+| itemsToSend | The selected items to send organized in document types and namespaces (see `RequestItems`) |

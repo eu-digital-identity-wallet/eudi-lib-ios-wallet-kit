@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Iso18013HolderDemo
 Created on 04/10/2023 
 */
 
@@ -57,7 +56,7 @@ class OpenId4VpService: PresentationService {
 		self.openid4VPlink = openid4VPlink
 	}
 	
-	func generateQRCode() async throws -> Data? { nil }
+	func startQrEngagement() async throws -> Data? { nil }
 	
 	///  Receive request from an openid4vp URL
 	///

@@ -32,6 +32,7 @@ public class DocumentsViewModel: ObservableObject {
 	public init(storageService: any DataStorageService) {
 		logger = Logger(label: "logger")
 		self.storageService = storageService
+		loadDocuments()
 	}
 
 	fileprivate func refreshStatistics() {

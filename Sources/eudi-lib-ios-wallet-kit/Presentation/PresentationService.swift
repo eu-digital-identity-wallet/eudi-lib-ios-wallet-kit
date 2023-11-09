@@ -27,7 +27,7 @@ public protocol PresentationService {
 	/// instance of a presentation ``FlowType``
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
-	func generateQRCode() async throws -> Data?
+	func startQrEngagement() async throws -> Data?
 	///
 	/// - Returns: The requested items.
 	/// Receive request.

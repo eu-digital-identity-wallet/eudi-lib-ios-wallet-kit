@@ -41,7 +41,7 @@ class BlePresentationService : PresentationService {
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
-	public func generateQRCode() async throws -> Data? {
+	public func startQrEngagement() async throws -> Data? {
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
 			self.bleServerTransfer.performDeviceEngagement()
@@ -62,7 +62,7 @@ class BlePresentationService : PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws  {
 		return try await withCheckedThrowingContinuation { c in
 			continuationResponse = c
 			handleSelected?(userAccepted, itemsToSend)

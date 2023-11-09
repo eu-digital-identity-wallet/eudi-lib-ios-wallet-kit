@@ -9,10 +9,13 @@
   - `openid4vp(qrCode:)`
 - [Properties](#properties)
   - `isProximity`
+  - `qrCode`
 
 ```swift
 public enum FlowType: Codable, Hashable
 ```
+
+Data exchange flow type
 
 ## Cases
 ### `ble`
@@ -32,4 +35,12 @@ case openid4vp(qrCode: Data)
 
 ```swift
 public var isProximity: Bool
+```
+
+True if proximity flow type (currently ``ble``)
+
+### `qrCode`
+
+```swift
+public var qrCode: Data?
 ```
