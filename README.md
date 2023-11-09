@@ -22,9 +22,9 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A [KeyChain](Documentation/Reference/classes/KeyChainStorageService.md) implementation of document storage is available.
 
 ```swift
-		wallet = EudiWallet.standard
-		wallet.userAuthenticationRequired = true
-		wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
+let wallet = EudiWallet.standard
+wallet.userAuthenticationRequired = true
+wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
 ```	
 
 ## Presentation Service
@@ -40,9 +40,9 @@ On view appearance the attestations are presented with the presentAttestations m
 
 ```swift
  .task {
-	 if isProximitySharing { try? await presentationSession.startQrEngagement() }
+	if isProximitySharing { try? await presentationSession.startQrEngagement() }
 	 try? await presentationSession.receiveRequest()
-	}
+  }
 
 ```
 After the request is received the selectedRequestItems contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
