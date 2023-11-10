@@ -40,7 +40,7 @@ let session = eudiWallet.beginPresentation(flow: flow)
 ShareView(presentationSession: session)
 ```
 
-On view appearance the attestations are presented with the presentAttestations method. For the BLE (proximity) case the deviceEngagement property is populated with the QR code to be displayed on the holder device.
+On view appearance the attestations are presented with the receiveRequest method. For the BLE (proximity) case the deviceEngagement property is populated with the QR code to be displayed on the holder device.
 
 ```swift
  .task {
