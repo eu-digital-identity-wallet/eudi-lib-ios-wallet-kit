@@ -22,7 +22,7 @@ import LocalAuthentication
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
-	var storageService: any DataStorageService
+	public private(set) var storageService: any DataStorageService
 	public var documentsViewModel: DocumentsViewModel
 	public static private(set) var standard: EudiWallet = EudiWallet()
 	public var userAuthenticationRequired: Bool
