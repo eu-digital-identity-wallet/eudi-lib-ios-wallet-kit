@@ -58,6 +58,10 @@ public class DocumentsViewModel: ObservableObject {
 		refreshStatistics()
 	}
 	
+	public func getKnownDoc<T>(of: T.Type) -> T? where T: MdocDecodable {
+		mdocModels.first(where: { $0 != nil && type(of: $0!) == of}) as? T
+	}
+	
 	public func getDoc(i: Int) -> MdocDecodable? {
 		guard i < Self.knownDocTypes.count, i < mdocModels.count else { return nil }
 		return mdocModels[i]
