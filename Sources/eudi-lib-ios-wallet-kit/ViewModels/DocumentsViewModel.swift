@@ -22,12 +22,13 @@ import Logging
 
 /// Sample data storage service
 public class DocumentsViewModel: ObservableObject {
-	// public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
+	public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
 	public var docTypes: [String?] = []
 	@Published public var mdocModels: [MdocDecodable?] = []
 	public var modelIds: [String?] = []
 	var storageService: any DataStorageService
 	@Published public var hasData: Bool = false
+	@Published public var hasWellKnownData: Bool = false
 	@Published public var docCount: Int = 0
 	let logger: Logger
 
@@ -38,6 +39,7 @@ public class DocumentsViewModel: ObservableObject {
 	}
 
 	fileprivate func refreshStatistics() {
+		hasWellKnownData = !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
 		hasData = modelIds.compactMap { $0 }.count > 0
 		docCount = modelIds.compactMap { $0 }.count
 	}
