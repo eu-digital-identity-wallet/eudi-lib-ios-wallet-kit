@@ -21,7 +21,7 @@ import WalletStorage
 import Logging
 
 /// Sample data storage service
-public class DocumentsViewModel: ObservableObject {
+public class StorageModel: ObservableObject {
 	public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
 	public var docTypes: [String?] = []
 	@Published public var mdocModels: [MdocDecodable?] = []
@@ -30,6 +30,9 @@ public class DocumentsViewModel: ObservableObject {
 	@Published public var hasData: Bool = false
 	@Published public var hasWellKnownData: Bool = false
 	@Published public var docCount: Int = 0
+	@Published public var mdlModel: IsoMdlModel?
+	@Published public var pidModel: EuPidModel?
+	@Published public var otherModels: [GenericMdocModel] = []
 	let logger: Logger
 
 	public init(storageService: any DataStorageService) {
@@ -38,10 +41,13 @@ public class DocumentsViewModel: ObservableObject {
 		loadDocuments()
 	}
 
-	fileprivate func refreshStatistics() {
+	fileprivate func refreshPublishedVars() {
 		hasWellKnownData = !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
 		hasData = modelIds.compactMap { $0 }.count > 0
 		docCount = modelIds.compactMap { $0 }.count
+		mdlModel = getTypedDoc()
+		pidModel = getTypedDoc()
+		otherModels = getTypedDocs()
 	}
 	
 	/// Decompose CBOR device responses from data
@@ -70,8 +76,8 @@ public class DocumentsViewModel: ObservableObject {
 		}
 	}
 	
-	func loadDocuments() {
-		guard let docs = try? storageService.loadDocuments() else { return }
+	@discardableResult func loadDocuments() -> [WalletStorage.Document]? {
+		guard let docs = try? storageService.loadDocuments() else { return nil }
 		docTypes = docs.map(\.docType)
 		mdocModels = docs.map { _ in nil }
 		modelIds = docs.map(\.id)
@@ -83,23 +89,38 @@ public class DocumentsViewModel: ObservableObject {
 			default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 			}
 		}
-		refreshStatistics()
+		refreshPublishedVars()
+		return docs
 	}
 	
-	public func getKnownDoc<T>(of: T.Type) -> T? where T: MdocDecodable {
+	public func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
 		mdocModels.first(where: { $0 != nil && type(of: $0!) == of}) as? T
 	}
 	
-	public func getDoc(i: Int) -> MdocDecodable? {
-		guard i < mdocModels.count else { return nil }
-		return mdocModels[i]
+	public func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: MdocDecodable {
+		mdocModels.filter({ $0 != nil && type(of: $0!) == of}).map { $0 as! T }
 	}
 	
-	public func removeDoc(i: Int) {
-		guard i < modelIds.count, let id = modelIds[i] else { return }
+	public func getDoc(index: Int) -> MdocDecodable? {
+		guard index < mdocModels.count else { return nil }
+		return mdocModels[index]
+	}
+	
+	public func getDoc(docType: String) -> MdocDecodable? {
+		guard let i = docTypes.firstIndex(of: docType)  else { return nil }
+		return getDoc(index: i)
+	}
+	
+	public func removeDoc(docType: String) {
+		guard let i = docTypes.firstIndex(of: docType)  else { return }
+		removeDoc(index: i)
+	}
+	
+	public func removeDoc(index: Int) {
+		guard index < modelIds.count, let id = modelIds[index] else { return }
 		try? storageService.deleteDocument(id: id)
-		modelIds[i] = nil; mdocModels[i] = nil; docTypes[i] = nil
-		refreshStatistics()
+		modelIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
+		refreshPublishedVars()
 	}
 
 
