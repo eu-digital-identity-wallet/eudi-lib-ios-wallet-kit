@@ -44,11 +44,10 @@ public final class EudiWallet: ObservableObject {
 	
 	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
 		try? storageService.deleteDocuments()
-		for (i,docType) in DocumentsViewModel.knownDocTypes.enumerated() {
-			let sampleDataFile = if let sampleDataFiles { sampleDataFiles[i] } else { "EUDI_sample_data" }
-			let docSample = Document(docType: docType, data: Data(name: sampleDataFile) ?? Data(), createdAt: Date.distantPast, modifiedAt: nil)
-			try storageService.saveDocument(docSample)
-		}
+		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
+			.compactMap(DocumentsViewModel.decomposeCBORSignupResponse(data:)).flatMap {$0}
+			.map {  Document(docType: $0.docType, data: $0.jsonData, createdAt: Date.distantPast, modifiedAt: nil) }
+		for docSample in docSamples { try storageService.saveDocument(docSample) }
 		documentsViewModel.loadDocuments()
 	}
 	
@@ -57,14 +56,18 @@ public final class EudiWallet: ObservableObject {
 	///   - flow: Presentation ``FlowType`` instance
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
-	public func beginPresentation(flow: FlowType, dataFormat: DataFormat = .cbor) -> PresentationSession {
+	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		var parameters: [String: Any]
 		do {
 			switch dataFormat {
 			case .cbor:
-				guard let docs = try storageService.loadDocuments(), let doc = docs.first else { throw WalletError(description: "No documents found") }
-				guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { throw WalletError(description: "Error in document data") }
-				parameters = [InitializeKeys.document_signup_response_data.rawValue: [dr], InitializeKeys.device_private_key.rawValue: dpk]
+				guard var docs = try storageService.loadDocuments(), docs.count > 0 else { throw WalletError(description: "No documents found") }
+				if let docType { docs = docs.filter { $0.docType == docType} }
+				if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
+				let srs = docs.compactMap {$0.data.decodeJSON(type: SignUpResponse.self)}; let drs = srs.compactMap(\.deviceResponse)
+				guard drs.count > 0 else { throw WalletError(description: "Documents decode error") }
+				guard let sr = srs.first, let dpk = sr.devicePrivateKey else { throw WalletError(description: "Error: No private key found") }
+				parameters = [InitializeKeys.document_signup_response_data.rawValue: drs, InitializeKeys.device_private_key.rawValue: dpk]
 				if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
 			default:
 				fatalError("jwt format not implemented")
