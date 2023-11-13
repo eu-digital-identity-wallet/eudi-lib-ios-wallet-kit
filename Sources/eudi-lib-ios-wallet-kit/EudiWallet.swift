@@ -46,7 +46,7 @@ public final class EudiWallet: ObservableObject {
 	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
 		try? storageService.deleteDocuments()
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
-			.compactMap(StorageModel.decomposeCBORSignupResponse(data:)).flatMap {$0}
+			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
 			.map {  Document(docType: $0.docType, data: $0.jsonData, createdAt: Date.distantPast, modifiedAt: nil) }
 		for docSample in docSamples { try storageService.saveDocument(docSample) }
 		storage.loadDocuments()
