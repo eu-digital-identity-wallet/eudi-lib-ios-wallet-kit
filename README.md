@@ -67,6 +67,10 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
  await presentationSession.sendResponse(userAccepted: true,
   itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
 ```
+
+## Reference
+Detailed documentation is provided [here](Documentation/Reference/README.md) 
+
 ### Dependencies
 
 The detailed functionality of the wallet kit is implemented in the following Swift Packages: [MdocDataModel18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git), [MdocSecurity18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git),  [MdocDataTransfer18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git) and
