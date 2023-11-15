@@ -27,9 +27,18 @@ wallet.userAuthenticationRequired = true
 wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
 ```	
 
-## Storage Service
-The read-only property ``storageService`` is an instance of a [DataStorageService](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage/blob/main/Documentation/Reference/protocols/DataStorageService.md) 
+## Storage Model
+The read-only property ``storage`` is an instance of a [StorageModel](Documentation/Reference/classes/StorageModel.md) 
 Currently the keychain implementation is used. It provides document management functionality using the iOS KeyChain.
+
+The storage model provides the following models for the supported well-known document types:
+
+|DocType|Model|
+|-------|-----|
+|eu.europa.ec.eudiw.pid.1|[EuPidModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/EuPidModel.md)|
+|org.iso.18013.5.1.mDL|[IsoMdlModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/IsoMdlModel.md)|
+
+For other document types the [GenericMdocModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/GenericMdocModel.md) is provided.
 
 ## Presentation Service
 The [presentation service protocol](Documentation/Reference/protocols/PresentationService.md) abstracts the presentation flow. The [BlePresentationService](Documentation/Reference/classes/BlePresentationService.md) and [OpenId4VpService](Documentation/Reference/classes/OpenId4VpService.md) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](Documentation/Reference/classes/PresentationSession.md) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](Documentation/Reference/enums/FlowType.md).
@@ -44,7 +53,8 @@ On view appearance the attestations are presented with the receiveRequest method
 
 ```swift
  .task {
-	if isProximitySharing { try? await presentationSession.startQrEngagement() }
+  // when the view appears present the QR (for proximity case) and wait for the presentation request
+	if presentationSession.flow.isProximity { try? await presentationSession.startQrEngagement() }
 	 try? await presentationSession.receiveRequest()
   }
 
