@@ -19,12 +19,14 @@ The initial implementation provides Proximity and Remote Flows for the EUDI Wall
 - SIOPv2 – Draft
 
 ## Initialization
-The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the 2 user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
+The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
 ```swift
 let wallet = EudiWallet.standard
 wallet.userAuthenticationRequired = true
 wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
+wallet.openId4VpVerifierApiUri = "https:// ... verifier api uri ..."
+wallet.loadDocuments()
 ```	
 
 ## Storage Manager
@@ -52,19 +54,17 @@ ShareView(presentationSession: session)
 On view appearance the attestations are presented with the receiveRequest method. For the BLE (proximity) case the deviceEngagement property is populated with the QR code to be displayed on the holder device.
 
 ```swift
- .task {
-  // when the view appears present the QR (for proximity case) and wait for the presentation request
-	if presentationSession.flow.isProximity { try? await presentationSession.startQrEngagement() }
-	 try? await presentationSession.receiveRequest()
-  }
-
+.task {
+	 if presentationSession.flow.isProximity { await presentationSession.startQrEngagement() }
+	 _ = await presentationSession.receiveRequest()
+}
 ```
-After the request is received the disclosedDocuments contains the requested attested items. It can be modified from the UI before the presentation is sent with user selective disclosure. Finally the presentation is sent with the following code: 
+After the request is received the ``presentationSession.disclosedDocuments`` contains the requested attested items. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
 
 ```swift
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
-_ = try await presentationSession.sendResponse(userAccepted: true,
+ await presentationSession.sendResponse(userAccepted: true,
   itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
 ```
 ### Dependencies
