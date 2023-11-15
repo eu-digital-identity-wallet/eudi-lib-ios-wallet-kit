@@ -20,41 +20,53 @@ import MdocDataModel18013
 import WalletStorage
 import Logging
 
-/// Sample data storage service
-public class StorageModel: ObservableObject {
+/// Storage manager. Provides services and view models
+public class StorageManager: ObservableObject {
 	public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
+	/// Array of doc.types of documents loaded in the wallet
 	public var docTypes: [String?] = []
+	/// Array of document models loaded in the wallet
 	@Published public var mdocModels: [MdocDecodable?] = []
-	public var modelIds: [String?] = []
+	/// Array of document identifiers loaded in the wallet
+	public var documentIds: [String?] = []
 	var storageService: any DataStorageService
+	/// Whether wallet currently has loaded data
 	@Published public var hasData: Bool = false
+	/// Whether wallet currently has loaded a document with doc.type included in the ``knownDocTypes`` array
 	@Published public var hasWellKnownData: Bool = false
+	/// Count of documents loaded in the wallet
 	@Published public var docCount: Int = 0
+	/// The driver license model loaded in the wallet
 	@Published public var mdlModel: IsoMdlModel?
+	/// The PID model loaded in the wallet
 	@Published public var pidModel: EuPidModel?
+	/// Other document models loaded in the wallet
 	@Published public var otherModels: [GenericMdocModel] = []
 	let logger: Logger
 
 	public init(storageService: any DataStorageService) {
-		logger = Logger(label: "logger")
+		logger = Logger(label: "\(StorageManager.self)")
 		self.storageService = storageService
-		loadDocuments()
 	}
 
 	fileprivate func refreshPublishedVars() {
 		hasWellKnownData = !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
-		hasData = modelIds.compactMap { $0 }.count > 0
-		docCount = modelIds.compactMap { $0 }.count
+		hasData = documentIds.compactMap { $0 }.count > 0
+		docCount = documentIds.compactMap { $0 }.count
 		mdlModel = getTypedDoc()
 		pidModel = getTypedDoc()
 		otherModels = getTypedDocs()
 	}
 	
-	@discardableResult func loadDocuments() -> [WalletStorage.Document]? {
+	/// Load documents from storage
+	///
+	/// Internally sets the ``docTypes``, ``mdocModels``, ``documentIds``, ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
+	/// - Returns: An array of ``WalletStorage.Document`` objects
+	@discardableResult public func loadDocuments() -> [WalletStorage.Document]? {
 		guard let docs = try? storageService.loadDocuments() else { return nil }
 		docTypes = docs.map(\.docType)
 		mdocModels = docs.map { _ in nil }
-		modelIds = docs.map(\.id)
+		documentIds = docs.map(\.id)
 		for (i, doc) in docs.enumerated() {
 			guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { continue }
 			mdocModels[i] = switch doc.docType {
@@ -67,33 +79,43 @@ public class StorageModel: ObservableObject {
 		return docs
 	}
 	
-	public func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
+	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
 		mdocModels.first(where: { $0 != nil && type(of: $0!) == of}) as? T
 	}
 	
-	public func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: MdocDecodable {
+	func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: MdocDecodable {
 		mdocModels.filter({ $0 != nil && type(of: $0!) == of}).map { $0 as! T }
 	}
 	
-	public func getDoc(index: Int) -> MdocDecodable? {
+	/// Get document model by index
+	/// - Parameter index: Index in array of loaded models
+	/// - Returns: The ``MdocDecodable`` model
+	public func getDocumentModel(index: Int) -> MdocDecodable? {
 		guard index < mdocModels.count else { return nil }
 		return mdocModels[index]
 	}
 	
-	public func getDoc(docType: String) -> MdocDecodable? {
+	/// Get document model by docType
+	/// - Parameter docType: The docType of the document model to return
+	/// - Returns: The ``MdocDecodable`` model
+	public func getDocumentModel(docType: String) -> MdocDecodable? {
 		guard let i = docTypes.firstIndex(of: docType)  else { return nil }
-		return getDoc(index: i)
+		return getDocumentModel(index: i)
 	}
 	
-	public func removeDoc(docType: String) {
+	/// Delete document by docType
+	/// - Parameter docType: Document type
+	public func deleteDocument(docType: String) {
 		guard let i = docTypes.firstIndex(of: docType)  else { return }
-		removeDoc(index: i)
+		deleteDocument(index: i)
 	}
 	
-	public func removeDoc(index: Int) {
-		guard index < modelIds.count, let id = modelIds[index] else { return }
+	/// Delete document by Index
+	/// - Parameter index: Index in array of loaded models
+	public func deleteDocument(index: Int) {
+		guard index < documentIds.count, let id = documentIds[index] else { return }
 		try? storageService.deleteDocument(id: id)
-		modelIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
+		documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
 		refreshPublishedVars()
 	}
 

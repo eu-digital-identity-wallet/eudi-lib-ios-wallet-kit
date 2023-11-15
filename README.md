@@ -27,8 +27,8 @@ wallet.userAuthenticationRequired = true
 wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
 ```	
 
-## Storage Model
-The read-only property ``storage`` is an instance of a [StorageModel](Documentation/Reference/classes/StorageModel.md) 
+## Storage Manager
+The read-only property ``storage`` is an instance of a [StorageManager](Documentation/Reference/classes/StorageManager.md) 
 Currently the keychain implementation is used. It provides document management functionality using the iOS KeyChain.
 
 The storage model provides the following models for the supported well-known document types:

@@ -38,18 +38,20 @@ class OpenId4VpService: PresentationService {
 	var presentationDefinition: PresentationDefinition?
 	var resolvedRequestData: ResolvedRequestData?
 	var siopOpenId4Vp: SiopOpenID4VP!
+	var walletConf: WalletOpenId4VPConfiguration!
 	var flow: FlowType
 
-	init(parameters: [String: Any], qrCode: Data) throws {
+	init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
-		guard let wallet = Self.walletConf else {
+		guard let cfg = Self.getWalletConf(verifierApiUrl: openId4VpVerifierApiUri ?? "http://localhost:8080") else {
 			throw PresentationSession.makeError(str: "INVALID_WALLET_CONFIGURATION")
 		}
+		walletConf = cfg
 		guard let (docs, devicePrivateKey, iaca) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
 		}
 		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca
-		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: wallet)
+		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: walletConf)
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
@@ -102,7 +104,7 @@ class OpenId4VpService: PresentationService {
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData) async throws {
 		let consent: ClientConsent = if let vpTokenStr { .vpToken(vpToken: vpTokenStr, presentationSubmission: .init(id: pd.id, definitionID: pd.id, descriptorMap: [])) } else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
-		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: Self.walletConf!)
+		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: walletConf)
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
@@ -122,16 +124,14 @@ class OpenId4VpService: PresentationService {
 	}
 	
 	/// OpenId4VP wallet configuration
-	static var walletConf: WalletOpenId4VPConfiguration? = {
-		let VERIFIER_API = ProcessInfo.processInfo.environment["VERIFIER_API"] ?? "http://localhost:8080"
-		let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(VERIFIER_API)/wallet/public-keys.json")!))
+	static func getWalletConf(verifierApiUrl: String) -> WalletOpenId4VPConfiguration? {
+	let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 		guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
 			  let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
 		var res = WalletOpenId4VPConfiguration(subjectSyntaxTypesSupported: [], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), idTokenTTL: 10 * 60, presentationDefinitionUriSupported: true, signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])], vpFormatsSupported: [])
 		return res
-	}()
-	
-	
+	}
+
 }
