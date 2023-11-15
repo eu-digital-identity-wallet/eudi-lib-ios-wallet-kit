@@ -5,21 +5,18 @@
 **Contents**
 
 - [Properties](#properties)
-  - `presentationService`
   - `readerCertIssuerMessage`
   - `readerCertValidationMessage`
   - `uiError`
   - `disclosedDocuments`
   - `status`
   - `flow`
-  - `handleSelected`
   - `deviceEngagement`
   - `notAvailable`
 - [Methods](#methods)
   - `init(presentationService:)`
   - `decodeRequest(_:)`
   - `didFinishedWithError(_:)`
-  - `makeError(str:)`
   - `startQrEngagement()`
   - `receiveRequest()`
   - `sendResponse(userAccepted:itemsToSend:onCancel:)`
@@ -33,12 +30,6 @@ Presentation session
 This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 
 ## Properties
-### `presentationService`
-
-```swift
-var presentationService: any PresentationService
-```
-
 ### `readerCertIssuerMessage`
 
 ```swift
@@ -87,12 +78,6 @@ public var flow: FlowType
 
 The ``FlowType`` instance
 
-### `handleSelected`
-
-```swift
-var handleSelected: ((Bool, RequestItems?) -> Void)?
-```
-
 ### `deviceEngagement`
 
 ```swift
@@ -127,12 +112,6 @@ Decodes a presentation request
 
 ```swift
 public func didFinishedWithError(_ error: Error)
-```
-
-### `makeError(str:)`
-
-```swift
-static func makeError(str: String) -> NSError
 ```
 
 ### `startQrEngagement()`

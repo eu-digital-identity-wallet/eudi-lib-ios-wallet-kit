@@ -5,16 +5,14 @@
 **Contents**
 
 - [Properties](#properties)
-  - `storageService`
-  - `documentsViewModel`
+  - `storage`
   - `standard`
   - `userAuthenticationRequired`
   - `trustedReaderCertificates`
 - [Methods](#methods)
-  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:)`
   - `issueDocument(id:issuer:)`
   - `loadSampleData(sampleDataFiles:)`
-  - `beginPresentation(flow:dataFormat:)`
+  - `beginPresentation(flow:docType:dataFormat:)`
   - `authorizedAction(isFallBack:dismiss:action:)`
 
 ```swift
@@ -24,16 +22,10 @@ public final class EudiWallet: ObservableObject
 User wallet implementation
 
 ## Properties
-### `storageService`
+### `storage`
 
 ```swift
-var storageService: any DataStorageService
-```
-
-### `documentsViewModel`
-
-```swift
-public var documentsViewModel: DocumentsViewModel
+public private(set) var storage: StorageModel
 ```
 
 ### `standard`
@@ -55,12 +47,6 @@ public var trustedReaderCertificates: [Data]?
 ```
 
 ## Methods
-### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:)`
-
-```swift
-init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true)
-```
-
 ### `issueDocument(id:issuer:)`
 
 ```swift
@@ -73,10 +59,10 @@ public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throw
 public func loadSampleData(sampleDataFiles: [String]? = nil) throws
 ```
 
-### `beginPresentation(flow:dataFormat:)`
+### `beginPresentation(flow:docType:dataFormat:)`
 
 ```swift
-public func beginPresentation(flow: FlowType, dataFormat: DataFormat = .cbor) -> PresentationSession
+public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession
 ```
 
 Begin attestation presentation to a verifier
