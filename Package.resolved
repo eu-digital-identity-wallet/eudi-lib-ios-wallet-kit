@@ -24,7 +24,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "7d28b97313c8a247f1e862875c985bc8db9b5df1"
+        "revision" : "f789d682824183a5c648c186486caaef0b9a303a"
       }
     },
     {
@@ -33,7 +33,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "cfa9a625df4bac180317b57bb2044720049362e9"
+        "revision" : "b8996805fcf7f46739dedffe5aa26421dabfaed6"
       }
     },
     {
@@ -41,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "919aae995e0cc8294a830cb6fb70032f6e4d4876"
+        "revision" : "68e31dd168e3af20d676986892751a46db304b63",
+        "version" : "0.1.2"
       }
     },
     {
@@ -69,7 +69,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "c4d350123df46a1cea3db150ba4b33745f5e2401"
+        "revision" : "17bec9f9a0310de7efd6e5893898efb158cf4a1a"
       }
     },
     {
@@ -167,8 +167,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/valpackett/SwiftCBOR.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "edc01765cf6b3685bb622bb09242ef5964fb991b"
+        "revision" : "edc01765cf6b3685bb622bb09242ef5964fb991b",
+        "version" : "0.4.6"
       }
     }
   ],
