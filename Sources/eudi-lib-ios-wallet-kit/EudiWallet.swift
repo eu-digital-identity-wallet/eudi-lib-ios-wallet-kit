@@ -48,10 +48,14 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - id: Document identifier
 	///   - issuer: Issuer function
-	public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> WalletStorage.Document) async throws {
-		let request = try IssueRequest()
-		let document = try await issuer(request)
-		try storage.storageService.saveDocument(document)
+	public func beginIssueDocument(id: String) async throws -> IssueRequest {
+		let request = try IssueRequest(id: id)
+		try request.saveToStorage(storage.storageService)
+		return request
+	}
+	
+	public func endIssueDocument(_ issued: WalletStorage.Document) throws {
+		try storage.storageService.saveDocumentData(issued, dataToSaveType: .doc, dataType: issued.docDataType.rawValue, allowOverwrite: true)
 	}
 	
 	/// Load documents from storage
@@ -70,8 +74,8 @@ public final class EudiWallet: ObservableObject {
 		try? storageService.deleteDocuments()
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
-			.map { Document(docType: $0.docType, data: $0.jsonData, createdAt: Date.distantPast, modifiedAt: nil) }
-		for docSample in docSamples { try storageService.saveDocument(docSample) }
+			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.drData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil) }
+		for docSample in docSamples { try storageService.saveDocument(docSample, allowOverwrite: true) }
 		storage.loadDocuments()
 	}
 	
@@ -89,10 +93,9 @@ public final class EudiWallet: ObservableObject {
 				guard var docs = try storageService.loadDocuments(), docs.count > 0 else { throw WalletError(description: "No documents found") }
 				if let docType { docs = docs.filter { $0.docType == docType} }
 				if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
-				let srs = docs.compactMap {$0.data.decodeJSON(type: SignUpResponse.self)}; let drs = srs.compactMap(\.deviceResponse)
-				guard drs.count > 0 else { throw WalletError(description: "Documents decode error") }
-				guard let sr = srs.first, let dpk = sr.devicePrivateKey else { throw WalletError(description: "Error: No private key found") }
-				parameters = [InitializeKeys.document_signup_response_data.rawValue: drs, InitializeKeys.device_private_key.rawValue: dpk]
+				let cborsWithKeys = docs.compactMap { $0.getCborData() }
+				guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
+				parameters = [InitializeKeys.document_signup_response_data.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key.rawValue: cborsWithKeys.first!.dpk]
 				if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
 			default:
 				fatalError("jwt format not implemented")

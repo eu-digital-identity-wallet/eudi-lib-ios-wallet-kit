@@ -20,6 +20,7 @@ import SwiftCBOR
 import MdocDataModel18013
 import WalletStorage
 import Logging
+import CryptoKit
 
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject {
@@ -51,9 +52,9 @@ public class StorageManager: ObservableObject {
 	}
 
 	fileprivate func refreshPublishedVars() {
-		hasWellKnownData = !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
-		hasData = documentIds.compactMap { $0 }.count > 0
-		docCount = documentIds.compactMap { $0 }.count
+		hasData = mdocModels.compactMap { $0 }.count > 0
+		hasWellKnownData = hasData && !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
+		docCount = mdocModels.compactMap { $0 }.count
 		mdlModel = getTypedDoc()
 		pidModel = getTypedDoc()
 		otherModels = getTypedDocs()
@@ -69,7 +70,7 @@ public class StorageManager: ObservableObject {
 		mdocModels = docs.map { _ in nil }
 		documentIds = docs.map(\.id)
 		for (i, doc) in docs.enumerated() {
-			guard let sr = doc.data.decodeJSON(type: SignUpResponse.self), let dr = sr.deviceResponse, let dpk = sr.devicePrivateKey else { continue }
+			guard let (dr,dpk) = doc.getCborData() else { continue }
 			mdocModels[i] = switch doc.docType {
 			case EuPidModel.EuPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
 			case IsoMdlModel.isoDocType: IsoMdlModel(response: dr, devicePrivateKey: dpk)
@@ -119,6 +120,8 @@ public class StorageManager: ObservableObject {
 		documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
 		refreshPublishedVars()
 	}
-
-
+	
 }
+
+
+
