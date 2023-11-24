@@ -95,7 +95,7 @@ public final class EudiWallet: ObservableObject {
 				if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
 				let cborsWithKeys = docs.compactMap { $0.getCborData() }
 				guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
-				parameters = [InitializeKeys.document_signup_response_data.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key.rawValue: cborsWithKeys.first!.dpk]
+				parameters = [InitializeKeys.document_signup_response_obj.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.first!.dpk]
 				if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
 			default:
 				fatalError("jwt format not implemented")
