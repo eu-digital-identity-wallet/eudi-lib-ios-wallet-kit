@@ -25,9 +25,14 @@ public struct WalletError: LocalizedError {
 		self.code = code
 	}
 	
-	public init(description: String, code: Int = 0) {
+	public init(description: String, code: Int = 0, userInfo: [String: Any]? = nil) {
 		self.description = description
 		self.code = code
+		guard let userInfo else { return }
+		var strError: String?
+		if let key = userInfo["key"] as? String { strError = NSLocalizedString(key, comment: "") }
+		if let s = userInfo["%s"] as? String { strError = strError?.replacingOccurrences(of: "%s", with: NSLocalizedString(s, comment: "")) }
+		if let strError { self.description = strError }
 	}
 	
 	public var errorDescription: String? {

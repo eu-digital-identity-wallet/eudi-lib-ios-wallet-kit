@@ -84,7 +84,7 @@ public class PresentationSession: ObservableObject {
 			}
 		} catch {
 			status = .error
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
 		}
 	}
 	
@@ -102,7 +102,7 @@ public class PresentationSession: ObservableObject {
 			status = .requestReceived
 			return request
 		} catch {
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
 			status = .error
 			return nil
 		}
@@ -126,7 +126,7 @@ public class PresentationSession: ObservableObject {
 			status = .responseSent
 		} catch {
 			status = .error
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code)
+			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
 		}
 	}
 	
