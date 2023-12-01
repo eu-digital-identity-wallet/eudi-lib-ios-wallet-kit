@@ -30,6 +30,8 @@ public class PresentationSession: ObservableObject {
 	@Published public var readerCertIssuer: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
+	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
+	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
@@ -61,7 +63,8 @@ public class PresentationSession: ObservableObject {
 		disclosedDocuments = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			readerCertIssuer = readerAuthority
-			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String ?? ""
+			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
+			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String
 		}
 		status = .requestReceived
 	}
