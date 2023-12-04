@@ -29,6 +29,8 @@ public class PresentationSession: ObservableObject {
 	@Published public var readerCertIssuer: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
+	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
+	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
@@ -50,7 +52,7 @@ public class PresentationSession: ObservableObject {
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set for the BLE proximity flow
 	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
-	public func decodeRequest(_ request: [String: Any]) {
+	func decodeRequest(_ request: [String: Any]) {
 		// show the items as checkboxes
 		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
 		var tmp = validRequestItems.toDocElementViewModels(valid: true)
@@ -60,8 +62,10 @@ public class PresentationSession: ObservableObject {
 		disclosedDocuments = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			readerCertIssuer = readerAuthority
-			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String ?? ""
+			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
+			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String
 		}
+		status = .requestReceived
 	}
 	
 	static func makeError(str: String) -> NSError {
@@ -69,7 +73,6 @@ public class PresentationSession: ObservableObject {
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
 	}
 	
-	@MainActor
 	/// Start QR engagement to be presented to verifier
 	///
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
@@ -78,16 +81,20 @@ public class PresentationSession: ObservableObject {
 		do {
 			let data = try await presentationService.startQrEngagement()
 			if let data, data.count > 0 {
-				deviceEngagement = data
-				status = .qrEngagementReady
+				await MainActor.run {
+					deviceEngagement = data
+					status = .qrEngagementReady
+				}
 			}
-		} catch {
-			status = .error
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
-		}
+		} catch { await setError(error) }
 	}
 	
 	@MainActor
+	func setError(_ error: Error) {
+		status = .error
+		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
+	}
+	
 	/// Receive request from verifer
 	///
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
@@ -97,17 +104,14 @@ public class PresentationSession: ObservableObject {
 	public func receiveRequest() async -> [String: Any]? {
 		do {
 			let request = try await presentationService.receiveRequest()
-			decodeRequest(request)
-			status = .requestReceived
+			await decodeRequest(request)
 			return request
 		} catch {
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
-			status = .error
+			await setError(error)
 			return nil
 		}
 	}
 	
-	@MainActor
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
@@ -115,18 +119,15 @@ public class PresentationSession: ObservableObject {
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)?) async {
 		do {
-			status = .userSelected
+			await MainActor.run {status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend) }
 			if EudiWallet.standard.userAuthenticationRequired {
 				try await EudiWallet.authorizedAction(dismiss: { onCancel?()}, action: action )
 			} else {
 				try await action()
 			}
-			status = .responseSent
-		} catch {
-			status = .error
-			uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
-		}
+			await MainActor.run {status = .responseSent }
+		} catch { await setError(error) }
 	}
 	
 	
