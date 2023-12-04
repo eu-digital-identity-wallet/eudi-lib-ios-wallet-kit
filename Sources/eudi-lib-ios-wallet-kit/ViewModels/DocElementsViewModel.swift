@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 
 /// View model used in SwiftUI for presentation request elements
 public struct DocElementsViewModel: Identifiable {
@@ -23,18 +24,30 @@ public struct DocElementsViewModel: Identifiable {
 	public var isEnabled: Bool
 	public var elements: [ElementViewModel]
 }
-
-func fluttenItemViewModels(_ nsItems: [String:[String]], valid isEnabled: Bool) -> [ElementViewModel] {
-	nsItems.map { k,v in nsItemsToViewModels(k,v, isEnabled) }.flatMap {$0}
-}
-
-func nsItemsToViewModels(_ ns: String, _ items: [String], _ isEnabled: Bool) -> [ElementViewModel] {
-	items.map { ElementViewModel(nameSpace: ns, elementIdentifier:$0, isEnabled: isEnabled) }
+extension DocElementsViewModel {
+	static func fluttenItemViewModels(_ nsItems: [String:[String]], valid isEnabled: Bool, mandatoryElementKeys: [String]) -> [ElementViewModel] {
+		nsItems.map { k,v in nsItemsToViewModels(k,v, isEnabled, mandatoryElementKeys) }.flatMap {$0}
+	}
+	
+	static func nsItemsToViewModels(_ ns: String, _ items: [String], _ isEnabled: Bool, _ mandatoryElementKeys: [String]) -> [ElementViewModel] {
+		items.map { ElementViewModel(nameSpace: ns, elementIdentifier:$0, isMandatory: mandatoryElementKeys.contains($0), isEnabled: isEnabled) }
+	}
+	
+	static func getMandatoryElementKeys(docType: String) -> [String] {
+		switch docType {
+		case IsoMdlModel.isoDocType:
+			return IsoMdlModel.isoMandatoryElementKeys
+		case EuPidModel.EuPidDocType:
+			return EuPidModel.pidMandatoryElementKeys
+		default:
+			return []
+		}
+	}
 }
 
 extension RequestItems {
 	func toDocElementViewModels(valid: Bool) -> [DocElementsViewModel] {
-		map { docType,nsItems in DocElementsViewModel(docType: docType, isEnabled: valid, elements: fluttenItemViewModels(nsItems, valid: valid)) }
+		map { docType,nsItems in DocElementsViewModel(docType: docType, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
 	}
 }
 
@@ -58,6 +71,7 @@ public struct ElementViewModel: Identifiable {
 	public var id: String { "\(nameSpace)_\(elementIdentifier)" }
 	public let nameSpace: String
 	public let elementIdentifier: String
+	public let isMandatory: Bool
 	public var isEnabled: Bool
 	public var isDisabled: Bool { !isEnabled }
 	public var isSelected = true
