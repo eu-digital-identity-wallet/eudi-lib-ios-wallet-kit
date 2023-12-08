@@ -1,18 +1,18 @@
 /*
-Copyright (c) 2023 European Commission
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ Copyright (c) 2023 European Commission
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ 
+ http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 
 import Foundation
 import SwiftCBOR
@@ -43,13 +43,16 @@ public class StorageManager: ObservableObject {
 	@Published public var pidModel: EuPidModel?
 	/// Other document models loaded in the wallet
 	@Published public var otherModels: [GenericMdocModel] = []
+	/// Error object with localized message
+	@Published public var uiError: WalletError?
 	let logger: Logger
-
+	
 	public init(storageService: any DataStorageService) {
 		logger = Logger(label: "\(StorageManager.self)")
 		self.storageService = storageService
 	}
-
+	
+	@MainActor
 	fileprivate func refreshPublishedVars() {
 		hasData = mdocModels.compactMap { $0 }.count > 0
 		hasWellKnownData = hasData && !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
@@ -59,12 +62,8 @@ public class StorageManager: ObservableObject {
 		otherModels = getTypedDocs()
 	}
 	
-	/// Load documents from storage
-	///
-	/// Internally sets the ``docTypes``, ``mdocModels``, ``documentIds``, ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
-	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func loadDocuments() -> [WalletStorage.Document]? {
-		guard let docs = try? storageService.loadDocuments() else { return nil }
+	@MainActor
+	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document]) {
 		docTypes = docs.map(\.docType)
 		mdocModels = docs.map { _ in nil }
 		documentIds = docs.map(\.id)
@@ -76,8 +75,22 @@ public class StorageManager: ObservableObject {
 			default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 			}
 		}
-		refreshPublishedVars()
-		return docs
+	}
+	
+	/// Load documents from storage
+	///
+	/// Internally sets the ``docTypes``, ``mdocModels``, ``documentIds``, ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
+	/// - Returns: An array of ``WalletStorage.Document`` objects
+	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?  {
+		do {
+			guard let docs = try storageService.loadDocuments() else { return nil }
+			await refreshDocModels(docs)
+			await refreshPublishedVars()
+			return docs
+		} catch {
+			await setError(error)
+			throw error
+		}
 	}
 	
 	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
@@ -106,18 +119,43 @@ public class StorageManager: ObservableObject {
 	
 	/// Delete document by docType
 	/// - Parameter docType: Document type
-	public func deleteDocument(docType: String) {
+	public func deleteDocument(docType: String) async throws {
 		guard let i = docTypes.firstIndex(of: docType)  else { return }
-		deleteDocument(index: i)
+		do {
+			try await deleteDocument(index: i)
+		} catch {
+			await setError(error)
+			throw error
+		}
 	}
 	
 	/// Delete document by Index
 	/// - Parameter index: Index in array of loaded models
-	public func deleteDocument(index: Int) {
+	public func deleteDocument(index: Int) async throws {
 		guard index < documentIds.count, let id = documentIds[index] else { return }
-		try? storageService.deleteDocument(id: id)
-		documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
-		refreshPublishedVars()
+		do {
+			try storageService.deleteDocument(id: id)
+			documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
+			await refreshPublishedVars()
+		} catch {
+			await setError(error)
+			throw error
+		}
+	}
+	
+	/// Delete documenmts
+	public func deleteDocuments() async throws {
+		do {
+			try storageService.deleteDocuments()
+		} catch {
+			await setError(error)
+			throw error
+		}
+	}
+	
+	@MainActor
+	func setError(_ error: Error) {
+		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
 	}
 	
 }
