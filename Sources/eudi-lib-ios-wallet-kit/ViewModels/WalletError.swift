@@ -14,6 +14,7 @@
  limitations under the License.
  */
 import Foundation
+/// Wallet error
 public struct WalletError: LocalizedError {
 	
 	var description: String

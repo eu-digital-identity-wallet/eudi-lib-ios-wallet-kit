@@ -61,21 +61,28 @@ public final class EudiWallet: ObservableObject {
 	///
 	/// Calls ``storage`` loadDocuments
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func loadDocuments() -> [WalletStorage.Document]? {
-		return storage.loadDocuments()
+	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]? {
+		return try await storage.loadDocuments()
 	}
 	
 	/// Load sample data from json files
 	///
 	/// The mdoc data are stored in wallet storage as documents
 	/// - Parameter sampleDataFiles: Names of sample files provided in the app bundle
-	public func loadSampleData(sampleDataFiles: [String]? = nil) throws {
+	public func loadSampleData(sampleDataFiles: [String]? = nil) async throws {
 		try? storageService.deleteDocuments()
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
 			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.drData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil) }
-		for docSample in docSamples { try storageService.saveDocument(docSample, allowOverwrite: true) }
-		storage.loadDocuments()
+		do {
+		for docSample in docSamples {
+			try storageService.saveDocument(docSample, allowOverwrite: true)
+		}
+		try await storage.loadDocuments()
+		} catch {
+			await storage.setError(error)
+			throw WalletError(description: error.localizedDescription, code: (error as NSError).code)
+		}
 	}
 	
 	/// Begin attestation presentation to a verifier
