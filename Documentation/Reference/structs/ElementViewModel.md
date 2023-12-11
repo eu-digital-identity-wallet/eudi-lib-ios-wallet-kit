@@ -8,6 +8,7 @@
   - `id`
   - `nameSpace`
   - `elementIdentifier`
+  - `isMandatory`
   - `isEnabled`
   - `isDisabled`
   - `isSelected`
@@ -33,6 +34,12 @@ public let nameSpace: String
 
 ```swift
 public let elementIdentifier: String
+```
+
+### `isMandatory`
+
+```swift
+public let isMandatory: Bool
 ```
 
 ### `isEnabled`

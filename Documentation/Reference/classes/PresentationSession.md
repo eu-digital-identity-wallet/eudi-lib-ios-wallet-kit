@@ -8,6 +8,7 @@
   - `presentationService`
   - `readerCertIssuer`
   - `readerCertValidationMessage`
+  - `readerCertIssuerValid`
   - `uiError`
   - `disclosedDocuments`
   - `status`
@@ -15,7 +16,6 @@
   - `deviceEngagement`
 - [Methods](#methods)
   - `init(presentationService:)`
-  - `decodeRequest(_:)`
   - `startQrEngagement()`
   - `receiveRequest()`
   - `sendResponse(userAccepted:itemsToSend:onCancel:)`
@@ -50,6 +50,14 @@ Reader certificate issuer (only for BLE flow wih verifier using reader authentic
 ```
 
 Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
+
+### `readerCertIssuerValid`
+
+```swift
+@Published public var readerCertIssuerValid: Bool?
+```
+
+Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
 
 ### `uiError`
 
@@ -98,17 +106,6 @@ Device engagement data (QR image data for the BLE flow)
 public init(presentationService: any PresentationService)
 ```
 
-### `decodeRequest(_:)`
-
-```swift
-public func decodeRequest(_ request: [String: Any])
-```
-
-Decodes a presentation request
-
-The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set for the BLE proximity flow
-- Parameter request: Keys are defined in the ``UserRequestKeys``
-
 ### `startQrEngagement()`
 
 ```swift
@@ -144,3 +141,11 @@ Send response to verifier
   - userAccepted: Whether user confirmed to send the response
   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
   - onCancel: Action to perform if the user cancels the biometric authentication
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | Whether user confirmed to send the response |
+| itemsToSend | Data to send organized into a hierarcy of doc.types and namespaces |
+| onCancel | Action to perform if the user cancels the biometric authentication |

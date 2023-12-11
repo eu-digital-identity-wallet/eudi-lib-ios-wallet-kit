@@ -12,7 +12,8 @@
   - `openId4VpVerifierApiUri`
 - [Methods](#methods)
   - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:)`
-  - `issueDocument(id:issuer:)`
+  - `beginIssueDocument(id:)`
+  - `endIssueDocument(_:)`
   - `loadDocuments()`
   - `loadSampleData(sampleDataFiles:)`
   - `beginPresentation(flow:docType:dataFormat:)`
@@ -70,10 +71,10 @@ OpenID4VP verifier api URL (used for preregistered clients)
 public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true)
 ```
 
-### `issueDocument(id:issuer:)`
+### `beginIssueDocument(id:)`
 
 ```swift
-public func issueDocument(id: String, issuer: (_ send: IssueRequest) async throws -> WalletStorage.Document) async throws
+public func beginIssueDocument(id: String) async throws -> IssueRequest
 ```
 
 Issue a document and save in wallet storage
@@ -90,10 +91,16 @@ Issue a document and save in wallet storage
 | id | Document identifier |
 | issuer | Issuer function |
 
+### `endIssueDocument(_:)`
+
+```swift
+public func endIssueDocument(_ issued: WalletStorage.Document) throws
+```
+
 ### `loadDocuments()`
 
 ```swift
-@discardableResult public func loadDocuments() -> [WalletStorage.Document]?
+@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?
 ```
 
 Load documents from storage
@@ -104,7 +111,7 @@ Calls ``storage`` loadDocuments
 ### `loadSampleData(sampleDataFiles:)`
 
 ```swift
-public func loadSampleData(sampleDataFiles: [String]? = nil) throws
+public func loadSampleData(sampleDataFiles: [String]? = nil) async throws
 ```
 
 Load sample data from json files
