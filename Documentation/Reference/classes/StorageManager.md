@@ -15,6 +15,7 @@
   - `mdlModel`
   - `pidModel`
   - `otherModels`
+  - `uiError`
 - [Methods](#methods)
   - `init(storageService:)`
   - `loadDocuments()`
@@ -22,6 +23,7 @@
   - `getDocumentModel(docType:)`
   - `deleteDocument(docType:)`
   - `deleteDocument(index:)`
+  - `deleteDocuments()`
 
 ```swift
 public class StorageManager: ObservableObject
@@ -108,6 +110,14 @@ The PID model loaded in the wallet
 
 Other document models loaded in the wallet
 
+### `uiError`
+
+```swift
+@Published public var uiError: WalletError?
+```
+
+Error object with localized message
+
 ## Methods
 ### `init(storageService:)`
 
@@ -118,7 +128,7 @@ public init(storageService: any DataStorageService)
 ### `loadDocuments()`
 
 ```swift
-@discardableResult public func loadDocuments() -> [WalletStorage.Document]?
+@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?
 ```
 
 Load documents from storage
@@ -161,7 +171,7 @@ Get document model by docType
 ### `deleteDocument(docType:)`
 
 ```swift
-public func deleteDocument(docType: String)
+public func deleteDocument(docType: String) async throws
 ```
 
 Delete document by docType
@@ -176,7 +186,7 @@ Delete document by docType
 ### `deleteDocument(index:)`
 
 ```swift
-public func deleteDocument(index: Int)
+public func deleteDocument(index: Int) async throws
 ```
 
 Delete document by Index
@@ -187,3 +197,11 @@ Delete document by Index
 | Name | Description |
 | ---- | ----------- |
 | index | Index in array of loaded models |
+
+### `deleteDocuments()`
+
+```swift
+public func deleteDocuments() async throws
+```
+
+Delete documenmts

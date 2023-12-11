@@ -8,12 +8,14 @@
   - `errorDescription`
 - [Methods](#methods)
   - `init(key:code:)`
-  - `init(description:code:)`
+  - `init(description:code:userInfo:)`
   - `==(_:_:)`
 
 ```swift
 public struct WalletError: LocalizedError
 ```
+
+Wallet error
 
 ## Properties
 ### `errorDescription`
@@ -29,10 +31,10 @@ public var errorDescription: String?
 public init(key: String, code: Int = 0)
 ```
 
-### `init(description:code:)`
+### `init(description:code:userInfo:)`
 
 ```swift
-public init(description: String, code: Int = 0)
+public init(description: String, code: Int = 0, userInfo: [String: Any]? = nil)
 ```
 
 ### `==(_:_:)`
