@@ -64,6 +64,14 @@ public final class EudiWallet: ObservableObject {
 	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]? {
 		return try await storage.loadDocuments()
 	}
+
+	/// Delete all documents from storage
+	///
+	/// Calls ``storage`` loadDocuments
+	/// - Returns: An array of ``WalletStorage.Document`` objects
+	@discardableResult public func deleteDocuments() async throws  {
+		return try await storage.deleteDocuments()
+	}
 	
 	/// Load sample data from json files
 	///
