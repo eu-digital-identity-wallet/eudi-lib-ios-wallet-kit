@@ -93,6 +93,23 @@ public final class EudiWallet: ObservableObject {
 		}
 	}
 	
+	public func prepareServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String : Any] {
+		var parameters: [String: Any]
+		switch dataFormat {
+		case .cbor:
+			guard var docs = try storageService.loadDocuments(), docs.count > 0 else { throw WalletError(description: "No documents found") }
+			if let docType { docs = docs.filter { $0.docType == docType} }
+			if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
+			let cborsWithKeys = docs.compactMap { $0.getCborData() }
+			guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
+			parameters = [InitializeKeys.document_signup_response_obj.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.first!.dpk]
+			if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
+		default:
+			fatalError("jwt format not implemented")
+		}
+		return parameters
+	}
+	
 	/// Begin attestation presentation to a verifier
 	/// - Parameters:
 	///   - flow: Presentation ``FlowType`` instance
@@ -100,20 +117,8 @@ public final class EudiWallet: ObservableObject {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
-		var parameters: [String: Any]
 		do {
-			switch dataFormat {
-			case .cbor:
-				guard var docs = try storageService.loadDocuments(), docs.count > 0 else { throw WalletError(description: "No documents found") }
-				if let docType { docs = docs.filter { $0.docType == docType} }
-				if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
-				let cborsWithKeys = docs.compactMap { $0.getCborData() }
-				guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
-				parameters = [InitializeKeys.document_signup_response_obj.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.first!.dpk]
-				if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
-			default:
-				fatalError("jwt format not implemented")
-			}
+			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
@@ -121,7 +126,18 @@ public final class EudiWallet: ObservableObject {
 			case .openid4vp(let qrCode):
 				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.openId4VpVerifierApiUri)
 				return PresentationSession(presentationService: openIdSvc)
+			default:
+				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")))
 			}
+		} catch {
+			return PresentationSession(presentationService: FaultPresentationService(error: error))
+		}
+	}
+	
+	public func beginPresentation(service: any PresentationService, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
+		do {
+			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
+			return PresentationSession(presentationService: service)
 		} catch {
 			return PresentationSession(presentationService: FaultPresentationService(error: error))
 		}

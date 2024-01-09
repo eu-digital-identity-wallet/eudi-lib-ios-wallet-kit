@@ -17,24 +17,28 @@ limitations under the License.
 import Foundation
 
 /// Fault presentation service. Used to communicate error state to the user
-class FaultPresentationService: PresentationService {
-	var status: TransferStatus = .error
-	var flow: FlowType = .ble
+public class FaultPresentationService: PresentationService {
+	public var status: TransferStatus = .error
+	public var flow: FlowType = .other
 	var error: Error
 	
-	init(error: Error) {
+	public init(msg: String) {
+		self.error = PresentationSession.makeError(str: msg)
+	}
+	
+	public init(error: Error) {
 		self.error = error
 	}
 	
-	func startQrEngagement() async throws -> Data? {
+	public func startQrEngagement() async throws -> Data? {
 		throw error
 	}
 	
-	func receiveRequest() async throws -> [String : Any] {
+	public func receiveRequest() async throws -> [String : Any] {
 		throw error
 	}
 	
-	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws{
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws{
 		throw error
 	}
 	

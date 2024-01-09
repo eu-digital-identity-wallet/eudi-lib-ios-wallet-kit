@@ -21,16 +21,16 @@ import MdocDataTransfer18013
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
 /// Implementation is based on the ISO/IEC 18013-5 specification
-class BlePresentationService : PresentationService {
+public class BlePresentationService : PresentationService {
 	var bleServerTransfer: MdocGattServer
-	var status: TransferStatus = .initializing
+	public var status: TransferStatus = .initializing
 	var continuationQrCode: CheckedContinuation<Data?, Error>?
 	var continuationRequest: CheckedContinuation<[String: Any], Error>?
 	var continuationResponse: CheckedContinuation<Void, Error>?
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	var deviceEngagement: Data?
 	var request: [String: Any]?
-	var flow: FlowType { .ble }
+	public var flow: FlowType { .ble }
 
 	public init(parameters: [String: Any]) throws {
 		bleServerTransfer = try MdocGattServer(parameters: parameters)

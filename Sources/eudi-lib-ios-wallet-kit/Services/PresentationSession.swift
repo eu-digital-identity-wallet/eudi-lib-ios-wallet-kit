@@ -38,7 +38,7 @@ public class PresentationSession: ObservableObject {
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// The ``FlowType`` instance
-	public var flow: FlowType { presentationService.flow }
+	// public var flow: FlowType { presentationService.flow }
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR image data for the BLE flow)
 	@Published public var deviceEngagement: Data?
@@ -68,9 +68,15 @@ public class PresentationSession: ObservableObject {
 		status = .requestReceived
 	}
 	
-	static func makeError(str: String) -> NSError {
+	public static func makeError(str: String) -> NSError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
+	}
+	
+	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+		let message = str ?? code.description
+		logger.error(Logger.Message(unicodeScalarLiteral: message))
+		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
 	}
 	
 	/// Start QR engagement to be presented to verifier

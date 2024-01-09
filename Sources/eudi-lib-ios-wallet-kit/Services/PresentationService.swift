@@ -23,7 +23,7 @@ public typealias RequestItems = [String: [String: [String]]]
 /// Presentation service abstract protocol
 public protocol PresentationService {
 	/// Status of the data transfer
-	var status: TransferStatus { get }
+	//var status: TransferStatus { get }
 	/// instance of a presentation ``FlowType``
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
