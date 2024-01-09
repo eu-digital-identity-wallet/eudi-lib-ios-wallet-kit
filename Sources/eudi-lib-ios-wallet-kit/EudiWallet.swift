@@ -93,6 +93,11 @@ public final class EudiWallet: ObservableObject {
 		}
 	}
 	
+	/// Prepare Service Data Parameters
+	/// - Parameters:
+	///   - docType: docType of documents to present (optional)
+	///   - dataFormat: Exchanged data ``Format`` type
+	/// - Returns: A data dictionary that can be used to initialize a presentation service
 	public func prepareServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String : Any] {
 		var parameters: [String: Any]
 		switch dataFormat {
@@ -134,9 +139,14 @@ public final class EudiWallet: ObservableObject {
 		}
 	}
 	
+	/// Begin attestation presentation to a verifier
+	/// - Parameters:
+	///   - service: A ``PresentationService`` instance
+	///   - docType: DocType of documents to present (optional)
+	///   - dataFormat: Exchanged data ``Format`` type
+	/// - Returns: A presentation session instance,
 	public func beginPresentation(service: any PresentationService, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		do {
-			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
 			return PresentationSession(presentationService: service)
 		} catch {
 			return PresentationSession(presentationService: FaultPresentationService(error: error))
@@ -152,6 +162,11 @@ public final class EudiWallet: ObservableObject {
 		try await authorizedAction(isFallBack: false, dismiss: dismiss, action: action)
 	}
 	
+	/// Wrap an action with TouchID or FaceID authentication
+	/// - Parameters:
+	///   - isFallBack: true if fallback (ask for pin code)
+	///   - dismiss: action to dismiss current page
+	///   - action: action to perform after authentication
 	static func authorizedAction(isFallBack: Bool = false, dismiss: () -> Void, action: () async throws -> Void) async throws {
 		let context = LAContext()
 		var error: NSError?

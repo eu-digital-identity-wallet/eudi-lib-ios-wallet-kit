@@ -69,7 +69,6 @@ public class BlePresentationService : PresentationService {
 			handleSelected = nil
 		}
 	}
-
 }
 
 /// handle events from underlying BLE service
