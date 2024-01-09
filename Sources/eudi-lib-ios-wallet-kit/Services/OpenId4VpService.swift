@@ -28,8 +28,8 @@ import Logging
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
-class OpenId4VpService: PresentationService {
-	var status: TransferStatus = .initialized
+public class OpenId4VpService: PresentationService {
+	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	var docs: [DeviceResponse]!
 	var iaca: [SecCertificate]!
@@ -39,9 +39,9 @@ class OpenId4VpService: PresentationService {
 	var resolvedRequestData: ResolvedRequestData?
 	var siopOpenId4Vp: SiopOpenID4VP!
 	var walletConf: WalletOpenId4VPConfiguration!
-	var flow: FlowType
+	public var flow: FlowType
 
-	init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
+	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		guard let cfg = Self.getWalletConf(verifierApiUrl: openId4VpVerifierApiUri ?? "http://localhost:8080") else {
 			throw PresentationSession.makeError(str: "INVALID_WALLET_CONFIGURATION")
@@ -58,12 +58,12 @@ class OpenId4VpService: PresentationService {
 		self.openid4VPlink = openid4VPlink
 	}
 	
-	func startQrEngagement() async throws -> Data? { nil }
+	public func startQrEngagement() async throws -> Data? { nil }
 	
 	///  Receive request from an openid4vp URL
 	///
 	/// - Returns: The requested items.
-	func receiveRequest() async throws -> [String: Any] {
+	public func receiveRequest() async throws -> [String: Any] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
 			case .notSecured(data: _):
@@ -86,7 +86,7 @@ class OpenId4VpService: PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
 		guard let pd = presentationDefinition, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
