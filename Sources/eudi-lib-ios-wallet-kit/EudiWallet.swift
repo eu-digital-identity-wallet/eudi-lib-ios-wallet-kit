@@ -69,7 +69,7 @@ public final class EudiWallet: ObservableObject {
 	///
 	/// Calls ``storage`` loadDocuments
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func deleteDocuments() async throws  {
+	public func deleteDocuments() async throws  {
 		return try await storage.deleteDocuments()
 	}
 	
@@ -145,12 +145,8 @@ public final class EudiWallet: ObservableObject {
 	///   - docType: DocType of documents to present (optional)
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
-	public func beginPresentation(service: any PresentationService, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
-		do {
-			return PresentationSession(presentationService: service)
-		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error))
-		}
+	public func beginPresentation(service: any PresentationService) -> PresentationSession {
+	 PresentationSession(presentationService: service)
 	}
 	
 	@MainActor
