@@ -23,7 +23,7 @@ import CryptoKit
 
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject {
-	public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
+	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
 	/// Array of doc.types of documents loaded in the wallet
 	public var docTypes: [String?] = []
 	/// Array of document models loaded in the wallet
@@ -70,7 +70,7 @@ public class StorageManager: ObservableObject {
 		for (i, doc) in docs.enumerated() {
 			guard let (dr,dpk) = doc.getCborData() else { continue }
 			mdocModels[i] = switch doc.docType {
-			case EuPidModel.EuPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
+			case EuPidModel.euPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
 			case IsoMdlModel.isoDocType: IsoMdlModel(response: dr, devicePrivateKey: dpk)
 			default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 			}
@@ -135,7 +135,11 @@ public class StorageManager: ObservableObject {
 		guard index < documentIds.count, let id = documentIds[index] else { return }
 		do {
 			try storageService.deleteDocument(id: id)
-			documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
+			await MainActor.run {
+				if docTypes[index] == IsoMdlModel.isoDocType { mdlModel = nil }
+				if docTypes[index] == EuPidModel.euPidDocType { pidModel = nil }
+				documentIds[index] = nil; mdocModels[index] = nil; docTypes[index] = nil
+			}
 			await refreshPublishedVars()
 		} catch {
 			await setError(error)
@@ -147,6 +151,8 @@ public class StorageManager: ObservableObject {
 	public func deleteDocuments() async throws {
 		do {
 			try storageService.deleteDocuments()
+			await MainActor.run { documentIds = []; mdocModels = []; docTypes = []; mdlModel = nil; pidModel = nil }
+			await refreshPublishedVars()
 		} catch {
 			await setError(error)
 			throw error
