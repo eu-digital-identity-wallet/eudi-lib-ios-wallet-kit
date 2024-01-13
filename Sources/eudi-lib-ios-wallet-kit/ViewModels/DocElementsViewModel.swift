@@ -37,7 +37,7 @@ extension DocElementsViewModel {
 		switch docType {
 		case IsoMdlModel.isoDocType:
 			return IsoMdlModel.isoMandatoryElementKeys
-		case EuPidModel.EuPidDocType:
+		case EuPidModel.euPidDocType:
 			return EuPidModel.pidMandatoryElementKeys
 		default:
 			return []
