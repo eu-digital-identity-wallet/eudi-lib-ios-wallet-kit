@@ -69,6 +69,26 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
   itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
 ```
 
+## Issue document using OpenID4VCI
+
+The library provides the functionality to issue documents using OpenID4VCI. To issue a document
+using this functionality, EudiWallet must be property initialized. 
+To issue a document using OpenID4VCI, you need to know the document's docType.
+```swift
+wallet.vciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
+wallet.vciClientId = "wallet-dev"
+wallet.vciRedirectUri = "eudi-openid4ci://authorize/" // this is the default value,if not specified
+do {
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
+  // document has been added to wallet storage, you can display it
+}
+catch {
+  // display error
+}
+
+```
+
+
 ## Reference
 Detailed documentation is provided [here](Documentation/Reference/README.md) 
 
@@ -76,6 +96,7 @@ Detailed documentation is provided [here](Documentation/Reference/README.md)
 
 The detailed functionality of the wallet kit is implemented in the following Swift Packages: [MdocDataModel18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git), [MdocSecurity18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git),  [MdocDataTransfer18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git) and
   [SiopOpenID4VP](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git)
+  [OpenID4VCI](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift)
 
 ### Sample application  
 A sample application that demonstrates the usage of this library is [App Wallet UI](https://github.com/eu-digital-identity-wallet/eudi-app-ios-wallet-ui).
