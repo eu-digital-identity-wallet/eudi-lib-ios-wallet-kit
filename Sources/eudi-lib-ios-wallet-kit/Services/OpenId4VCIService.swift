@@ -1,9 +1,18 @@
-//
-//  File.swift
-//
-//
-//  Created by ffeli on 11/01/2024.
-//
+/*
+ * Copyright (c) 2023 European Commission
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 import Foundation
 import OpenID4VCI
@@ -21,38 +30,40 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	var bindingKey: BindingKey!
 	let logger: Logger
 	let config: WalletOpenId4VCIConfig
-	
+	let alg = JWSAlgorithm(.ES256)
+
 	init(credentialIssuerURL: String, clientId: String, callbackScheme: String) {
 		self.credentialIssuerURL = credentialIssuerURL
 		logger = Logger(label: "OpenId4VCI")
 		config = .init(clientId: clientId, authFlowRedirectionURI: URL(string: callbackScheme)!)
 	}
 	
-	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = false) async throws -> Data {
+	/// Issue a document with the given `docType` using OpenId4Vci protocol
+	/// - Parameters:
+	///   - docType: the docType of the document to be issued
+	///   - format: format of the exchanged data
+	///   - useSecureEnclave: use secure enclave to protect the private key (to be implemented)
+	/// - Returns: The data of the document
+	public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = false) async throws -> Data {
 		privateKey = try KeyController.generateECDHPrivateKey()
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
-		let alg = JWSAlgorithm(.ES256)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name,"use": "sig","kid": UUID().uuidString])
 		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey)
-		let scope = try Self.findScope(docType: docType, format: format)
-		let str = try await issueByScope(scope)
-		guard let data = Data(base64Encoded: str) else { throw OpenId4VCIError.dataNotValid }
+		let str = try await issueByDocType(docType, format: format)
+		guard let data = Data(base64URLEncoded: str) else { throw OpenId4VCIError.dataNotValid }
 		return data
 	}
 		
-	func issueByScope(_ scope: String) async throws -> String {
-		let credentialIdentifier = try CredentialIdentifier(value: scope)
+	func issueByDocType(_ docType: String, format: DataFormat) async throws -> String {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
-		
 		let issuerMetadata = await CredentialIssuerMetadataResolver().resolve(source: .credentialIssuer( credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier,	credentialIssuerMetadata: metaData,
-												credentials: [.scope(.init(scope)),	.scope(.init(Constants.OPENID_SCOPE))],	authorizationServerMetadata: try authServerMetadata.get())
-				// return "todo" // try await issueOfferedCredentialNoProof(offer: offer, credentialIdentifier: credentialIdentifier	)
-				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)				
+				let (credentialIdentifier, _, scope) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
+				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentials: [.scope(.init(scope))], authorizationServerMetadata: try authServerMetadata.get())
+				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 				// Authorize with auth code flow
 				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 				switch authorized {
@@ -61,23 +72,29 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				case .proofRequired:
 					return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: authorized, credentialIdentifier: credentialIdentifier)
 				}
-				
 			} else {
-				throw ValidationError.error(reason: "Invalid authorization server")
+				throw WalletError(description: "Invalid authorization server")
 			}
 		case .failure:
-			throw ValidationError.error(reason: "Invalid issuer metadata")
+			throw WalletError(description: "Invalid issuer metadata")
 		}
 	}
 	
-	static func findScope(docType: String, format: DataFormat) throws -> String {
-		switch (docType, format) {
-		case (EuPidModel.euPidDocType, .cbor):
-			return "eu.europa.ec.eudiw.pid_mso_mdoc"
-		case (EuPidModel.euPidDocType, .sjwt):
-			return "eu.europa.ec.eudiw.pid_vc_sd_jwt"
+	func getCredentialIdentifier(credentialsSupported: [CredentialIdentifier: SupportedCredential], docType: String, format: DataFormat) throws -> (CredentialIdentifier, SupportedCredential, String) {
+		switch format {
+		case .cbor:
+			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType { true } else { false } }), let scope = credential.value.getScope() else {
+				logger.error("No credential for \(docType). Currently supported credentials: \(credentialsSupported.values)")
+				throw WalletError(description: "Issuer does not support \(docType)")
+			}
+			if credential.value.cryptographicSuitesSupported?.contains(alg.name) ?? false {
+				return (credential.key, credential.value, scope)
+			} else {
+				logger.error("No supported cryptographic suite for \(docType). Currently supported cryptographic suites: \(credential.value.cryptographicSuitesSupported?.joined(separator: ",") ?? "")")
+				throw WalletError(description: "Not supported cryptography  suite for \(docType)")
+			}
 		default:
-			throw WalletError(key: "docType_or_format_not_supported")
+			throw WalletError(description: "Format \(format) not yet supported")
 		}
 	}
 	
@@ -95,14 +112,13 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
 			let authorizationCode = try await loginUserAndGetAuthCode(
 				getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url) ?? { throw  ValidationError.error(reason: "Could not retrieve authorization code") }()
-			logger.info("--> [AUTHORIZATION] Authorization code retrieved: \(authorizationCode)")
+			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
 			let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
-			
 			switch unAuthorized {
 			case .success(let request):
 				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
 				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token) = authorized {
-					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
+					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token")
 					return authorized
 				}
 			case .failure(let error):
@@ -131,8 +147,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						throw ValidationError.error(reason: "No credential response results available")
 					}
 				case .invalidProof(let cNonce, _):
-					return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: noProofRequiredState.handleInvalidProof(cNonce: cNonce), credentialIdentifier: credentialIdentifier
-					)
+					return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: noProofRequiredState.handleInvalidProof(cNonce: cNonce), credentialIdentifier: credentialIdentifier)
 				case .failed(error: let error):
 					throw ValidationError.error(reason: error.localizedDescription)
 				}
@@ -188,17 +203,14 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	@MainActor
 	private func loginUserAndGetAuthCode(getAuthorizationCodeUrl: URL) async throws -> String? {
-		return try await withCheckedThrowingContinuation { c in // eudi-openid4ci // config.authFlowRedirectionURI.absoluteString
-			let authenticationSession = ASWebAuthenticationSession(url: getAuthorizationCodeUrl, callbackURLScheme: "eudi-openid4ci") { optionalUrl, optionalError in
-				// authorization server stores the code_challenge and redirects the user back to the application with an authorization code, which is good for one use
-				// c.resume(returning: "7bd3854e-6b0f-42b7-8b2b-083c48fcb4a0.da9ca3b1-0b9c-4674-8051-52149c1b0717.946f2917-2177-4a87-8e4f-463c6972819a"); return
+		return try await withCheckedThrowingContinuation { c in
+			let authenticationSession = ASWebAuthenticationSession(url: getAuthorizationCodeUrl, callbackURLScheme: config.authFlowRedirectionURI.scheme!) { optionalUrl, optionalError in
 				guard optionalError == nil else { c.resume(throwing: OpenId4VCIError.authRequestFailed(optionalError!)); return }
 				guard let url = optionalUrl else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl); return }
 				guard let code = url.getQueryStringParameter("code") else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoCode); return }
-				// 4. sends this code and the code_verifier (created in step 2) to the authorization server (token endpoint)
-				//self.getAccessToken(authCode: code, codeVerifier: code_verifier, parameters: parameters, completion: completion)
 				c.resume(returning: code)
 			}
+			authenticationSession.prefersEphemeralWebBrowserSession = true
 			authenticationSession.presentationContextProvider = self
 			authenticationSession.start()
 		}
@@ -231,6 +243,24 @@ extension SecureEnclave.P256.Signing.PrivateKey {
 	}
 }
 
+extension SupportedCredential {
+	var cryptographicSuitesSupported: [String]? {
+		switch self {
+		case .msoMdoc(let credential):
+			return credential.cryptographicSuitesSupported
+		case .w3CSignedJwt(let credential):
+			return credential.cryptographicSuitesSupported
+		case .w3CJsonLdSignedJwt(let credential):
+			return credential.cryptographicSuitesSupported
+		case .w3CJsonLdDataIntegrity(let credential):
+			return credential.cryptographicSuitesSupported
+		case .sdJwtVc(let credential):
+			return credential.cryptographicSuitesSupported
+		default: return nil
+		}
+	}
+}
+
 public enum OpenId4VCIError: LocalizedError {
 	case authRequestFailed(Error)
 	case authorizeResponseNoUrl
@@ -258,20 +288,6 @@ public enum OpenId4VCIError: LocalizedError {
 			return "Issued data not valid"
 		}
 	}
-}
-
-public struct OAuth2PKCEParameters {
-	public var authorizeUrl: String
-	public var tokenUrl: String
-	public var clientId: String
-	public var redirectUri: String
-	public var callbackURLScheme: String
-}
-
-
-public struct AccessTokenResponse: Codable {
-	public var access_token: String
-	public var expires_in: Int
 }
 
 

@@ -34,9 +34,9 @@ public final class EudiWallet: ObservableObject {
 	public var verifierApiUri: String?
 	public var vciIssuerUrl: String?
 	public var vciClientId: String?
-	public var vciCallbackScheme: String?
+	public var vciRedirectUri: String = "eudi-openid4ci://authorize/"
 	
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, vciIssuerUrl: String? = nil, vciClientId: String? = nil, vciCallbackScheme: String? = nil) {
+	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, vciIssuerUrl: String? = nil, vciClientId: String? = nil, vciRedirectUri: String? = nil) {
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
 		storage = StorageManager(storageService: storageService)
@@ -45,21 +45,21 @@ public final class EudiWallet: ObservableObject {
 		self.verifierApiUri	= verifierApiUri
 		self.vciIssuerUrl = vciIssuerUrl
 		self.vciClientId = vciClientId
-		self.vciCallbackScheme = vciCallbackScheme
+		if let vciRedirectUri { self.vciRedirectUri = vciRedirectUri }
 	}
 	
-	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = false) async throws -> WalletStorage.Document {
+   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = false) async throws -> WalletStorage.Document {
 		guard let vciIssuerUrl else { throw WalletError(description: "vciIssuerUrl not defined")}
 		guard let vciClientId else { throw WalletError(description: "vciClientId not defined")}
-		guard let vciCallbackScheme else { throw WalletError(description: "vciCallbackScheme not defined")}
 		guard useSecureEnclave == false else { throw WalletError(description: "Secure enclave not implemented")}
-		let openId4VCIService = OpenId4VCIService(credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciCallbackScheme)
+		let openId4VCIService = OpenId4VCIService(credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciRedirectUri)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)")}
 		guard let pkd = SecKeyCopyExternalRepresentation(openId4VCIService.privateKey, nil) as? Data else { throw WalletError(description: "Invalid private key") }
 		let issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: pkd, createdAt: Date())
 		try endIssueDocument(issued)
-		try await loadDocuments()
+		await storage.appendDocModel(issued)
+		await storage.refreshPublishedVars()
 		return issued
 	}
 		
@@ -77,6 +77,7 @@ public final class EudiWallet: ObservableObject {
 	
 	public func endIssueDocument(_ issued: WalletStorage.Document) throws {
 		try storage.storageService.saveDocumentData(issued, dataToSaveType: .doc, dataType: issued.docDataType.rawValue, allowOverwrite: true)
+		try storage.storageService.saveDocumentData(issued, dataToSaveType: .key, dataType: issued.privateKeyType!.rawValue, allowOverwrite: true)
 	}
 	
 	/// Load documents from storage

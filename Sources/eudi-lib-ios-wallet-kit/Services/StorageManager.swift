@@ -53,7 +53,7 @@ public class StorageManager: ObservableObject {
 	}
 	
 	@MainActor
-	fileprivate func refreshPublishedVars() {
+	func refreshPublishedVars() {
 		hasData = mdocModels.compactMap { $0 }.count > 0
 		hasWellKnownData = hasData && !Set(docTypes.compactMap {$0}).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.compactMap { $0 }.count
@@ -68,12 +68,23 @@ public class StorageManager: ObservableObject {
 		mdocModels = docs.map { _ in nil }
 		documentIds = docs.map(\.id)
 		for (i, doc) in docs.enumerated() {
-			guard let (dr,dpk) = doc.getCborData() else { continue }
-			mdocModels[i] = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
-			case IsoMdlModel.isoDocType: IsoMdlModel(response: dr, devicePrivateKey: dpk)
-			default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
-			}
+			mdocModels[i] = toModel(doc: doc)
+		}
+	}
+	
+	@MainActor
+	func appendDocModel(_ doc: WalletStorage.Document) {
+		docTypes.append(doc.docType)
+		documentIds.append(doc.id)
+		mdocModels.append(toModel(doc: doc))
+	}
+
+	func toModel(doc: WalletStorage.Document) -> MdocDecodable? {
+		guard let (dr,dpk) = doc.getCborData() else { return nil }
+		return switch doc.docType {
+		case EuPidModel.euPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
+		case IsoMdlModel.isoDocType: IsoMdlModel(response: dr, devicePrivateKey: dpk)
+		default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 		}
 	}
 	
