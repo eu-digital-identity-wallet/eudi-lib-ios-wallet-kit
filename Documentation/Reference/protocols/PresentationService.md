@@ -9,14 +9,6 @@ public protocol PresentationService
 Presentation service abstract protocol
 
 ## Properties
-### `status`
-
-```swift
-var status: TransferStatus
-```
-
-Status of the data transfer
-
 ### `flow`
 
 ```swift
