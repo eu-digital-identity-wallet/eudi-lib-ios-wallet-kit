@@ -12,10 +12,11 @@
   - `uiError`
   - `disclosedDocuments`
   - `status`
-  - `flow`
   - `deviceEngagement`
 - [Methods](#methods)
   - `init(presentationService:)`
+  - `makeError(str:)`
+  - `makeError(code:str:)`
   - `startQrEngagement()`
   - `receiveRequest()`
   - `sendResponse(userAccepted:itemsToSend:onCancel:)`
@@ -83,14 +84,6 @@ Request items selected by the user to be sent to verifier.
 
 Status of the data transfer.
 
-### `flow`
-
-```swift
-public var flow: FlowType
-```
-
-The ``FlowType`` instance
-
 ### `deviceEngagement`
 
 ```swift
@@ -104,6 +97,18 @@ Device engagement data (QR image data for the BLE flow)
 
 ```swift
 public init(presentationService: any PresentationService)
+```
+
+### `makeError(str:)`
+
+```swift
+public static func makeError(str: String) -> NSError
+```
+
+### `makeError(code:str:)`
+
+```swift
+public static func makeError(code: ErrorCode, str: String? = nil) -> NSError
 ```
 
 ### `startQrEngagement()`

@@ -35,7 +35,7 @@ Storage manager. Provides services and view models
 ### `knownDocTypes`
 
 ```swift
-public static let knownDocTypes = [EuPidModel.EuPidDocType, IsoMdlModel.isoDocType]
+public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
 ```
 
 ### `docTypes`

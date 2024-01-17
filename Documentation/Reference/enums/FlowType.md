@@ -7,6 +7,7 @@
 - [Cases](#cases)
   - `ble`
   - `openid4vp(qrCode:)`
+  - `other`
 - [Properties](#properties)
   - `isProximity`
   - `qrCode`
@@ -28,6 +29,12 @@ case ble
 
 ```swift
 case openid4vp(qrCode: Data)
+```
+
+### `other`
+
+```swift
+case other
 ```
 
 ## Properties
