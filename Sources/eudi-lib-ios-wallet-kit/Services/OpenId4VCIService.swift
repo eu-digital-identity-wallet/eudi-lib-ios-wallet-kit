@@ -62,7 +62,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
 				let (credentialIdentifier, _, scope) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentials: [.scope(.init(scope))], authorizationServerMetadata: try authServerMetadata.get())
+				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentials: [.init(value: scope)], authorizationServerMetadata: try authServerMetadata.get())
 				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 				// Authorize with auth code flow
 				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
@@ -100,10 +100,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	private func authorizeRequestWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> AuthorizedRequest {
 		var pushedAuthorizationRequestEndpoint = ""
-		if case let .oidc(metaData) = offer.authorizationServerMetadata {
-			pushedAuthorizationRequestEndpoint = metaData.pushedAuthorizationRequestEndpoint
-		} else if case let .oauth(metaData) = offer.authorizationServerMetadata {
-			pushedAuthorizationRequestEndpoint = metaData.pushedAuthorizationRequestEndpoint
+		if case let .oidc(metaData) = offer.authorizationServerMetadata, let pare = metaData.pushedAuthorizationRequestEndpoint {
+			pushedAuthorizationRequestEndpoint = pare
+		} else if case let .oauth(metaData) = offer.authorizationServerMetadata, let pare = metaData.pushedAuthorizationRequestEndpoint {
+			pushedAuthorizationRequestEndpoint = pare
 		}
 		logger.info("--> [AUTHORIZATION] Placing PAR to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
 		let parPlaced = await issuer.pushAuthorizationCodeRequest(credentials: offer.credentials)
@@ -118,7 +118,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			case .success(let request):
 				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
 				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token) = authorized {
-					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token")
+					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token \(token)")
 					return authorized
 				}
 			case .failure(let error):
