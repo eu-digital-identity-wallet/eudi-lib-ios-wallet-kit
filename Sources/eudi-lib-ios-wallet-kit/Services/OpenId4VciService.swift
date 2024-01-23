@@ -61,8 +61,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
-				let (credentialIdentifier, _, scope) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentials: [.scope(.init(scope))], authorizationServerMetadata: try authServerMetadata.get())
+				let (credentialIdentifier, _, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
+				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentials: [.init(value: credentialIdentifier.value), .init(value: "openid")], authorizationServerMetadata: try authServerMetadata.get())
 				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 				// Authorize with auth code flow
 				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
@@ -100,10 +100,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	private func authorizeRequestWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> AuthorizedRequest {
 		var pushedAuthorizationRequestEndpoint = ""
-		if case let .oidc(metaData) = offer.authorizationServerMetadata {
-			pushedAuthorizationRequestEndpoint = metaData.pushedAuthorizationRequestEndpoint
-		} else if case let .oauth(metaData) = offer.authorizationServerMetadata {
-			pushedAuthorizationRequestEndpoint = metaData.pushedAuthorizationRequestEndpoint
+		if case let .oidc(metaData) = offer.authorizationServerMetadata, let pare = metaData.pushedAuthorizationRequestEndpoint {
+			pushedAuthorizationRequestEndpoint = pare
+		} else if case let .oauth(metaData) = offer.authorizationServerMetadata, let pare = metaData.pushedAuthorizationRequestEndpoint {
+			pushedAuthorizationRequestEndpoint = pare
 		}
 		logger.info("--> [AUTHORIZATION] Placing PAR to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
 		let parPlaced = await issuer.pushAuthorizationCodeRequest(credentials: offer.credentials)
@@ -111,21 +111,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
 			let authorizationCode = try await loginUserAndGetAuthCode(
-				getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url) ?? { throw  ValidationError.error(reason: "Could not retrieve authorization code") }()
+				getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url) ?? { throw WalletError(description: "Could not retrieve authorization code") }()
 			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
 			let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
 			switch unAuthorized {
 			case .success(let request):
 				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
-				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token) = authorized {
+				if case let .success(authorized) = authorizedRequest, case .noProofRequired(_) = authorized {
 					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token")
 					return authorized
 				}
 			case .failure(let error):
-				throw  ValidationError.error(reason: error.localizedDescription)
+				throw  WalletError(description: error.localizedDescription)
 			}
 		}
-		throw  ValidationError.error(reason: "Failed to get push authorization code request")
+		throw WalletError(description: "Failed to get push authorization code request")
 	}
 	
 	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialIdentifier: CredentialIdentifier) async throws -> String {
@@ -144,17 +144,17 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 							return credential
 						}
 					} else {
-						throw ValidationError.error(reason: "No credential response results available")
+						throw WalletError(description: "No credential response results available")
 					}
 				case .invalidProof(let cNonce, _):
 					return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: noProofRequiredState.handleInvalidProof(cNonce: cNonce), credentialIdentifier: credentialIdentifier)
 				case .failed(error: let error):
-					throw ValidationError.error(reason: error.localizedDescription)
+					throw WalletError(description: error.localizedDescription)
 				}
 			case .failure(let error):
-				throw ValidationError.error(reason: error.localizedDescription)
+				throw WalletError(description: error.localizedDescription)
 			}
-		default: throw ValidationError.error(reason: "Illegal noProofRequiredState case")
+		default: throw WalletError(description: "Illegal noProofRequiredState case")
 		}
 	}
 	
@@ -172,14 +172,14 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						return credential
 					}
 				} else {
-					throw ValidationError.error(reason: "No credential response results available")
+					throw WalletError(description: "No credential response results available")
 				}
 			case .invalidProof:
-				throw ValidationError.error(reason: "Although providing a proof with c_nonce the proof is still invalid")
+				throw WalletError(description: "Although providing a proof with c_nonce the proof is still invalid")
 			case .failed(let error):
-				throw ValidationError.error(reason: error.localizedDescription)
+				throw WalletError(description: error.localizedDescription)
 			}
-		case .failure(let error): throw ValidationError.error(reason: error.localizedDescription)
+		case .failure(let error): throw WalletError(description: error.localizedDescription)
 		}
 	}
 	
@@ -192,12 +192,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			case .issued(_, let credential):
 				return credential
 			case .issuancePending(let transactionId):
-				throw ValidationError.error(reason: "Credential not ready yet. Try after \(transactionId.interval ?? 0)")
+				throw WalletError(description: "Credential not ready yet. Try after \(transactionId.interval ?? 0)")
 			case .errored(_, let errorDescription):
-				throw ValidationError.error(reason: "\(errorDescription ?? "Something went wrong with your deferred request response")")
+				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")
 			}
 		case .failure(let error):
-			throw ValidationError.error(reason: error.localizedDescription)
+			throw WalletError(description: error.localizedDescription)
 		}
 	}
 	
