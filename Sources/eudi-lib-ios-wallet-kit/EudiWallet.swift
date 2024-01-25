@@ -19,6 +19,7 @@ import MdocDataModel18013
 import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
+import CryptoKit
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -48,15 +49,20 @@ public final class EudiWallet: ObservableObject {
 		if let vciRedirectUri { self.vciRedirectUri = vciRedirectUri }
 	}
 	
-   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = false) async throws -> WalletStorage.Document {
+   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> WalletStorage.Document {
 		guard let vciIssuerUrl else { throw WalletError(description: "vciIssuerUrl not defined")}
 		guard let vciClientId else { throw WalletError(description: "vciClientId not defined")}
-		guard useSecureEnclave == false else { throw WalletError(description: "Secure enclave not implemented")}
 		let openId4VCIService = OpenId4VCIService(credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciRedirectUri)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)")}
-		guard let pkd = SecKeyCopyExternalRepresentation(openId4VCIService.privateKey, nil) as? Data else { throw WalletError(description: "Invalid private key") }
-		let issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: pkd, createdAt: Date())
+		 var issued: WalletStorage.Document
+		 if !openId4VCIService.usedSecureEnclave {
+			 let pkd = try secCall { SecKeyCopyExternalRepresentation(openId4VCIService.privateKey, $0) } as Data
+			 issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: pkd, createdAt: Date())
+		 } else {
+			 let pkd = openId4VCIService.seKey.dataRepresentation
+			 issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: pkd, createdAt: Date())
+		 }
 		try endIssueDocument(issued)
 		await storage.appendDocModel(issued)
 		await storage.refreshPublishedVars()

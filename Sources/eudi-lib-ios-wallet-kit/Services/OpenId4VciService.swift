@@ -27,7 +27,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let credentialIssuerURL: String
 	var privateKey: SecKey!
 	var publicKey: SecKey!
+	var seKey: SecureEnclave.P256.Signing.PrivateKey!
 	var bindingKey: BindingKey!
+	var usedSecureEnclave: Bool!
 	let logger: Logger
 	let config: WalletOpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
@@ -44,10 +46,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	///   - format: format of the exchanged data
 	///   - useSecureEnclave: use secure enclave to protect the private key (to be implemented)
 	/// - Returns: The data of the document
-	public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = false) async throws -> Data {
-		privateKey = try KeyController.generateECDHPrivateKey()
+	public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> Data {
+		usedSecureEnclave = !useSecureEnclave || !SecureEnclave.isAvailable
+		if usedSecureEnclave { seKey = try SecureEnclave.P256.Signing.PrivateKey() }
+		privateKey = if !usedSecureEnclave { try KeyController.generateECDHPrivateKey() } else { try seKey.toSecKey() }
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
-		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name,"use": "sig","kid": UUID().uuidString])
+		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
 		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey)
 		let str = try await issueByDocType(docType, format: format)
 		guard let data = Data(base64URLEncoded: str) else { throw OpenId4VCIError.dataNotValid }
@@ -238,10 +242,11 @@ extension SecureEnclave.P256.Signing.PrivateKey {
 
 	func toSecKey() throws -> SecKey {
 		var errorQ: Unmanaged<CFError>?
-		guard let sf = SecKeyCreateWithData(self.dataRepresentation as NSData, [
+		guard let sf = SecKeyCreateWithData(Data() as NSData, [
 			kSecAttrKeyType: kSecAttrKeyTypeECSECPrimeRandom,
 			kSecAttrKeyClass: kSecAttrKeyClassPrivate,
 			kSecAttrTokenID: kSecAttrTokenIDSecureEnclave,
+			"toid": dataRepresentation
 		] as NSDictionary, &errorQ) else { throw errorQ!.takeRetainedValue() as Error }
 		return sf
 	}
@@ -277,6 +282,7 @@ public enum OpenId4VCIError: LocalizedError {
 	public var localizedDescription: String {
 		switch self {
 		case .authRequestFailed(let error):
+			if let wae = error as? ASWebAuthenticationSessionError, wae.code == .canceledLogin { return "The login has been canceled." } 
 			return "Authorization request failed: \(error.localizedDescription)"
 		case .authorizeResponseNoUrl:
 			return "Authorization response does not include a url"

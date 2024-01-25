@@ -23,7 +23,32 @@ extension String {
 	}
 }
 
+/// Calls a Security framework function that returns `nil` on error along with a `CFError` indirectly.
+///
+/// For example, the `SecKeyCreateDecryptedData` function has a signature like this:
+///
+/// ```
+/// func SecKeyCreateDecryptedData(…, _ error: UnsafeMutablePointer<Unmanaged<CFError>?>?) -> CFData?
+/// ```
+///
+/// and so you call it like this:
+///
+/// ```
+/// let plainText = try secCall { SecKeyCreateDecryptedData(privateKey, .rsaEncryptionPKCS1, cypherText, $0) }
+/// ```
+///
+/// - Parameter body: A function that returns a value, which returns `nil` if
+/// there’s an error and, in that case, places a `CFError` value in the ‘out’ parameter.
+/// - Throws: If `body` returns `nil`.
+/// - Returns: On success, the non-`nil` value returned by `body`.
 
+func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFError>?>) -> Result?) throws -> Result {
+		var errorQ: Unmanaged<CFError>? = nil
+		guard let result = body(&errorQ) else {
+				throw errorQ!.takeRetainedValue() as Error
+		}
+		return result
+}
 
 
 
