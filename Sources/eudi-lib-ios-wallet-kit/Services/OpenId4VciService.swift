@@ -27,7 +27,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let credentialIssuerURL: String
 	var privateKey: SecKey!
 	var publicKey: SecKey!
-	var seKey: SecureEnclave.P256.Signing.PrivateKey!
+	var seKey: SecureEnclave.P256.KeyAgreement.PrivateKey!
 	var bindingKey: BindingKey!
 	var usedSecureEnclave: Bool!
 	let logger: Logger
@@ -44,11 +44,11 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	/// - Parameters:
 	///   - docType: the docType of the document to be issued
 	///   - format: format of the exchanged data
-	///   - useSecureEnclave: use secure enclave to protect the private key (to be implemented)
+	///   - useSecureEnclave: use secure enclave to protect the private key
 	/// - Returns: The data of the document
-	public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> Data {
-		usedSecureEnclave = !useSecureEnclave || !SecureEnclave.isAvailable
-		if usedSecureEnclave { seKey = try SecureEnclave.P256.Signing.PrivateKey() }
+	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool) async throws -> Data {
+		usedSecureEnclave = useSecureEnclave && SecureEnclave.isAvailable
+		if usedSecureEnclave { seKey = try SecureEnclave.P256.KeyAgreement.PrivateKey() }
 		privateKey = if !usedSecureEnclave { try KeyController.generateECDHPrivateKey() } else { try seKey.toSecKey() }
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
@@ -238,7 +238,7 @@ fileprivate extension URL {
 	}
 }
 
-extension SecureEnclave.P256.Signing.PrivateKey {
+extension SecureEnclave.P256.KeyAgreement.PrivateKey {
 
 	func toSecKey() throws -> SecKey {
 		var errorQ: Unmanaged<CFError>?
