@@ -33,6 +33,7 @@ public class OpenId4VpService: PresentationService {
 	var openid4VPlink: String
 	var docs: [DeviceResponse]!
 	var iaca: [SecCertificate]!
+	var dauthMethod: DeviceAuthMethod
 	var devicePrivateKey: CoseKeyPrivate!
 	var logger = Logger(label: "OpenId4VpService")
 	var presentationDefinition: PresentationDefinition?
@@ -47,10 +48,10 @@ public class OpenId4VpService: PresentationService {
 			throw PresentationSession.makeError(str: "INVALID_WALLET_CONFIGURATION")
 		}
 		walletConf = cfg
-		guard let (docs, devicePrivateKey, iaca) = MdocHelpers.initializeData(parameters: parameters) else {
+		guard let (docs, devicePrivateKey, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
 		}
-		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca
+		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca; self.dauthMethod = dauthMethod
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: walletConf)
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
@@ -95,7 +96,7 @@ public class OpenId4VpService: PresentationService {
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
-		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
 		try await SendVpToken(vpTokenStr, pd, resolved)

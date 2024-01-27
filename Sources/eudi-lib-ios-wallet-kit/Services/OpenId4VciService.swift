@@ -22,19 +22,21 @@ import AuthenticationServices
 import Logging
 import CryptoKit
 import Security
+import WalletStorage
 
 public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
+	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var privateKey: SecKey!
 	var publicKey: SecKey!
-	var seKey: SecureEnclave.P256.KeyAgreement.PrivateKey!
 	var bindingKey: BindingKey!
 	var usedSecureEnclave: Bool!
 	let logger: Logger
 	let config: WalletOpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
 
-	init(credentialIssuerURL: String, clientId: String, callbackScheme: String) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String) {
+		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		logger = Logger(label: "OpenId4VCI")
 		config = .init(clientId: clientId, authFlowRedirectionURI: URL(string: callbackScheme)!)
@@ -48,8 +50,13 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	/// - Returns: The data of the document
 	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool) async throws -> Data {
 		usedSecureEnclave = useSecureEnclave && SecureEnclave.isAvailable
-		if usedSecureEnclave { seKey = try SecureEnclave.P256.KeyAgreement.PrivateKey() }
-		privateKey = if !usedSecureEnclave { try KeyController.generateECDHPrivateKey() } else { try seKey.toSecKey() }
+		if !usedSecureEnclave {
+			let key = try P256.KeyAgreement.PrivateKey(x963Representation: issueReq.keyData)
+			privateKey = try key.toSecKey()
+		} else {
+			let seKey = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: issueReq.keyData)
+			privateKey = try seKey.toSecKey()
+		}
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
 		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey)
@@ -250,6 +257,19 @@ extension SecureEnclave.P256.KeyAgreement.PrivateKey {
 		] as NSDictionary, &errorQ) else { throw errorQ!.takeRetainedValue() as Error }
 		return sf
 	}
+}
+
+extension P256.KeyAgreement.PrivateKey {
+func toSecKey() throws -> SecKey {
+  var error: Unmanaged<CFError>?
+  guard let privateKey = SecKeyCreateWithData(x963Representation as NSData, [
+	kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+	kSecAttrKeyClass: kSecAttrKeyClassPrivate
+  ] as NSDictionary, &error) else {
+	throw error!.takeRetainedValue() as Error
+  }
+  return privateKey
+}
 }
 
 extension SupportedCredential {

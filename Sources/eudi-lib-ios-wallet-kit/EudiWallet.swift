@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
+import MdocSecurity18013
 import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
@@ -31,6 +32,7 @@ public final class EudiWallet: ObservableObject {
 	public var userAuthenticationRequired: Bool
 	/// Trusted root certificates to validate the reader authentication certificate included in the proximity request
 	public var trustedReaderCertificates: [Data]?
+	public var dauthMethod: DeviceAuthMethod = .deviceMac
 	/// OpenID4VP verifier api URL (used for preregistered clients)
 	public var verifierApiUri: String?
 	public var vciIssuerUrl: String?
@@ -52,16 +54,19 @@ public final class EudiWallet: ObservableObject {
    @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> WalletStorage.Document {
 		guard let vciIssuerUrl else { throw WalletError(description: "vciIssuerUrl not defined")}
 		guard let vciClientId else { throw WalletError(description: "vciClientId not defined")}
-		let openId4VCIService = OpenId4VCIService(credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciRedirectUri)
-		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
-		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)")}
+		let id: String = UUID().uuidString
+	   try await Self.authorizedAction(action: {
+		   _ = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave && SecureEnclave.isAvailable ? .secureEnclaveP256 : .x963EncodedP256)
+	   }, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: ""))
+	   guard let issueReq = try IssueRequest(storageService, id: id) else { throw WalletError(description: "Cannot store private key") }
+	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciRedirectUri)
+		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave && SecureEnclave.isAvailable)
+		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		 var issued: WalletStorage.Document
 		 if !openId4VCIService.usedSecureEnclave {
-			 let pkd = try secCall { SecKeyCopyExternalRepresentation(openId4VCIService.privateKey, $0) } as Data
-			 issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: pkd, createdAt: Date())
+			 issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())
 		 } else {
-			 let pkd = openId4VCIService.seKey.dataRepresentation
-			 issued = WalletStorage.Document(docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: pkd, createdAt: Date())
+			 issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date())
 		 }
 		try endIssueDocument(issued)
 		await storage.appendDocModel(issued)
@@ -75,8 +80,8 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - id: Document identifier
 	///   - issuer: Issuer function
-	public func beginIssueDocument(id: String) async throws -> IssueRequest {
-		let request = try IssueRequest(id: id)
+	public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256) async throws -> IssueRequest {
+		let request = try IssueRequest(id: id, privateKeyType: privateKeyType)
 		try request.saveToStorage(storage.storageService)
 		return request
 	}
@@ -138,6 +143,7 @@ public final class EudiWallet: ObservableObject {
 			guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
 			parameters = [InitializeKeys.document_signup_response_obj.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.first!.dpk]
 			if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
+			parameters[InitializeKeys.device_auth_method.rawValue] = dauthMethod.rawValue
 		default:
 			fatalError("jwt format not implemented")
 		}
@@ -156,15 +162,15 @@ public final class EudiWallet: ObservableObject {
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
-				return PresentationSession(presentationService: bleSvc)
+				return PresentationSession(presentationService: bleSvc, userAuthenticationRequired: userAuthenticationRequired)
 			case .openid4vp(let qrCode):
 				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri)
-				return PresentationSession(presentationService: openIdSvc)
+				return PresentationSession(presentationService: openIdSvc, userAuthenticationRequired: userAuthenticationRequired)
 			default:
-				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")))
+				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), userAuthenticationRequired: false)
 			}
 		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error))
+			return PresentationSession(presentationService: FaultPresentationService(error: error), userAuthenticationRequired: false)
 		}
 	}
 	
@@ -175,7 +181,7 @@ public final class EudiWallet: ObservableObject {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(service: any PresentationService) -> PresentationSession {
-	 PresentationSession(presentationService: service)
+		PresentationSession(presentationService: service, userAuthenticationRequired: userAuthenticationRequired)
 	}
 	
 	@MainActor
@@ -183,8 +189,8 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - dismiss: Action to perform if the user cancels authorization
 	///   - action: Action to perform after user authorization
-	public static func authorizedAction(dismiss: () -> Void, action: () async throws -> Void) async throws {
-		try await authorizedAction(isFallBack: false, dismiss: dismiss, action: action)
+	public static func authorizedAction(action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws {
+		try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
 	}
 	
 	/// Wrap an action with TouchID or FaceID authentication
@@ -192,20 +198,24 @@ public final class EudiWallet: ObservableObject {
 	///   - isFallBack: true if fallback (ask for pin code)
 	///   - dismiss: action to dismiss current page
 	///   - action: action to perform after authentication
-	static func authorizedAction(isFallBack: Bool = false, dismiss: () -> Void, action: () async throws -> Void) async throws {
+	static func authorizedAction(isFallBack: Bool = false, action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws {
+		guard !disabled else {
+			try await action()
+			return
+		}
 		let context = LAContext()
 		var error: NSError?
 		let policy: LAPolicy = .deviceOwnerAuthentication
 		if context.canEvaluatePolicy(policy, error: &error) {
 			do {
-				let success = try await context.evaluatePolicy(policy, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: ""))
+				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success {
 					try await action()
 				}
 				else { dismiss()}
 			} catch let laError as LAError {
 				if !isFallBack, laError.code == .userFallback {
-					try await authorizedAction(isFallBack: true, dismiss: dismiss, action: action)
+					try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
 				} else { dismiss() }
 			}
 		} else if let error {
