@@ -24,6 +24,7 @@ import CryptoKit
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
+	/// Storage manager instance
 	public private(set) var storage: StorageManager
 	var storageService: any WalletStorage.DataStorageService { storage.storageService }
 	/// Instance of the wallet initialized with default parameters
@@ -32,35 +33,48 @@ public final class EudiWallet: ObservableObject {
 	public var userAuthenticationRequired: Bool
 	/// Trusted root certificates to validate the reader authentication certificate included in the proximity request
 	public var trustedReaderCertificates: [Data]?
-	public var dauthMethod: DeviceAuthMethod = .deviceMac
+	/// Method to perform mdoc authentication (MAC or signature). Defaults to device MAC
+	public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
 	/// OpenID4VP verifier api URL (used for preregistered clients)
 	public var verifierApiUri: String?
-	public var vciIssuerUrl: String?
-	public var vciClientId: String?
-	public var vciRedirectUri: String = "eudi-openid4ci://authorize/"
+	/// OpenID4VCI issuer url
+	public var openID4VciIssuerUrl: String?
+	/// OpenID4VCI client id
+	public var openID4VciClientId: String?
+	var vciRedirectUri: String = "eudi-openid4ci://authorize/"
+	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
+	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
 	
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, vciIssuerUrl: String? = nil, vciClientId: String? = nil, vciRedirectUri: String? = nil) {
+	/// Initialize a wallet instance. All parameters are optional.
+	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil) {
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
 		storage = StorageManager(storageService: storageService)
 		self.trustedReaderCertificates = trustedReaderCertificates
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.verifierApiUri	= verifierApiUri
-		self.vciIssuerUrl = vciIssuerUrl
-		self.vciClientId = vciClientId
-		if let vciRedirectUri { self.vciRedirectUri = vciRedirectUri }
+		self.openID4VciIssuerUrl = openID4VciIssuerUrl
+		self.openID4VciClientId = openID4VciClientId
+		useSecureEnclave = SecureEnclave.isAvailable
 	}
 	
-   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> WalletStorage.Document {
-		guard let vciIssuerUrl else { throw WalletError(description: "vciIssuerUrl not defined")}
-		guard let vciClientId else { throw WalletError(description: "vciClientId not defined")}
+	/// Issue a document with the given docType using OpenId4Vci protocol
+	///
+	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	///  - Parameters:
+	///   - docType: Document type
+	///   - format: Optional format type. Defaults to cbor
+	/// - Returns: The document issued. It is saved in storage.
+   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document {
+		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
+		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
 		let id: String = UUID().uuidString
 	   try await Self.authorizedAction(action: {
-		   _ = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave && SecureEnclave.isAvailable ? .secureEnclaveP256 : .x963EncodedP256)
-	   }, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: ""))
+		   _ = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256)
+	   }, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
 	   guard let issueReq = try IssueRequest(storageService, id: id) else { throw WalletError(description: "Cannot store private key") }
-	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: vciIssuerUrl, clientId: vciClientId, callbackScheme: vciRedirectUri)
-		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave && SecureEnclave.isAvailable)
+	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: vciRedirectUri)
+		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		 var issued: WalletStorage.Document
 		 if !openId4VCIService.usedSecureEnclave {
@@ -74,9 +88,8 @@ public final class EudiWallet: ObservableObject {
 		return issued
 	}
 		
-	/// Issue a document and save in wallet storage
+	/// Begin issuing a document by generating an issue request
 	///
-	///  ** Not tested **
 	/// - Parameters:
 	///   - id: Document identifier
 	///   - issuer: Issuer function
@@ -86,6 +99,8 @@ public final class EudiWallet: ObservableObject {
 		return request
 	}
 	
+	/// End issuing by saving the issuing document (and its private key) in storage
+	/// - Parameter issued: The issued document
 	public func endIssueDocument(_ issued: WalletStorage.Document) throws {
 		try storage.storageService.saveDocumentData(issued, dataToSaveType: .doc, dataType: issued.docDataType.rawValue, allowOverwrite: true)
 		try storage.storageService.saveDocumentData(issued, dataToSaveType: .key, dataType: issued.privateKeyType!.rawValue, allowOverwrite: true)
@@ -143,7 +158,7 @@ public final class EudiWallet: ObservableObject {
 			guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
 			parameters = [InitializeKeys.document_signup_response_obj.rawValue: cborsWithKeys.map(\.dr), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.first!.dpk]
 			if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
-			parameters[InitializeKeys.device_auth_method.rawValue] = dauthMethod.rawValue
+			parameters[InitializeKeys.device_auth_method.rawValue] = deviceAuthMethod.rawValue
 		default:
 			fatalError("jwt format not implemented")
 		}
