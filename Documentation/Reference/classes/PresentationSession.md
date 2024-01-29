@@ -14,7 +14,7 @@
   - `status`
   - `deviceEngagement`
 - [Methods](#methods)
-  - `init(presentationService:)`
+  - `init(presentationService:userAuthenticationRequired:)`
   - `makeError(str:)`
   - `makeError(code:str:)`
   - `startQrEngagement()`
@@ -93,10 +93,10 @@ Status of the data transfer.
 Device engagement data (QR image data for the BLE flow)
 
 ## Methods
-### `init(presentationService:)`
+### `init(presentationService:userAuthenticationRequired:)`
 
 ```swift
-public init(presentationService: any PresentationService)
+public init(presentationService: any PresentationService, userAuthenticationRequired: Bool)
 ```
 
 ### `makeError(str:)`
