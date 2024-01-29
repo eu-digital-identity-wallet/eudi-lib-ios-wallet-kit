@@ -74,10 +74,10 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
 The library provides the functionality to issue documents using OpenID4VCI. To issue a document
 using this functionality, EudiWallet must be property initialized. 
 To issue a document using OpenID4VCI, you need to know the document's docType.
+If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 ```swift
-wallet.vciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
-wallet.vciClientId = "wallet-dev"
-wallet.vciRedirectUri = "eudi-openid4ci://authorize/" // this is the default value,if not specified
+wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
+wallet.openID4VciClientId = "wallet-dev"
 do {
   let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
   // document has been added to wallet storage, you can display it

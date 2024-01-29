@@ -9,14 +9,15 @@
   - `standard`
   - `userAuthenticationRequired`
   - `trustedReaderCertificates`
+  - `deviceAuthMethod`
   - `verifierApiUri`
-  - `vciIssuerUrl`
-  - `vciClientId`
-  - `vciRedirectUri`
+  - `openID4VciIssuerUrl`
+  - `openID4VciClientId`
+  - `useSecureEnclave`
 - [Methods](#methods)
-  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:vciIssuerUrl:vciClientId:vciRedirectUri:)`
-  - `issueDocument(docType:format:useSecureEnclave:)`
-  - `beginIssueDocument(id:)`
+  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:)`
+  - `issueDocument(docType:format:)`
+  - `beginIssueDocument(id:privateKeyType:)`
   - `endIssueDocument(_:)`
   - `loadDocuments()`
   - `deleteDocuments()`
@@ -24,7 +25,7 @@
   - `prepareServiceDataParameters(docType:dataFormat:)`
   - `beginPresentation(flow:docType:dataFormat:)`
   - `beginPresentation(service:)`
-  - `authorizedAction(dismiss:action:)`
+  - `authorizedAction(action:disabled:dismiss:localizedReason:)`
 
 ```swift
 public final class EudiWallet: ObservableObject
@@ -38,6 +39,8 @@ User wallet implementation
 ```swift
 public private(set) var storage: StorageManager
 ```
+
+Storage manager instance
 
 ### `standard`
 
@@ -63,6 +66,14 @@ public var trustedReaderCertificates: [Data]?
 
 Trusted root certificates to validate the reader authentication certificate included in the proximity request
 
+### `deviceAuthMethod`
+
+```swift
+public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
+```
+
+Method to perform mdoc authentication (MAC or signature). Defaults to device MAC
+
 ### `verifierApiUri`
 
 ```swift
@@ -71,46 +82,61 @@ public var verifierApiUri: String?
 
 OpenID4VP verifier api URL (used for preregistered clients)
 
-### `vciIssuerUrl`
+### `openID4VciIssuerUrl`
 
 ```swift
-public var vciIssuerUrl: String?
+public var openID4VciIssuerUrl: String?
 ```
 
-### `vciClientId`
+OpenID4VCI issuer url
+
+### `openID4VciClientId`
 
 ```swift
-public var vciClientId: String?
+public var openID4VciClientId: String?
 ```
 
-### `vciRedirectUri`
+OpenID4VCI client id
+
+### `useSecureEnclave`
 
 ```swift
-public var vciRedirectUri: String = "eudi-openid4ci://authorize/"
+public var useSecureEnclave: Bool
 ```
+
+Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 
 ## Methods
-### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:vciIssuerUrl:vciClientId:vciRedirectUri:)`
+### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:)`
 
 ```swift
-public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, vciIssuerUrl: String? = nil, vciClientId: String? = nil, vciRedirectUri: String? = nil)
+public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil)
 ```
 
-### `issueDocument(docType:format:useSecureEnclave:)`
+Initialize a wallet instance. All parameters are optional.
+
+### `issueDocument(docType:format:)`
 
 ```swift
-@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, useSecureEnclave: Bool = false) async throws -> WalletStorage.Document
+@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document
 ```
 
-### `beginIssueDocument(id:)`
+Issue a document with the given docType using OpenId4Vci protocol
+
+If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+ - Parameters:
+  - docType: Document type
+  - format: Optional format type. Defaults to cbor
+- Returns: The document issued. It is saved in storage.
+
+### `beginIssueDocument(id:privateKeyType:)`
 
 ```swift
-public func beginIssueDocument(id: String) async throws -> IssueRequest
+public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256) async throws -> IssueRequest
 ```
 
-Issue a document and save in wallet storage
+Begin issuing a document by generating an issue request
 
- ** Not tested **
 - Parameters:
   - id: Document identifier
   - issuer: Issuer function
@@ -127,6 +153,15 @@ Issue a document and save in wallet storage
 ```swift
 public func endIssueDocument(_ issued: WalletStorage.Document) throws
 ```
+
+End issuing by saving the issuing document (and its private key) in storage
+- Parameter issued: The issued document
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| issued | The issued document |
 
 ### `loadDocuments()`
 
@@ -228,10 +263,10 @@ Begin attestation presentation to a verifier
 | docType | DocType of documents to present (optional) |
 | dataFormat | Exchanged data `Format` type |
 
-### `authorizedAction(dismiss:action:)`
+### `authorizedAction(action:disabled:dismiss:localizedReason:)`
 
 ```swift
-public static func authorizedAction(dismiss: () -> Void, action: () async throws -> Void) async throws
+public static func authorizedAction(action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws
 ```
 
 Perform an action after user authorization via TouchID/FaceID/Passcode

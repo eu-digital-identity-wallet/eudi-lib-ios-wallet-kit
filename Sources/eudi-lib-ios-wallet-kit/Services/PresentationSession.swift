@@ -42,9 +42,12 @@ public class PresentationSession: ObservableObject {
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR image data for the BLE flow)
 	@Published public var deviceEngagement: Data?
+	/// User authentication required
+	var userAuthenticationRequired: Bool
 	
-	public init(presentationService: any PresentationService) {
+	public init(presentationService: any PresentationService, userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
+		self.userAuthenticationRequired = userAuthenticationRequired
 	}
 	
 	@MainActor
@@ -127,11 +130,7 @@ public class PresentationSession: ObservableObject {
 		do {
 			await MainActor.run {status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend) }
-			if EudiWallet.standard.userAuthenticationRequired {
-				try await EudiWallet.authorizedAction(dismiss: { onCancel?()}, action: action )
-			} else {
-				try await action()
-			}
+			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run {status = .responseSent }
 		} catch { await setError(error) }
 	}
