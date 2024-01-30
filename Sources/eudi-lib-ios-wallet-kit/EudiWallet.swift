@@ -41,12 +41,13 @@ public final class EudiWallet: ObservableObject {
 	public var openID4VciIssuerUrl: String?
 	/// OpenID4VCI client id
 	public var openID4VciClientId: String?
-	var vciRedirectUri: String = "eudi-openid4ci://authorize/"
+	/// OpenID4VCI redirect URI. Defaults to "eudi-openid4ci://authorize/"
+	public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize/"
 	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
 	
 	/// Initialize a wallet instance. All parameters are optional.
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil) {
+	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil, openID4VciRedirectUri: String? = nil) {
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
 		storage = StorageManager(storageService: storageService)
@@ -55,6 +56,7 @@ public final class EudiWallet: ObservableObject {
 		self.verifierApiUri	= verifierApiUri
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
 		self.openID4VciClientId = openID4VciClientId
+		if let openID4VciRedirectUri { self.openID4VciRedirectUri = openID4VciRedirectUri }
 		useSecureEnclave = SecureEnclave.isAvailable
 	}
 	
@@ -73,7 +75,7 @@ public final class EudiWallet: ObservableObject {
 		   _ = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256)
 	   }, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
 	   guard let issueReq = try IssueRequest(storageService, id: id) else { throw WalletError(description: "Cannot store private key") }
-	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: vciRedirectUri)
+	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		 var issued: WalletStorage.Document
