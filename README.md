@@ -78,6 +78,7 @@ If ``userAuthenticationRequired`` is true, user authentication is required. The 
 ```swift
 wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
 wallet.openID4VciClientId = "wallet-dev"
+wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
 do {
   let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
   // document has been added to wallet storage, you can display it
