@@ -12,7 +12,7 @@
   - `init(error:)`
   - `startQrEngagement()`
   - `receiveRequest()`
-  - `sendResponse(userAccepted:itemsToSend:)`
+  - `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
 public class FaultPresentationService: PresentationService
@@ -58,10 +58,10 @@ public func startQrEngagement() async throws -> Data?
 public func receiveRequest() async throws -> [String : Any]
 ```
 
-### `sendResponse(userAccepted:itemsToSend:)`
+### `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems,  onSuccess: ((URL?) -> Void)?) async throws
 ```
 
 #### Parameters

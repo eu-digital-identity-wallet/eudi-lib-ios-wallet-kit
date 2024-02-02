@@ -38,7 +38,7 @@ public class FaultPresentationService: PresentationService {
 		throw error
 	}
 	
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws{
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems,  onSuccess: ((URL?) -> Void)?) async throws{
 		throw error
 	}
 	

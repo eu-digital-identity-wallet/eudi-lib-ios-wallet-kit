@@ -19,7 +19,7 @@
   - `makeError(code:str:)`
   - `startQrEngagement()`
   - `receiveRequest()`
-  - `sendResponse(userAccepted:itemsToSend:onCancel:)`
+  - `sendResponse(userAccepted:itemsToSend:onCancel:onSuccess:)`
 
 ```swift
 public class PresentationSession: ObservableObject
@@ -135,10 +135,10 @@ On success ``disclosedDocuments`` published variable will be set  and ``status``
 On error ``uiError`` will be filled and ``status`` will be ``.error``
 - Returns: A request dictionary keyed by ``MdocDataTransfer.UserRequestKeys``
 
-### `sendResponse(userAccepted:itemsToSend:onCancel:)`
+### `sendResponse(userAccepted:itemsToSend:onCancel:onSuccess:)`
 
 ```swift
-public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)?) async
+public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: ((URL?) -> Void)? = nil) async
 ```
 
 Send response to verifier

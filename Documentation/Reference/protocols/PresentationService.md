@@ -35,10 +35,10 @@ func receiveRequest() async throws -> [String: Any]
 - Returns: The requested items.
 Receive request.
 
-### `sendResponse(userAccepted:itemsToSend:)`
+### `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws
 ```
 
 Send response to verifier

@@ -62,7 +62,7 @@ public class BlePresentationService : PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws  {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)? ) async throws  {
 		return try await withCheckedThrowingContinuation { c in
 			continuationResponse = c
 			handleSelected?(userAccepted, itemsToSend)

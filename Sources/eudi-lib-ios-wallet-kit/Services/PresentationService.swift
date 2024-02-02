@@ -36,7 +36,7 @@ public protocol PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces (see ``RequestItems``)
-	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws
 }
 
 
