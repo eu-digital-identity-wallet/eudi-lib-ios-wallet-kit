@@ -90,49 +90,33 @@ public class OpenId4VpService: PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws {
 		guard let pd = presentationDefinition, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
 		guard userAccepted, itemsToSend.count > 0 else {
-			try await SendVpToken(nil, pd, resolved)
+			try await SendVpToken(nil, pd, resolved, onSuccess)
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
 		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
-		try await SendVpToken(vpTokenStr, pd, resolved)
+		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
 	}
 	
-	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData) async throws {
+	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokenStr { .vpToken(vpToken: vpTokenStr, presentationSubmission: .init(id: pd.id, definitionID: pd.id, descriptorMap: [])) } else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: walletConf)
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
-			if let url {
-				await presentSafariView(url)
-			}
+			onSuccess?(url)
 		} else if case let .rejected(reason) = result {
 			logger.info("Dispatch rejected, reason: \(reason)")
 			throw PresentationSession.makeError(str: reason)
 		}
-	}
-	
-	@MainActor
-	func presentSafariView(_ url: URL) {
-		#if canImport(UIKit)
-		let vc = SFSafariViewController(url: url)
-		if #available(iOS 15.0, *) {
-			guard let w = UIApplication.shared.firstKeyWindow else { return }
-			w.rootViewController?.present(vc, animated: true)
-		} else {
-			guard let w = UIApplication.shared.keyWindow else { return }
-			w.rootViewController?.present(vc, animated: true)
-		}
-		#endif
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
@@ -163,14 +147,4 @@ public class OpenId4VpService: PresentationService {
 
 }
 
-#if canImport(UIKit)
-extension UIApplication {
-	@available(iOS 15.0, *)
-	var firstKeyWindow: UIWindow? {
-				return UIApplication.shared.connectedScenes
-						.compactMap { $0 as? UIWindowScene }
-						.filter { $0.activationState == .foregroundActive }
-						.first?.keyWindow
-		}
-}
-#endif
+

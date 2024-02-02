@@ -66,7 +66,9 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
  await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() })
+  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() }, onSuccess: {
+			if let url = $0 { presentSafariView(url) }
+		})
 ```
 
 ## Issue document using OpenID4VCI
