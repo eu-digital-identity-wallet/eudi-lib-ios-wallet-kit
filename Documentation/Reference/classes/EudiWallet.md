@@ -13,9 +13,10 @@
   - `verifierApiUri`
   - `openID4VciIssuerUrl`
   - `openID4VciClientId`
+  - `openID4VciRedirectUri`
   - `useSecureEnclave`
 - [Methods](#methods)
-  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:)`
+  - `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:openID4VciRedirectUri:)`
   - `issueDocument(docType:format:)`
   - `beginIssueDocument(id:privateKeyType:)`
   - `endIssueDocument(_:)`
@@ -98,6 +99,14 @@ public var openID4VciClientId: String?
 
 OpenID4VCI client id
 
+### `openID4VciRedirectUri`
+
+```swift
+public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize/"
+```
+
+OpenID4VCI redirect URI. Defaults to "eudi-openid4ci://authorize/"
+
 ### `useSecureEnclave`
 
 ```swift
@@ -107,10 +116,10 @@ public var useSecureEnclave: Bool
 Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 
 ## Methods
-### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:)`
+### `init(storageType:serviceName:accessGroup:trustedReaderCertificates:userAuthenticationRequired:verifierApiUri:openID4VciIssuerUrl:openID4VciClientId:openID4VciRedirectUri:)`
 
 ```swift
-public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil)
+public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil, openID4VciRedirectUri: String? = nil)
 ```
 
 Initialize a wallet instance. All parameters are optional.
