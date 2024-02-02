@@ -24,6 +24,8 @@ import MdocDataTransfer18013
 import SiopOpenID4VP
 import JOSESwift
 import Logging
+import UIKit
+import SafariServices
 
 /// Implements remote attestation presentation to online verifier
 
@@ -109,9 +111,24 @@ public class OpenId4VpService: PresentationService {
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
+			if let url {
+				await presentSafariView(url)
+			}
 		} else if case let .rejected(reason) = result {
 			logger.info("Dispatch rejected, reason: \(reason)")
 			throw PresentationSession.makeError(str: reason)
+		}
+	}
+	
+	@MainActor
+	func presentSafariView(_ url: URL) {
+		let vc = SFSafariViewController(url: url)
+		if #available(iOS 15.0, *) {
+			guard let w = UIApplication.shared.firstKeyWindow else { return }
+			w.rootViewController?.present(vc, animated: true)
+		} else {
+			guard let w = UIApplication.shared.keyWindow else { return }
+			w.rootViewController?.present(vc, animated: true)
 		}
 	}
 	
@@ -124,15 +141,34 @@ public class OpenId4VpService: PresentationService {
 		return [docType:[namespace:requestedFields]]
 	}
 	
+	static var chainVerifier: CertificateTrust = { certificates in
+	/*	let chainVerifier = X509CertificateChainVerifier()
+		let verified = try? chainVerifier.verifyCertificateChain(
+			base64Certificates: certificates
+		)
+		return chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
+	 */
+		return true
+	}
+	
 	/// OpenId4VP wallet configuration
 	static func getWalletConf(verifierApiUrl: String) -> WalletOpenId4VPConfiguration? {
-	let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 		guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
 			  let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
-		let res = WalletOpenId4VPConfiguration(subjectSyntaxTypesSupported: [], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), idTokenTTL: 10 * 60, presentationDefinitionUriSupported: true, signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])], vpFormatsSupported: [])
+		let res = WalletOpenId4VPConfiguration(subjectSyntaxTypesSupported: [], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), idTokenTTL: 10 * 60, presentationDefinitionUriSupported: true, signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: [.x509SanDns(trust: chainVerifier)], vpFormatsSupported: [])
 		return res
 	}
 
+}
+
+extension UIApplication {
+	@available(iOS 15.0, *)
+	var firstKeyWindow: UIWindow? {
+				return UIApplication.shared.connectedScenes
+						.compactMap { $0 as? UIWindowScene }
+						.filter { $0.activationState == .foregroundActive }
+						.first?.keyWindow
+		}
 }
