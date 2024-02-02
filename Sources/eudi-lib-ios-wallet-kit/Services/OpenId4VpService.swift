@@ -24,9 +24,10 @@ import MdocDataTransfer18013
 import SiopOpenID4VP
 import JOSESwift
 import Logging
+#if canImport(UIKit)
 import UIKit
 import SafariServices
-
+#endif
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
@@ -122,6 +123,7 @@ public class OpenId4VpService: PresentationService {
 	
 	@MainActor
 	func presentSafariView(_ url: URL) {
+		#if canImport(UIKit)
 		let vc = SFSafariViewController(url: url)
 		if #available(iOS 15.0, *) {
 			guard let w = UIApplication.shared.firstKeyWindow else { return }
@@ -130,6 +132,7 @@ public class OpenId4VpService: PresentationService {
 			guard let w = UIApplication.shared.keyWindow else { return }
 			w.rootViewController?.present(vc, animated: true)
 		}
+		#endif
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
@@ -160,6 +163,7 @@ public class OpenId4VpService: PresentationService {
 
 }
 
+#if canImport(UIKit)
 extension UIApplication {
 	@available(iOS 15.0, *)
 	var firstKeyWindow: UIWindow? {
@@ -169,3 +173,4 @@ extension UIApplication {
 						.first?.keyWindow
 		}
 }
+#endif

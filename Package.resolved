@@ -10,6 +10,15 @@
       }
     },
     {
+      "identity" : "blueecc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/niscy-eudiw/BlueECC.git",
+      "state" : {
+        "revision" : "15e525cfff2da9b7429285346248e2c67ba0bd12",
+        "version" : "1.2.4"
+      }
+    },
+    {
       "identity" : "chronometer",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Chronometer.git",
@@ -68,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "c660e111010389cbf7255fff8a1b5a50dd054e15",
-        "version" : "0.0.66"
+        "revision" : "7ea99cedc9520b5de7d03ca7ca718f2d1f87e7b0",
+        "version" : "0.0.69"
       }
     },
     {
