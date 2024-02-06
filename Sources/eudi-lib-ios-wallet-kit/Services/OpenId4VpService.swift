@@ -24,10 +24,7 @@ import MdocDataTransfer18013
 import SiopOpenID4VP
 import JOSESwift
 import Logging
-#if canImport(UIKit)
-import UIKit
-import SafariServices
-#endif
+import ASN1Decoder
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
@@ -82,7 +79,7 @@ public class OpenId4VpService: PresentationService {
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
 						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated
-						result[UserRequestKeys.reader_certificate_issuer.rawValue] = readerCertificateIssuer
+						result[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: readerCertificateIssuer)
 						result[UserRequestKeys.reader_certificate_validation_message.rawValue] = readerCertificateValidationMessage
 					}
 					return result
@@ -139,8 +136,8 @@ public class OpenId4VpService: PresentationService {
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
 		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
-		guard let encodedData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, encodedData as CFData) else { return result }
-		var cfName: CFString?; SecCertificateCopyCommonName(cert, &cfName); self.readerCertificateIssuer = cfName as String?
+		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509Certificate(der: certData) else { return result }
+		self.readerCertificateIssuer = x509.subjectDistinguishedName
 		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = reason
