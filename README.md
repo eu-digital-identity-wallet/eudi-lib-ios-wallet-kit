@@ -13,11 +13,71 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=reliability_rating&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit&metric=vulnerabilities&token=ceca670d1f503fb68c5545e9d6bf44465a5883a6)](https://sonarcloud.io/summary/new_code?id=eu-digital-identity-wallet_eudi-lib-ios-wallet-kit)
 
-The initial implementation provides Proximity and Remote Flows for the EUDI Wallet. It is based on the following specifications:
+## Overview
+
+This repository contains the EUDI Wallet Kit library for iOS. The library is a part
+of the EUDI Wallet Reference Implementation project.
+
+This library acts as a coordinator by orchestrating the various components that are
+required to implement the EUDI Wallet functionality. On top of that, it provides a simplified API
+that can be used by the application to implement the EUDI Wallet functionality.
+
+```mermaid
+graph TD;
+    A[eudi-lib-ios-wallet-kit]
+    B[eudi-lib-ios-wallet-storage] -->  |Wallet Storage|A 
+    C[eudi-lib-ios-iso18013-data-transfer] --> |Transfer Manager|A 
+    D[eudi-lib-ios-openid4vci-swift] --> |OpenId4Vci Manager|A 
+    E[eudi-lib-ios-siop-openid4vp-swift] --> |OpenId4Vp Manager|A 
+    F[eudi-lib-ios-iso18013-security] --> |Mdoc Security|C 
+    G[eudi-lib-ios-iso18013-data-model] --> |Mdoc Data Model|C 
+    H[eudi-lib-ios-presentation-exchange-swift] --> E 
+```
+
+The library provides the following functionality:
+
+- Document management
+    - [x] Storage encryption
+    - [x] Using iOS Secure Enclave for generating/storing documents' keypair
+    - [x] Enforcing device user authentication when retrieving documents' private keys
+- Document issuance
+    - [x] Support for OpenId4VCI document issuance
+        - [x] Authorization Code Flow
+        - [ ] Pre-authorization Code Flow
+        - [x] Support for mso_mdoc format
+        - [ ] Support for sd-jwt-vc format
+- Proximity document presentation
+    - [x] Support for ISO-18013-5 device retrieval
+        - [x] QR device engagement
+        - [x] BLE data transfer
+        - [ ] NFC data transfer
+        - [ ] Wifi-Aware data transfer
+- Remote document presentation
+    - [x] OpenId4VP document transfer
+        - [x] For pre-registered verifiers
+        - [x] Dynamic registration of verifiers
+
+The library is written in Kotlin and is compatible with Java. It is distributed as a Maven package
+and can be included in any Android project that uses Android 8 (API level 26) or higher.
+
+It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
 - Presentation Exchange v2.0.0 - Published
 - OpenID4VP – Draft 18
 - SIOPv2 – Draft
+
+## Installation
+To use EUDI Wallet Kit, add the following dependency to your Package.swift:
+```swift
+dependencies: [
+    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.2.0"))
+]
+```
+Then add the Eudi Wallet package to your target's dependencies:
+```swift
+dependencies: [
+    .product(name: "EudiWalletKit", package: "eudi-lib-ios-wallet-kit"),
+]
 
 ## Initialization
 The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
@@ -25,7 +85,7 @@ The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a
 ```swift
 let wallet = EudiWallet.standard
 wallet.userAuthenticationRequired = true
-wallet.trustedReaderCertificates = [Data(name: "scytales_root_ca", ext: "der")!]
+wallet.trustedReaderCertificates = [...] // array of der certificate data
 wallet.openId4VpVerifierApiUri = "https:// ... verifier api uri ..."
 wallet.loadDocuments()
 ```	

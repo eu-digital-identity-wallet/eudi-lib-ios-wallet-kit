@@ -53,7 +53,7 @@ public class PresentationSession: ObservableObject {
 	@MainActor
 	/// Decodes a presentation request
 	///
-	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set for the BLE proximity flow
+	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
 	func decodeRequest(_ request: [String: Any]) {
 		// show the items as checkboxes
