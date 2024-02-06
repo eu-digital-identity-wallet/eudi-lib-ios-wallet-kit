@@ -138,7 +138,7 @@ public class OpenId4VpService: PresentationService {
 		let chainVerifier = X509CertificateChainVerifier()
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
-		guard let self, let b64cert = certificates.last, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
+		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
 		guard let encodedData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, encodedData as CFData) else { return result }
 		var cfName: CFString?; SecCertificateCopyCommonName(cert, &cfName); self.readerCertificateIssuer = cfName as String?
 		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca)
