@@ -57,8 +57,8 @@ The library provides the following functionality:
         - [x] For pre-registered verifiers
         - [x] Dynamic registration of verifiers
 
-The library is written in Kotlin and is compatible with Java. It is distributed as a Maven package
-and can be included in any Android project that uses Android 8 (API level 26) or higher.
+The library is written in Swift and is compatible with iOS 14 or higher. It is distributed as a Swift package
+and can be included in any iOS project.
 
 It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
