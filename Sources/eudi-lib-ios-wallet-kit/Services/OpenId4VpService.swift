@@ -138,7 +138,7 @@ public class OpenId4VpService: PresentationService {
 		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
 		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509Certificate(der: certData) else { return result }
 		self.readerCertificateIssuer = x509.subjectDistinguishedName
-		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca)
+		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = reason
 		return result
