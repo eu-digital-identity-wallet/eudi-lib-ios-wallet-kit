@@ -50,8 +50,6 @@ The library provides the following functionality:
     - [x] Support for ISO-18013-5 device retrieval
         - [x] QR device engagement
         - [x] BLE data transfer
-        - [ ] NFC data transfer
-        - [ ] Wifi-Aware data transfer
 - Remote document presentation
     - [x] OpenId4VP document transfer
         - [x] For pre-registered verifiers
@@ -73,11 +71,13 @@ dependencies: [
     .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.2.0"))
 ]
 ```
+
 Then add the Eudi Wallet package to your target's dependencies:
 ```swift
 dependencies: [
     .product(name: "EudiWalletKit", package: "eudi-lib-ios-wallet-kit"),
 ]
+```
 
 ## Initialization
 The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
