@@ -34,7 +34,7 @@ public class OpenId4VpService: PresentationService {
 	var docs: [DeviceResponse]!
 	var iaca: [SecCertificate]!
 	var dauthMethod: DeviceAuthMethod
-	var devicePrivateKey: CoseKeyPrivate!
+	var devicePrivateKeys: [CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
 	var presentationDefinition: PresentationDefinition?
 	var resolvedRequestData: ResolvedRequestData?
@@ -47,10 +47,10 @@ public class OpenId4VpService: PresentationService {
 
 	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
-		guard let (docs, devicePrivateKey, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
+		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
 		}
-		self.docs = docs; self.devicePrivateKey = devicePrivateKey; self.iaca = iaca; self.dauthMethod = dauthMethod
+		self.docs = docs; self.devicePrivateKeys = devicePrivateKeys; self.iaca = iaca; self.dauthMethod = dauthMethod
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
@@ -102,7 +102,7 @@ public class OpenId4VpService: PresentationService {
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
-		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
 		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
@@ -138,7 +138,7 @@ public class OpenId4VpService: PresentationService {
 		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
 		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509Certificate(der: certData) else { return result }
 		self.readerCertificateIssuer = x509.subjectDistinguishedName
-		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca)
+		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = reason
 		return result
