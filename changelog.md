@@ -1,3 +1,6 @@
+## v.0.2.9
+- Fixed MAC validation error for mDL document type
+
 ## v0.1.7
 - Added delete documents func
 - Storage manager functions are now `async throws`
