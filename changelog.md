@@ -1,5 +1,8 @@
+## v.0.3.0
+- Updated eudi-lib-ios-siop-openid4vp-swift to 0.0.72
+
 ## v.0.2.9
-- Fixed MAC validation error for mDL document type
+- Fixed mDOC authentication MAC validation error for mDL document type
 
 ## v0.1.7
 - Added delete documents func
