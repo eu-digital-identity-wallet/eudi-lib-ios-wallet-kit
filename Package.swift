@@ -34,6 +34,8 @@ let package = Package(
         ),
         .testTarget(
             name: "EudiWalletKitTests",
-            dependencies: ["EudiWalletKit"]),
+            dependencies: ["EudiWalletKit"],
+						resources: [.process("Resources")]
+						)
     ]
 )
