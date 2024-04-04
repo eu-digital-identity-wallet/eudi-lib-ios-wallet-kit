@@ -74,7 +74,7 @@ public class OpenId4VpService: PresentationService {
 				switch resolvedRequestData {
 				case let .vpToken(vp):
 					self.presentationDefinition = vp.presentationDefinition
-					let items = try Self.parsePresentationDefinition(vp.presentationDefinition)
+					let items = try parsePresentationDefinition(vp.presentationDefinition)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
@@ -123,9 +123,8 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) throws -> RequestItems? {
+	func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) throws -> RequestItems? {
 		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
-		let logger = Logger(label: "")
 		var res = RequestItems()
 		for inputDescriptor in presentationDefinition.inputDescriptors {
 			guard let fc = inputDescriptor.formatContainer else { logger.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
