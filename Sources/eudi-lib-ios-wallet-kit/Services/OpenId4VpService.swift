@@ -74,7 +74,7 @@ public class OpenId4VpService: PresentationService {
 				switch resolvedRequestData {
 				case let .vpToken(vp):
 					self.presentationDefinition = vp.presentationDefinition
-					let items = try parsePresentationDefinition(vp.presentationDefinition)
+					let items = try Self.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
@@ -109,7 +109,9 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
-		let consent: ClientConsent = if let vpTokenStr { .vpToken(vpToken: vpTokenStr, presentationSubmission: .init(id: pd.id, definitionID: pd.id, descriptorMap: [])) } else { .negative(message: "Rejected") }
+		let consent: ClientConsent = if let vpTokenStr {
+			.vpToken(vpToken: vpTokenStr, presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0.designation == .msoMdoc }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
+		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri))
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
@@ -123,12 +125,12 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) throws -> RequestItems? {
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> RequestItems? {
 		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
 		var res = RequestItems()
 		for inputDescriptor in presentationDefinition.inputDescriptors {
-			guard let fc = inputDescriptor.formatContainer else { logger.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
-			guard fc.formats.contains(where: { $0.designation == .msoMdoc }) else { logger.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
+			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
+			guard fc.formats.contains(where: { $0.designation == .msoMdoc }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
 			let docType = inputDescriptor.id
 			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
