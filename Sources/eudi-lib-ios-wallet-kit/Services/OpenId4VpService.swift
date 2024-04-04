@@ -74,7 +74,7 @@ public class OpenId4VpService: PresentationService {
 				switch resolvedRequestData {
 				case let .vpToken(vp):
 					self.presentationDefinition = vp.presentationDefinition
-					let items = parsePresentationDefinition(vp.presentationDefinition)
+					let items = try Self.parsePresentationDefinition(vp.presentationDefinition)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
@@ -123,12 +123,30 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) -> RequestItems? {
-		guard let fieldConstraints = presentationDefinition.inputDescriptors.first?.constraints.fields else { return nil }
-		guard let docType = fieldConstraints.first(where: {$0.paths.first == "$.mdoc.doctype" })?.filter?["const"] as? String else { return nil }
-		guard let namespace = fieldConstraints.first(where: {$0.paths.first == "$.mdoc.namespace" })?.filter?["const"] as? String else { return nil }
-		let requestedFields = fieldConstraints.filter { $0.intentToRetain != nil }.compactMap { $0.paths.first?.replacingOccurrences(of: "$.mdoc.", with: "") }
-		return [docType:[namespace:requestedFields]]
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) throws -> RequestItems? {
+		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
+		let logger = Logger(label: "")
+		var res = RequestItems()
+		for inputDescriptor in presentationDefinition.inputDescriptors {
+			guard let fc = inputDescriptor.formatContainer else { logger.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
+			guard fc.formats.contains(where: { $0.designation == .msoMdoc }) else { logger.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
+			let docType = inputDescriptor.id
+			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
+			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
+			if !nsItems.isEmpty { res[docType] = nsItems }
+		}
+		return res
+	} 
+
+	static func parsePath(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
+		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
+		let r1 = match.range(at:1); 
+		let r1l = path.index(path.startIndex, offsetBy: r1.location)
+		let r1r = path.index(r1l, offsetBy: r1.length)
+		let r2 = match.range(at: 2) 
+		let r2l = path.index(path.startIndex, offsetBy: r2.location)
+		let r2r = path.index(r2l, offsetBy: r2.length)
+		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
 	}
 	
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
