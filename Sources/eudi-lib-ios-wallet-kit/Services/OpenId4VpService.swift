@@ -24,7 +24,7 @@ import MdocDataTransfer18013
 import SiopOpenID4VP
 import JOSESwift
 import Logging
-import ASN1Decoder
+import X509
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
@@ -155,11 +155,11 @@ public class OpenId4VpService: PresentationService {
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
 		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
-		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509Certificate(der: certData) else { return result }
-		self.readerCertificateIssuer = x509.subjectDistinguishedName
-		let (isValid, reason, _) = SecurityHelpers.isValidMdlPublicKey(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
+		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](certData)) else { return result }
+		self.readerCertificateIssuer = x509.subject.description
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
-		self.readerCertificateValidationMessage = reason
+		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		return result
 	}
 	
