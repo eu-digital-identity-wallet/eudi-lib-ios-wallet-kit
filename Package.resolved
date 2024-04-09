@@ -1,15 +1,6 @@
 {
   "pins" : [
     {
-      "identity" : "asn1decoder",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/filom/ASN1Decoder",
-      "state" : {
-        "revision" : "7e1523662c69d019a3299bbfb22fb824141dd1f6",
-        "version" : "1.10.0"
-      }
-    },
-    {
       "identity" : "blueecc",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/BlueECC.git",
@@ -41,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "f45960f4b00bc25f740122968aaebe1593cecea1",
-        "version" : "0.2.2"
+        "revision" : "3f24b3417dac2525ed830337fe03fd22c4d594e4",
+        "version" : "0.2.3"
       }
     },
     {
@@ -50,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "b307f5d411688b9b7752971530d108cf96b08f28",
-        "version" : "0.1.9"
+        "revision" : "a68dc2ce75f4e0ddbf5d45e00594b83f2966142d",
+        "version" : "0.2.0"
       }
     },
     {
