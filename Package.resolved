@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "75fed38a1805b696949c9bc2d2d709a3e59b6646",
-        "version" : "0.0.4"
+        "revision" : "1c06b020e6866906690c2eb36c8718e193659780",
+        "version" : "0.0.5"
       }
     },
     {
@@ -68,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "152880755e25cf025f5921b09c030b746dc883cc",
-        "version" : "0.0.72"
+        "revision" : "e822000c9b45040961d74839ce0c75a01391cc3c",
+        "version" : "0.0.71"
       }
     },
     {
@@ -86,8 +86,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Hitch.git",
       "state" : {
-        "revision" : "92f32ad70b9e61807cf0cf9fa89993eac2c0dd56",
-        "version" : "0.4.130"
+        "revision" : "733c8e04e04813bc6e3cc105850a4eb657bdacfb",
+        "version" : "0.4.133"
       }
     },
     {
@@ -95,8 +95,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/JOSESwift.git",
       "state" : {
-        "revision" : "ef86488a729fb1eb85edc3b174f528ac212c5ce6",
-        "version" : "2.4.1"
+        "revision" : "518cedba79ef18867191811b161471298b6cb7c8",
+        "version" : "2.4.1-gcm"
       }
     },
     {

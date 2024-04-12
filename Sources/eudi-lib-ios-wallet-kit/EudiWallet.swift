@@ -42,7 +42,7 @@ public final class EudiWallet: ObservableObject {
 	/// OpenID4VCI client id
 	public var openID4VciClientId: String?
 	/// OpenID4VCI redirect URI. Defaults to "eudi-openid4ci://authorize/"
-	public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize/"
+	public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize"
 	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
 	
@@ -53,6 +53,9 @@ public final class EudiWallet: ObservableObject {
 		storage = StorageManager(storageService: storageService)
 		self.trustedReaderCertificates = trustedReaderCertificates
 		self.userAuthenticationRequired = userAuthenticationRequired
+		#if DEBUG
+		self.userAuthenticationRequired = false
+		#endif
 		self.verifierApiUri	= verifierApiUri
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
 		self.openID4VciClientId = openID4VciClientId
@@ -67,7 +70,7 @@ public final class EudiWallet: ObservableObject {
 	///   - docType: Document type
 	///   - format: Optional format type. Defaults to cbor
 	/// - Returns: The document issued. It is saved in storage.
-   @discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document {
+	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
 		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
 		let id: String = UUID().uuidString
