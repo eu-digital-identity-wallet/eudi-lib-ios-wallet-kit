@@ -1,7 +1,16 @@
-## v.0.3.0
+## v0.3.3
+- OpenID4VP draft 13 support
+
+## v0.3.2
+- Internal updates for security checks
+
+## v0.3.1
+- Updated presentation definition parsing
+
+## v0.3.0
 - Updated eudi-lib-ios-siop-openid4vp-swift to 0.0.72
 
-## v.0.2.9
+## v0.2.9
 - Fixed mDOC authentication MAC validation error for mDL document type
 
 ## v0.1.7
