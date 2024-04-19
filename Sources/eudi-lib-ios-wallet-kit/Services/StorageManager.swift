@@ -82,9 +82,9 @@ public class StorageManager: ObservableObject {
 	func toModel(doc: WalletStorage.Document) -> MdocDecodable? {
 		guard let (dr,dpk) = doc.getCborData() else { return nil }
 		return switch doc.docType {
-		case EuPidModel.euPidDocType: EuPidModel(response: dr, devicePrivateKey: dpk)
-		case IsoMdlModel.isoDocType: IsoMdlModel(response: dr, devicePrivateKey: dpk)
-		default: GenericMdocModel(response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
+		case EuPidModel.euPidDocType: EuPidModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk)
+		case IsoMdlModel.isoDocType: IsoMdlModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk)
+		default: GenericMdocModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 		}
 	}
 	
@@ -120,18 +120,40 @@ public class StorageManager: ObservableObject {
 		return mdocModels[index]
 	}
 	
-	/// Get document model by docType
-	/// - Parameter docType: The docType of the document model to return
+	/// Get document model by id
+	/// - Parameter id: The id of the document model to return
 	/// - Returns: The ``MdocDecodable`` model
-	public func getDocumentModel(docType: String) -> MdocDecodable? {
-		guard let i = docTypes.firstIndex(of: docType)  else { return nil }
+	public func getDocumentModel(id: String) -> MdocDecodable? {
+		guard let i = documentIds.firstIndex(of: id)  else { return nil }
 		return getDocumentModel(index: i)
 	}
 	
-	/// Delete document by docType
+	/// Get document model by docType
+	/// - Parameter docType: The docType of the document model to return
+	/// - Returns: The ``MdocDecodable`` model
+	public func getDocumentModels(docType: String) -> [MdocDecodable] {
+		return (0..<docTypes.count).compactMap { i in
+			guard let dt = docTypes[i], dt == docType else { return nil }
+			return getDocumentModel(index: i)
+		}
+	}
+	/// Delete documents by docType
 	/// - Parameter docType: Document type
-	public func deleteDocument(docType: String) async throws {
-		guard let i = docTypes.firstIndex(of: docType)  else { return }
+	public func deleteDocuments(docType: String) async throws {
+		for i in (0..<docTypes.count) {
+			guard let dt = docTypes[i], dt == docType else { continue }
+			do {
+				try await deleteDocument(index: i)
+			} catch {
+				await setError(error)
+				throw error
+			}
+		}
+	}
+	/// Delete document by id
+	/// - Parameter id: Document id
+	public func deleteDocument(id: String) async throws {
+		guard let i: Array<String?>.Index = documentIds.firstIndex(of: id)  else { return }
 		do {
 			try await deleteDocument(index: i)
 		} catch {
@@ -139,7 +161,6 @@ public class StorageManager: ObservableObject {
 			throw error
 		}
 	}
-	
 	/// Delete document by Index
 	/// - Parameter index: Index in array of loaded models
 	public func deleteDocument(index: Int) async throws {

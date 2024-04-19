@@ -74,19 +74,20 @@ public final class EudiWallet: ObservableObject {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
 		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
 		let id: String = UUID().uuidString
-	   try await Self.authorizedAction(action: {
-		   _ = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256)
-	   }, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
-	   guard let issueReq = try IssueRequest(storageService, id: id) else { throw WalletError(description: "Cannot store private key") }
-	   let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
+		let issueReq = try await Self.authorizedAction(action: {
+			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
+		}, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
+		guard let issueReq else { throw WalletError(description: "Failed to begin issuing. Cannot store private key")}
+		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
-		 var issued: WalletStorage.Document
-		 if !openId4VCIService.usedSecureEnclave {
-			 issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())
-		 } else {
-			 issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date())
-		 }
+		var issued: WalletStorage.Document
+		if !openId4VCIService.usedSecureEnclave {
+			issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())
+		} else {
+			issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date())
+		}
+		try issueReq.saveToStorage(storage.storageService)
 		try endIssueDocument(issued)
 		await storage.appendDocModel(issued)
 		await storage.refreshPublishedVars()
@@ -98,9 +99,9 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - id: Document identifier
 	///   - issuer: Issuer function
-	public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256) async throws -> IssueRequest {
+	public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256, saveToStorage: Bool = true) async throws -> IssueRequest {
 		let request = try IssueRequest(id: id, privateKeyType: privateKeyType)
-		try request.saveToStorage(storage.storageService)
+		if saveToStorage { try request.saveToStorage(storage.storageService) }
 		return request
 	}
 	
@@ -209,8 +210,8 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - dismiss: Action to perform if the user cancels authorization
 	///   - action: Action to perform after user authorization
-	public static func authorizedAction(action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws {
-		try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
+	public static func authorizedAction<T>(action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
+		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
 	}
 	
 	/// Wrap an action with TouchID or FaceID authentication
@@ -218,10 +219,9 @@ public final class EudiWallet: ObservableObject {
 	///   - isFallBack: true if fallback (ask for pin code)
 	///   - dismiss: action to dismiss current page
 	///   - action: action to perform after authentication
-	static func authorizedAction(isFallBack: Bool = false, action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws {
+	static func authorizedAction<T>(isFallBack: Bool = false, action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
 		guard !disabled else {
-			try await action()
-			return
+			return try await action()
 		}
 		let context = LAContext()
 		var error: NSError?
@@ -230,16 +230,20 @@ public final class EudiWallet: ObservableObject {
 			do {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success {
-					try await action()
+					return try await action()
 				}
 				else { dismiss()}
 			} catch let laError as LAError {
 				if !isFallBack, laError.code == .userFallback {
-					try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
-				} else { dismiss() }
+					return try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
+				} else {
+					dismiss()
+					return nil
+				}
 			}
 		} else if let error {
 			throw WalletError(description: error.localizedDescription, code: error.code)
 		}
+		return nil
 	}
 }
