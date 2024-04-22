@@ -1,3 +1,10 @@
+## v0.3.5
+Updated `eudi-lib-ios-siop-openid4vp-swift` to v0.0.73
+Updated `eudi-lib-ios-openid4vci-swift` to v0.0.6
+
+## v0.3.4
+- Refactor MdocDecodable (DocType, DocumentIdentifier, createdAt), 
+
 ## v0.3.3
 - OpenID4VP draft 13 support
 
