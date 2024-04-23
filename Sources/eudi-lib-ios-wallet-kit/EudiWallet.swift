@@ -21,6 +21,7 @@ import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
 import CryptoKit
+import OpenID4VCI
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -63,6 +64,18 @@ public final class EudiWallet: ObservableObject {
 		useSecureEnclave = SecureEnclave.isAvailable
 	}
 	
+	func prepareIssuing(docType: String?) async throws -> (IssueRequest, OpenId4VCIService, String) {
+		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
+		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
+		let id: String = UUID().uuidString
+		let issueReq = try await Self.authorizedAction(action: {
+			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
+		}, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType ?? "", comment: "")))
+		guard let issueReq else { throw WalletError(description: "Failed to begin issuing. Cannot store private key")}
+		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
+		return (issueReq, openId4VCIService, id)
+	}
+	
 	/// Issue a document with the given docType using OpenId4Vci protocol
 	///
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
@@ -71,15 +84,12 @@ public final class EudiWallet: ObservableObject {
 	///   - format: Optional format type. Defaults to cbor
 	/// - Returns: The document issued. It is saved in storage.
 	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document {
-		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
-		let id: String = UUID().uuidString
-		let issueReq = try await Self.authorizedAction(action: {
-			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
-		}, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
-		guard let issueReq else { throw WalletError(description: "Failed to begin issuing. Cannot store private key")}
-		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
+		let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docType)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
+		return try await finalizeIssuing(id: id, data: data, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+	}
+	
+	func finalizeIssuing(id: String, data: Data, docType: String, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		var issued: WalletStorage.Document
 		if !openId4VCIService.usedSecureEnclave {
@@ -93,7 +103,20 @@ public final class EudiWallet: ObservableObject {
 		await storage.refreshPublishedVars()
 		return issued
 	}
-		
+	
+	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [String] {
+		let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil)
+		guard let uriOfferNormalized = uriOffer.removingPercentEncoding else { throw WalletError(description: "Invalid uri offer \(uriOffer)")}
+		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOfferNormalized, format: format)
+	}
+	
+	public func issueDocumentByOfferUrl(offerUri: String, docType: String, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> WalletStorage.Document {
+		guard let uriOfferNormalized = offerUri.removingPercentEncoding else { throw WalletError(description: "Invalid uri offer \(offerUri)")}
+		guard let offerUrl = URL(string: uriOfferNormalized) else { throw WalletError(description: "Invalid url : \(offerUri)")}
+		let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docType)
+		let data = try await openId4VCIService.issueDocumentByOfferUrl(offerUrl: offerUrl, docType: docType, format: format)
+		return try await finalizeIssuing(id: id, data: data, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+	}
 	/// Begin issuing a document by generating an issue request
 	///
 	/// - Parameters:

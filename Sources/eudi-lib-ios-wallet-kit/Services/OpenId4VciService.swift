@@ -69,6 +69,38 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return data
 	}
 	
+	/// Issue a document with the given `docType` using OpenId4Vci protocol
+	/// - Parameters:
+	///   - docType: the docType of the document to be issued
+	///   - format: format of the exchanged data
+	///   - useSecureEnclave: use secure enclave to protect the private key
+	/// - Returns: The data of the document
+	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [String] {
+		guard let offerUri = URL(string: uriOffer) else { throw WalletError(description: "Invalid URL string \(uriOffer)")}
+		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: offerUri.absoluteString))
+		switch result {
+		case .success(let offer):
+			let credIdentifiers = try getCredentialIdentifiers(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, format: format)
+			return credIdentifiers.map(\.docType)
+		case .failure(let error):
+			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
+		}
+	}
+	
+	public func issueDocumentByOfferUrl(offerUrl: URL, docType: String, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> Data {
+		try initSecurityKeys(useSecureEnclave)
+		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: offerUrl.absoluteString))
+		switch result {
+		case .success(let offer):
+			let (_, scope) = try getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: docType, format: format)
+			let str = try await issueOfferedCredentialWithProof(offer: offer, scope: scope, claimSet: claimSet)
+			guard let data = Data(base64URLEncoded: str) else { throw OpenId4VCIError.dataNotValid }
+			return data
+		case .failure(let error):
+			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
+		}
+	}
+	
 	func issueByDocType(_ docType: String, format: DataFormat, claimSet: ClaimSet? = nil) async throws -> String {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
 		let issuerMetadata = await CredentialIssuerMetadataResolver().resolve(source: .credentialIssuer( credentialIssuerIdentifier))
@@ -86,7 +118,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			throw WalletError(description: "Invalid issuer metadata")
 		}
 	}	
-	
+
 	private func issueOfferedCredentialInternal(offer: CredentialOffer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> String {
 		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 		// Authorize with auth code flow
@@ -116,6 +148,16 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			}
 			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
 			return (credential.key, scope)
+		default:
+			throw WalletError(description: "Format \(format) not yet supported")
+		}
+	}
+	
+	func getCredentialIdentifiers(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], format: DataFormat) throws -> [(identifier:CredentialConfigurationIdentifier, scope:String, docType:String)] {
+		switch format {
+		case .cbor:
+			let credentialInfos = credentialsSupported.compactMap { if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope { ($0.key, scope, msoMdocCred.docType) } else { nil } }
+			return credentialInfos
 		default:
 			throw WalletError(description: "Format \(format) not yet supported")
 		}
