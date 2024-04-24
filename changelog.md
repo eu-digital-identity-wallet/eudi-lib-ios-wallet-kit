@@ -1,3 +1,7 @@
+## v0.3.6
+Updated `eudi-lib-ios-siop-openid4vp-swift` to v0.0.74
+Updated `eudi-lib-ios-openid4vci-swift` to v0.0.7
+
 ## v0.3.5
 Updated `eudi-lib-ios-siop-openid4vp-swift` to v0.0.73
 Updated `eudi-lib-ios-openid4vci-swift` to v0.0.6
