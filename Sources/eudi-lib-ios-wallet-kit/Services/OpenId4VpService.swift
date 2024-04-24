@@ -110,7 +110,7 @@ public class OpenId4VpService: PresentationService {
 	
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokenStr {
-			.vpToken(vpToken: vpTokenStr, presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0.designation == .msoMdoc }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
+			.vpToken(vpToken: .generic(vpTokenStr), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri))
@@ -130,7 +130,7 @@ public class OpenId4VpService: PresentationService {
 		var res = RequestItems()
 		for inputDescriptor in presentationDefinition.inputDescriptors {
 			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
-			guard fc.formats.contains(where: { $0.designation == .msoMdoc }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
+			guard fc.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
 			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
 			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
