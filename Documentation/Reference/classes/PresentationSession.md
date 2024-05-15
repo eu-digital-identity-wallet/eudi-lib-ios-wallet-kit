@@ -87,10 +87,10 @@ Status of the data transfer.
 ### `deviceEngagement`
 
 ```swift
-@Published public var deviceEngagement: Data?
+@Published public var deviceEngagement: String?
 ```
 
-Device engagement data (QR image data for the BLE flow)
+Device engagement data (QR data for the BLE flow)
 
 ## Methods
 ### `init(presentationService:userAuthenticationRequired:)`

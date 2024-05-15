@@ -49,7 +49,7 @@ public init(error: Error)
 ### `startQrEngagement()`
 
 ```swift
-public func startQrEngagement() async throws -> Data?
+public func startQrEngagement() async throws -> String?
 ```
 
 ### `receiveRequest()`
