@@ -73,13 +73,15 @@ public class StorageManager: ObservableObject {
 	}
 	
 	@MainActor
-	func appendDocModel(_ doc: WalletStorage.Document) {
+	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		docTypes.append(doc.docType)
 		documentIds.append(doc.id)
-		mdocModels.append(toModel(doc: doc))
+		let mdoc: (any MdocDecodable)? = toModel(doc: doc)
+		mdocModels.append(mdoc)
+		return mdoc
 	}
 
-	func toModel(doc: WalletStorage.Document) -> MdocDecodable? {
+	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		guard let (dr,dpk) = doc.getCborData() else { return nil }
 		return switch doc.docType {
 		case EuPidModel.euPidDocType: EuPidModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk)
