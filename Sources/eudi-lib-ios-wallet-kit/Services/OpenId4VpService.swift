@@ -58,7 +58,7 @@ public class OpenId4VpService: PresentationService {
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
 	}
 	
-	public func startQrEngagement() async throws -> Data? { nil }
+	public func startQrEngagement() async throws -> String? { nil }
 	
 	///  Receive request from an openid4vp URL
 	///

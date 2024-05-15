@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import Foundation
-import MdocDataModel18013
+import MdocDataTransfer18013
 
 /// [Doc Types to [Namespace to Items]] dictionary
 public typealias RequestItems = [String: [String: [String]]]
@@ -27,7 +27,7 @@ public protocol PresentationService {
 	/// instance of a presentation ``FlowType``
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
-	func startQrEngagement() async throws -> Data?
+	func startQrEngagement() async throws -> String?
 	///
 	/// - Returns: The requested items.
 	/// Receive request.

@@ -40,8 +40,8 @@ public class PresentationSession: ObservableObject {
 	/// The ``FlowType`` instance
 	// public var flow: FlowType { presentationService.flow }
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
-	/// Device engagement data (QR image data for the BLE flow)
-	@Published public var deviceEngagement: Data?
+	/// Device engagement data (QR data for the BLE flow)
+	@Published public var deviceEngagement: String?
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	
@@ -88,8 +88,7 @@ public class PresentationSession: ObservableObject {
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async {
 		do {
-			let data = try await presentationService.startQrEngagement()
-			if let data, data.count > 0 {
+			if let data = try await presentationService.startQrEngagement() {
 				await MainActor.run {
 					deviceEngagement = data
 					status = .qrEngagementReady
