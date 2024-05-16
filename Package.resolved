@@ -23,17 +23,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "branch" : "feat/get-qr-code-string-payload",
-        "revision" : "c009475c9334ff7c1ba1e2b863ed799502821517"
+        "revision" : "39134521d5c8df9302e60a1d98d3cb6405253d12",
+        "version" : "0.2.4"
       }
     },
     {
       "identity" : "eudi-lib-ios-iso18013-data-transfer",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/DSRCorporation/eudi-lib-ios-iso18013-data-transfer.git",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "branch" : "feat/get-qr-code-string-payload",
-        "revision" : "fbaf3af125a4d0018b9410f9e63d81f6de9ff614"
+        "revision" : "079f0526af9d87d46995b3f58bd9c75859b86353",
+        "version" : "0.2.4"
       }
     },
     {
@@ -158,8 +158,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "bc566f88842b3b8001717326d935c2d113af5741",
-        "version" : "1.2.0"
+        "revision" : "83640c8097acaec17c9835a083e89678cb0f2b66",
+        "version" : "1.3.0"
       }
     },
     {
@@ -176,8 +176,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "f0525da24dc3c6cbb2b6b338b65042bc91cbc4bb",
-        "version" : "3.3.0"
+        "revision" : "bc1c29221f6dfeb0ebbfbc98eb95cd3d4967868e",
+        "version" : "3.4.0"
       }
     },
     {
