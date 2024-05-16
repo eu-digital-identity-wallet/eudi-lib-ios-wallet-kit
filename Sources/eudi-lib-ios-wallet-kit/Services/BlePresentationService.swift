@@ -24,11 +24,11 @@ import MdocDataTransfer18013
 public class BlePresentationService : PresentationService {
 	var bleServerTransfer: MdocGattServer
 	public var status: TransferStatus = .initializing
-	var continuationQrCode: CheckedContinuation<Data?, Error>?
+	var continuationQrCode: CheckedContinuation<String, Error>?
 	var continuationRequest: CheckedContinuation<[String: Any], Error>?
 	var continuationResponse: CheckedContinuation<Void, Error>?
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
-	var deviceEngagement: Data?
+	var deviceEngagement: String?
 	var request: [String: Any]?
 	public var flow: FlowType { .ble }
 
@@ -41,7 +41,7 @@ public class BlePresentationService : PresentationService {
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
-	public func startQrEngagement() async throws -> Data? {
+	public func startQrEngagement() async throws -> String? {
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
 			self.bleServerTransfer.performDeviceEngagement()
@@ -79,7 +79,7 @@ extension BlePresentationService: MdocOfflineDelegate {
 		status = if let st = TransferStatus(rawValue: newStatus.rawValue) { st } else { .error }
 				switch newStatus {
 				case .qrEngagementReady:
-						if let qrCode = self.bleServerTransfer.qrCodeImageData {
+						if let qrCode = self.bleServerTransfer.qrCodePayload {
 							deviceEngagement = qrCode
 							continuationQrCode?.resume(returning: qrCode)
 							continuationQrCode = nil

@@ -152,10 +152,26 @@ Get document model by index
 | ---- | ----------- |
 | index | Index in array of loaded models |
 
-### `getDocumentModel(docType:)`
+### `getDocumentModel(id:)`
 
 ```swift
-public func getDocumentModel(docType: String) -> MdocDecodable?
+public func getDocumentModel(id: String) -> MdocDecodable?
+```
+
+Get document model by id
+- Parameter id: The id of the document model to return
+- Returns: The ``MdocDecodable`` model
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| id | The id of the document model to return |
+
+### `getDocumentModels(docType:)`
+
+```swift
+public func getDocumentModels(docType: String) -> [MdocDecodable]
 ```
 
 Get document model by docType
@@ -168,13 +184,13 @@ Get document model by docType
 | ---- | ----------- |
 | docType | The docType of the document model to return |
 
-### `deleteDocument(docType:)`
+### `deleteDocuments(docType:)`
 
 ```swift
-public func deleteDocument(docType: String) async throws
+public func deleteDocuments(docType: String) async throws
 ```
 
-Delete document by docType
+Delete documents by docType
 - Parameter docType: Document type
 
 #### Parameters
@@ -182,6 +198,21 @@ Delete document by docType
 | Name | Description |
 | ---- | ----------- |
 | docType | Document type |
+
+### `deleteDocument(id:)`
+
+```swift
+public func deleteDocument(id: String) async throws
+```
+
+Delete document by id
+- Parameter id: Document id
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| id | Document id |
 
 ### `deleteDocument(index:)`
 

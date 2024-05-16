@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataTransfer18013
 
 /// Fault presentation service. Used to communicate error state to the user
 public class FaultPresentationService: PresentationService {
@@ -30,7 +31,7 @@ public class FaultPresentationService: PresentationService {
 		self.error = error
 	}
 	
-	public func startQrEngagement() async throws -> Data? {
+	public func startQrEngagement() async throws -> String? {
 		throw error
 	}
 	

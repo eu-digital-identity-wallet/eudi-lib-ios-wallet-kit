@@ -43,7 +43,7 @@ public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: St
 ### `startQrEngagement()`
 
 ```swift
-public func startQrEngagement() async throws -> Data?
+public func startQrEngagement() async throws -> String?
 ```
 
 ### `receiveRequest()`
