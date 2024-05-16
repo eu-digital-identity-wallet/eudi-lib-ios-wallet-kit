@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 
 public struct OfferedDocModel {
-	public var docType: String
-	public var name: String
+	public let issuerName: String
+	public let docType: String
+	public let displayName: String
 }
