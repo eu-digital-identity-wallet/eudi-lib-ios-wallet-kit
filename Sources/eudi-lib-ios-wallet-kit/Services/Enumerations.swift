@@ -32,7 +32,7 @@ public enum FlowType: Codable, Hashable {
 /// Data format of the exchanged data
 public enum DataFormat: String {
 	case cbor = "cbor"
-	case sjwt = "sjwt"
+	case sdjwt = "sdjwt"
 }
 
 public enum StorageType {
