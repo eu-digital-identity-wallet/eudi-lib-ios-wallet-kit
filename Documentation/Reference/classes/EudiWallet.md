@@ -138,10 +138,10 @@ If ``userAuthenticationRequired`` is true, user authentication is required. The 
   - format: Optional format type. Defaults to cbor
 - Returns: The document issued. It is saved in storage.
 
-### `beginIssueDocument(id:privateKeyType:)`
+### `beginIssueDocument(id:privateKeyType:saveToStorage:)`
 
 ```swift
-public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256) async throws -> IssueRequest
+public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256, saveToStorage: Bool = true) async throws -> IssueRequest
 ```
 
 Begin issuing a document by generating an issue request
@@ -275,7 +275,7 @@ Begin attestation presentation to a verifier
 ### `authorizedAction(action:disabled:dismiss:localizedReason:)`
 
 ```swift
-public static func authorizedAction(action: () async throws -> Void, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws
+public static func authorizedAction<T>(action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T?
 ```
 
 Perform an action after user authorization via TouchID/FaceID/Passcode

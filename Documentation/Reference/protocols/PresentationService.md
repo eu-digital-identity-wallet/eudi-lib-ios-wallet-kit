@@ -21,7 +21,7 @@ instance of a presentation ``FlowType``
 ### `startQrEngagement()`
 
 ```swift
-func startQrEngagement() async throws -> Data?
+func startQrEngagement() async throws -> String?
 ```
 
 Generate a QR code to be shown to verifier (optional)

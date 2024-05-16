@@ -43,7 +43,7 @@ public init(parameters: [String: Any]) throws
 ### `startQrEngagement()`
 
 ```swift
-public func startQrEngagement() async throws -> Data?
+public func startQrEngagement() async throws -> String?
 ```
 
 Generate device engagement QR code 

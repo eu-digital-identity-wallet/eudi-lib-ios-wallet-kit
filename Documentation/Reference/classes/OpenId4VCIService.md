@@ -16,7 +16,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 ### `issueDocument(docType:format:useSecureEnclave:)`
 
 ```swift
-public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool) async throws -> Data
+public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = true) async throws -> Data
 ```
 
 Issue a document with the given `docType` using OpenId4Vci protocol
