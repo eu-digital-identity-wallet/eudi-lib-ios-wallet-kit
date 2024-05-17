@@ -34,6 +34,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let logger: Logger
 	let config: WalletOpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
+	static var metadataCache = [String: CredentialOffer]()
 	
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String) {
 		self.issueReq = issueRequest
@@ -69,16 +70,53 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return data
 	}
 	
+	/// Resolve issue offer and return available document metadata
+	/// - Parameters:
+	///   - uriOffer: Uri of the offer (from a QR or a deep link)
+	///   - format: format of the exchanged data
+	/// - Returns: The data of the document
+	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> [OfferedDocModel] {
+		guard let uriOfferNormalized = uriOffer.removingPercentEncoding else { throw WalletError(description: "Invalid uri offer \(uriOffer)")}
+		guard let offerUrlNormalied = URL(string: uriOfferNormalized) else { throw WalletError(description: "Invalid URL string \(uriOffer)")}
+		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: offerUrlNormalied.absoluteString))
+		switch result {
+		case .success(let offer):
+			Self.metadataCache[uriOffer] = offer
+			let credentialInfo = try getCredentialIdentifiers(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, format: format)
+			return credentialInfo.map(\.offered)
+		case .failure(let error):
+			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
+		}
+	}
+	
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
+		try initSecurityKeys(useSecureEnclave)
+		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
+		}
+		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
+		let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+		let data = try await credentialInfo.asyncCompactMap {
+			let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, scope: $0.scope, claimSet: claimSet)
+			if let d = Data(base64URLEncoded: str) { return d } else { throw OpenId4VCIError.dataNotValid }
+		}
+		Self.metadataCache.removeValue(forKey: offerUri)
+		return data
+	}
+	
 	func issueByDocType(_ docType: String, format: DataFormat, claimSet: ClaimSet? = nil) async throws -> String {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
-		let issuerMetadata = await CredentialIssuerMetadataResolver().resolve(source: .credentialIssuer( credentialIssuerIdentifier))
+		let issuerMetadata = await CredentialIssuerMetadataResolver().resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier, .init(value: "openid")], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
-				return try await issueOfferedCredentialInternal(offer: offer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
+				// Authorize with auth code flow
+				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
+				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 			} else {
 				throw WalletError(description: "Invalid authorization server")
 			}
@@ -86,11 +124,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			throw WalletError(description: "Invalid issuer metadata")
 		}
 	}	
-	
-	private func issueOfferedCredentialInternal(offer: CredentialOffer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> String {
-		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
-		// Authorize with auth code flow
-		let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+
+	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> String {
 		switch authorized {
 		case .noProofRequired:
 			return try await noProofRequiredSubmissionUseCase(issuer: issuer, noProofRequiredState: authorized, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
@@ -99,15 +134,15 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func issueOfferedCredentialWithProof(offer: CredentialOffer, scope: String, claimSet: ClaimSet? = nil) async throws -> String {
+	private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, scope: String, claimSet: ClaimSet? = nil) async throws -> String {
 		let issuerMetadata = offer.credentialIssuerMetadata
 		guard let credentialConfigurationIdentifier = issuerMetadata.credentialsSupported.keys.first(where: { $0.value == scope }) else {
 			throw WalletError(description: "Cannot find credential identifier for \(scope)")
 		}
-		return try await issueOfferedCredentialInternal(offer: offer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
+		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 	}
 	
-	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], docType: String, format: DataFormat) throws -> (CredentialConfigurationIdentifier, String) {
+	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], docType: String, format: DataFormat) throws -> (identifier: CredentialConfigurationIdentifier, scope: String) {
 		switch format {
 		case .cbor:
 			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope else {
@@ -115,7 +150,18 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				throw WalletError(description: "Issuer does not support \(docType)")
 			}
 			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-			return (credential.key, scope)
+			return (identifier: credential.key, scope: scope)
+		default:
+			throw WalletError(description: "Format \(format) not yet supported")
+		}
+	}
+	
+	func getCredentialIdentifiers(issuerName: String, credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], format: DataFormat) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
+		switch format {
+		case .cbor:
+			let credentialInfos = credentialsSupported.compactMap {
+				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(issuerName: issuerName, docType: msoMdocCred.docType, displayName: msoMdocCred.display.getName() ?? msoMdocCred.docType) { (identifier: $0.key, scope: scope, offered: offered) } else { nil } }
+			return credentialInfos
 		default:
 			throw WalletError(description: "Format \(format) not yet supported")
 		}

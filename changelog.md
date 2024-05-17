@@ -1,3 +1,20 @@
+## v0.3.7
+### Added functions:
+/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
+
+` public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] `
+
+/// Issue documents by offer URI.
+
+`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
+
+### Breaking change: 
+ `// PresentationSession
+ @Published public var deviceEngagement: String?`
+    use the following code to convert to QR code image:  
+    
+ `let qrImage =  DeviceEngagement.getQrCodeImage(qrCode: d)`
+
 ## v0.3.6
 Updated `eudi-lib-ios-siop-openid4vp-swift` to v0.0.74
 Updated `eudi-lib-ios-openid4vci-swift` to v0.0.7

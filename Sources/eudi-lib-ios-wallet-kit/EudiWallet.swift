@@ -21,6 +21,7 @@ import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
 import CryptoKit
+import OpenID4VCI
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -63,29 +64,46 @@ public final class EudiWallet: ObservableObject {
 		useSecureEnclave = SecureEnclave.isAvailable
 	}
 	
+	/// Prepare issuing
+	/// - Parameters:
+	///   - docType: document type
+	///   - promptMessage: Prompt message for biometric authentication (optional)
+	/// - Returns: (Issue request key pair, vci service, unique id)
+	func prepareIssuing(docType: String?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {
+		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
+		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
+		let id: String = UUID().uuidString
+		let issueReq = try await Self.authorizedAction(action: {
+			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
+		}, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType ?? "", comment: "")))
+		guard let issueReq else { throw LAError(.userCancel)}
+		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
+		return (issueReq, openId4VCIService, id)
+	}
+	
 	/// Issue a document with the given docType using OpenId4Vci protocol
 	///
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
 	///  - Parameters:
 	///   - docType: Document type
 	///   - format: Optional format type. Defaults to cbor
+	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
-	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor) async throws -> WalletStorage.Document {
-		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
-		let id: String = UUID().uuidString
-		let issueReq = try await Self.authorizedAction(action: {
-			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
-		}, disabled: !userAuthenticationRequired, dismiss: {}, localizedReason: NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType, comment: "")))
-		guard let issueReq else { throw WalletError(description: "Failed to begin issuing. Cannot store private key")}
-		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri)
+	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+		let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docType, promptMessage: promptMessage)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
+		return try await finalizeIssuing(id: id, data: data, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+	}
+	
+	func finalizeIssuing(id: String, data: Data, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
+		let docTypeToSave = docType ?? (format == .cbor ? DeviceResponse(data: [UInt8](data))?.documents?.first?.docType : nil)
+		guard let docTypeToSave else { throw WalletError(description: "Unknown document type") }
 		var issued: WalletStorage.Document
 		if !openId4VCIService.usedSecureEnclave {
-			issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())
+			issued = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: data, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())
 		} else {
-			issued = WalletStorage.Document(id: id, docType: docType, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date())
+			issued = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: data, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date())
 		}
 		try issueReq.saveToStorage(storage.storageService)
 		try endIssueDocument(issued)
@@ -93,7 +111,38 @@ public final class EudiWallet: ObservableObject {
 		await storage.refreshPublishedVars()
 		return issued
 	}
-		
+	
+	/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
+	/// - Parameters:
+	///   - uriOffer: url with offer
+	///   - format: data format
+	///   - useSecureEnclave: whether to use secure enclave (if supported)
+	/// - Returns: Offered document info model
+	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] {
+		let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil)
+		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOffer, format: format)
+	}
+	
+	/// Issue documents by offer URI.
+	/// - Parameters:
+	///   - offerUri: url with offer
+	///   - docTypes: doc types to be issued
+	///   - format: data format
+	///   - promptMessage: prompt message for biometric authentication (optional)
+	///   - useSecureEnclave: whether to use secure enclave (if supported)
+	///   - claimSet: claim set (optional)
+	/// - Returns: Array of issued and stored documents
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
+		var (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docTypes.map(\.docType).joined(separator: ", "), promptMessage: promptMessage)
+		let docsData = try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, format: format, useSecureEnclave: useSecureEnclave, claimSet: claimSet)
+		var documents = [WalletStorage.Document]()
+		for (i, docData) in docsData.enumerated() {
+			if i > 0 { (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil) }
+			openId4VCIService.usedSecureEnclave = useSecureEnclave && SecureEnclave.isAvailable
+			documents.append(try await finalizeIssuing(id: id, data: docData, docType: nil, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService))
+		}
+		return documents
+	}
 	/// Begin issuing a document by generating an issue request
 	///
 	/// - Parameters:
