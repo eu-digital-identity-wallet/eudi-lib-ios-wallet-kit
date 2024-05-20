@@ -90,6 +90,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
+		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
@@ -136,7 +137,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, scope: String, claimSet: ClaimSet? = nil) async throws -> String {
 		let issuerMetadata = offer.credentialIssuerMetadata
-		guard let credentialConfigurationIdentifier = issuerMetadata.credentialsSupported.keys.first(where: { $0.value == scope }) else {
+		guard let credentialConfigurationIdentifier = issuerMetadata.credentialsSupported.first(where: { $0.value.getScope() == scope })?.key else {
 			throw WalletError(description: "Cannot find credential identifier for \(scope)")
 		}
 		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
@@ -146,8 +147,22 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		switch format {
 		case .cbor:
 			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope else {
-				logger.error("No credential for \(docType). Currently supported credentials: \(credentialsSupported.values)")
-				throw WalletError(description: "Issuer does not support \(docType)")
+				logger.error("No credential for docType \(docType). Currently supported credentials: \(credentialsSupported.values)")
+				throw WalletError(description: "Issuer does not support doc type\(docType)")
+			}
+			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
+			return (identifier: credential.key, scope: scope)
+		default:
+			throw WalletError(description: "Format \(format) not yet supported")
+		}
+	}
+	
+	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], scope: String, format: DataFormat) throws -> (identifier: CredentialConfigurationIdentifier, scope: String) {
+		switch format {
+		case .cbor:
+			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.scope == scope { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope else {
+				logger.error("No credential for scope \(scope). Currently supported credentials: \(credentialsSupported.values)")
+				throw WalletError(description: "Issuer does not support scope \(scope)")
 			}
 			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
 			return (identifier: credential.key, scope: scope)
