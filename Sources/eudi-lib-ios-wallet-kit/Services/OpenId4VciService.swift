@@ -98,8 +98,15 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 		let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 		let data = try await credentialInfo.asyncCompactMap {
-			let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, scope: $0.scope, claimSet: claimSet)
-			if let d = Data(base64URLEncoded: str) { return d } else { throw OpenId4VCIError.dataNotValid }
+			do {
+				logger.info("Starting issuing with scope \($0.scope)")
+				let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, scope: $0.scope, claimSet: claimSet)
+				return Data(base64URLEncoded: str)
+			} catch {
+				logger.error("Failed to issue document with scope \($0.scope)")
+				logger.info("Exception: \(error)")
+				return nil
+			}
 		}
 		Self.metadataCache.removeValue(forKey: offerUri)
 		return data
