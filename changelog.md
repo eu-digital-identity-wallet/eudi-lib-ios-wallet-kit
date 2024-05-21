@@ -1,3 +1,9 @@
+## v0.3.9
+OpenID4VCI: Allow partial issuing when some documents fail to issue
+
+## v0.3.8
+OpenID4VCI: Fixed issuing with https://dev.issuer.eudiw.dev
+
 ## v0.3.7
 ### Added functions:
 /// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
