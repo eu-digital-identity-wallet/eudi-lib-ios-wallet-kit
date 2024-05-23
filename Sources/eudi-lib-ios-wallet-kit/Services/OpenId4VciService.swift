@@ -82,7 +82,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		switch result {
 		case .success(let offer):
 			Self.metadataCache[uriOffer] = offer
-			let credentialInfo = try getCredentialIdentifiers(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, format: format)
+			let credentialInfo = try getCredentialIdentifiers(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
 			return credentialInfo.map(\.offered)
 		case .failure(let error):
 			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
