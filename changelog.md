@@ -1,3 +1,7 @@
+## v0.4.0
+OpenID4VCI: fix for filtering resolved identifiers
+Support mdoc Authentication for OpenId4Vp #46
+
 ## v0.3.9
 OpenID4VCI: Allow partial issuing when some documents fail to issue
 
