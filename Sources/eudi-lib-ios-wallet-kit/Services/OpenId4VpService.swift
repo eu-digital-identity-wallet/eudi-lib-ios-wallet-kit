@@ -43,6 +43,9 @@ public class OpenId4VpService: PresentationService {
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
+	var mdocGeneratedNonce: String!
+	var sessionTranscript: SessionTranscript!
+	var eReaderPub: CoseKey?
 	public var flow: FlowType
 
 	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
@@ -73,8 +76,17 @@ public class OpenId4VpService: PresentationService {
 				self.resolvedRequestData = resolvedRequestData
 				switch resolvedRequestData {
 				case let .vpToken(vp):
+					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.ECCurveType(crvName: crv)  {
+						logger.info("Found jwks public key with curve \(crv)")
+						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
+					}
+					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
+					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
+					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.clientId,
+						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
+					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.clientId), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
-					let items = try Self.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
+					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
@@ -102,7 +114,7 @@ public class OpenId4VpService: PresentationService {
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
-		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
 		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
@@ -110,7 +122,7 @@ public class OpenId4VpService: PresentationService {
 	
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokenStr {
-			.vpToken(vpToken: .generic(vpTokenStr), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
+			.vpToken(vpToken: .msoMdoc(vpTokenStr, apu: mdocGeneratedNonce.base64urlEncode), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri))
@@ -122,32 +134,6 @@ public class OpenId4VpService: PresentationService {
 			logger.info("Dispatch rejected, reason: \(reason)")
 			throw PresentationSession.makeError(str: reason)
 		}
-	}
-	
-	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> RequestItems? {
-		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
-		var res = RequestItems()
-		for inputDescriptor in presentationDefinition.inputDescriptors {
-			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
-			guard fc.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
-			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
-			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
-			if !nsItems.isEmpty { res[docType] = nsItems }
-		}
-		return res
-	} 
-
-	static func parsePath(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
-		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
-		let r1 = match.range(at:1); 
-		let r1l = path.index(path.startIndex, offsetBy: r1.location)
-		let r1r = path.index(r1l, offsetBy: r1.length)
-		let r2 = match.range(at: 2) 
-		let r2l = path.index(path.startIndex, offsetBy: r2.location)
-		let r2r = path.index(r2l, offsetBy: r2.length)
-		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
 	}
 	
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
