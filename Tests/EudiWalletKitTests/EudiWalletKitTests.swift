@@ -20,6 +20,7 @@ import Foundation
 import CryptoKit
 import PresentationExchange
 import MdocDataModel18013
+import SwiftCBOR
 
 final class EudiWalletKitTests: XCTestCase {
 	func testExample() throws {
@@ -32,14 +33,10 @@ final class EudiWalletKitTests: XCTestCase {
 	
 	func testParsePresentationDefinition() throws {
 		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "TestPresentationDefinition", ext: "json", from: Bundle.module)! )
-		let items = try XCTUnwrap(OpenId4VpService.parsePresentationDefinition(testPD))
+		let items = try XCTUnwrap(Openid4VpUtils.parsePresentationDefinition(testPD))
 		XCTAssert(!items.keys.isEmpty)
 		print(items)
 	}
-	
-	
-	
-	
 	
 	let ANNEX_B_OPENID4VP_HANDOVER = "835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"
 	let ANNEX_B_SESSION_TRANSCRIPT = "83F6F6835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"
@@ -56,7 +53,7 @@ final class EudiWalletKitTests: XCTestCase {
 	}
 	
 	func testGenerateSessionTranscript() {
-		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
+		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce).encode(options: CBOROptions())
 		XCTAssertEqual(ANNEX_B_SESSION_TRANSCRIPT, sessionTranscript.toHexString().uppercased())
 	}
 	

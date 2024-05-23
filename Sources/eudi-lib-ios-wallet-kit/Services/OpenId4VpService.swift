@@ -44,7 +44,8 @@ public class OpenId4VpService: PresentationService {
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
 	var mdocGeneratedNonce: String!
-	var sessionTranscript: [UInt8]!
+	var sessionTranscript: SessionTranscript!
+	var eReaderPub: CoseKey?
 	public var flow: FlowType
 
 	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
@@ -75,15 +76,19 @@ public class OpenId4VpService: PresentationService {
 				self.resolvedRequestData = resolvedRequestData
 				switch resolvedRequestData {
 				case let .vpToken(vp):
+					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.ECCurveType(crvName: crv)  {
+						logger.info("Found jwks public key with curve \(crv)")
+						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
+					}
 					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
 					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
-					let sessionTranscriptBytes = Openid4VpUtils.generateSessionTranscript(clientId: vp.clientId,
+					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.clientId,
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
-					logger.info("Session Transcript: \(sessionTranscriptBytes.toHexString()), for clientId: \(vp.clientId), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
+					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.clientId), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items, UserRequestKeys.session_transcript_bytes.rawValue: sessionTranscriptBytes]
+					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
 					if let readerCertificateIssuer {
 						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated
 						result[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: readerCertificateIssuer)
@@ -109,7 +114,7 @@ public class OpenId4VpService: PresentationService {
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
-		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, devicePrivateKeys: devicePrivateKeys, dauthMethod: dauthMethod) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, deviceResponses: docs, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
 		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)

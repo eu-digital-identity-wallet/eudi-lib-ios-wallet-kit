@@ -19,6 +19,8 @@ import SwiftCBOR
 import CryptoKit
 import Logging
 import PresentationExchange
+import MdocDataModel18013
+import MdocSecurity18013
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *
@@ -57,11 +59,9 @@ import PresentationExchange
 
 class Openid4VpUtils {
 	
-	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> [UInt8] {
+	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> SessionTranscript {
 		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
-		
-		let sessionTranscriptBytes = CBOR.encodeArray([CBOR.null, CBOR.null,	openID4VPHandover])
-		return sessionTranscriptBytes
+		return SessionTranscript(handOver: openID4VPHandover)
 	}
 	
 	static func generateOpenId4VpHandover(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> CBOR {
@@ -112,3 +112,13 @@ class Openid4VpUtils {
 	
 }
 
+extension ECCurveType {
+	init?(crvName: String) {
+		switch crvName {
+		case "P-256": self = .p256
+		case "P-384": self = .p384
+		case "P-512": self = .p521
+		default: return nil
+		}
+	}
+}
