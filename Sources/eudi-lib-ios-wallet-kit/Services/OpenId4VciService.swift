@@ -99,8 +99,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 		let data = try await credentialInfo.asyncCompactMap {
 			do {
-				logger.info("Starting issuing with scope \($0.scope)")
-				let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, scope: $0.scope, claimSet: claimSet)
+				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
+				let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
 				return Data(base64URLEncoded: str)
 			} catch {
 				logger.error("Failed to issue document with scope \($0.scope)")
@@ -142,10 +142,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, scope: String, claimSet: ClaimSet? = nil) async throws -> String {
+	private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
 		let issuerMetadata = offer.credentialIssuerMetadata
-		guard let credentialConfigurationIdentifier = issuerMetadata.credentialsSupported.first(where: { $0.value.getScope() == scope })?.key else {
-			throw WalletError(description: "Cannot find credential identifier for \(scope)")
+		guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == credentialConfigurationIdentifier.value }) else {
+			throw WalletError(description: "Cannot find credential identifier \(credentialConfigurationIdentifier.value) in offer")
 		}
 		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 	}

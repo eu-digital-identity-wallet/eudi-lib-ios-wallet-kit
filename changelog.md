@@ -1,3 +1,6 @@
+## v0.4.1
+OpenID4VCI: fix to use credential identifier with msoMdoc format
+
 ## v0.4.0
 OpenID4VCI: fix for filtering resolved identifiers
 Support mdoc Authentication for OpenId4Vp #46
