@@ -82,11 +82,11 @@ public class StorageManager: ObservableObject {
 	}
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
-		guard let (dr,dpk) = doc.getCborData() else { return nil }
+		guard let (iss,dpk) = doc.getCborData() else { return nil }
 		return switch doc.docType {
-		case EuPidModel.euPidDocType: EuPidModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk)
-		case IsoMdlModel.isoDocType: IsoMdlModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk)
-		default: GenericMdocModel(id: doc.id, createdAt: doc.createdAt, response: dr, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
+		case EuPidModel.euPidDocType: EuPidModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk)
+		case IsoMdlModel.isoDocType: IsoMdlModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk)
+		default: GenericMdocModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
 		}
 	}
 	
