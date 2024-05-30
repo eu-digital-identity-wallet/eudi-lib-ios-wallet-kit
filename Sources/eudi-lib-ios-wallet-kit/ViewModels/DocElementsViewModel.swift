@@ -19,7 +19,8 @@ import MdocDataModel18013
 
 /// View model used in SwiftUI for presentation request elements
 public struct DocElementsViewModel: Identifiable {
-	public var id: String { docType }
+	public var id: String { docId }
+	public var docId: String
 	public let docType: String
 	public var isEnabled: Bool
 	public var elements: [ElementViewModel]
@@ -46,20 +47,23 @@ extension DocElementsViewModel {
 }
 
 extension RequestItems {
-	func toDocElementViewModels(valid: Bool) -> [DocElementsViewModel] {
-		map { docType,nsItems in DocElementsViewModel(docType: docType, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
+	func toDocElementViewModels(docId: String, docType: String, valid: Bool) -> [DocElementsViewModel] {
+		compactMap { dType,nsItems in
+			if dType != docType { nil }
+			else { DocElementsViewModel(docId: docId, docType: docType, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
+		}
 	}
 }
 
 extension Array where Element == DocElementsViewModel {
-	public var items: RequestItems { Dictionary(grouping: self, by: \.docType).mapValues { $0.first!.elements.filter(\.isSelected).nsDictionary } }
+	public var items: RequestItems { Dictionary(grouping: self, by: \.docId).mapValues { $0.first!.elements.filter(\.isSelected).nsDictionary } }
 
 	func merging(with other: Self) -> Self {
 		var res = Self()
 		for otherDE in other {
-			if let exist = first(where: { $0.docType == otherDE.docType})	{
+			if let exist = first(where: { $0.docId == otherDE.docId})	{
 				let newElements = (exist.elements + otherDE.elements).sorted(by: { $0.isEnabled && $1.isDisabled })
-				res.append(DocElementsViewModel(docType: exist.docType, isEnabled: exist.isEnabled, elements: newElements))
+				res.append(DocElementsViewModel(docId: exist.docId, docType: exist.docType, isEnabled: exist.isEnabled, elements: newElements))
 			}
 			else { res.append(otherDE) }
 		}

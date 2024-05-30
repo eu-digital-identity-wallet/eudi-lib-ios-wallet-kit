@@ -42,11 +42,14 @@ public class PresentationSession: ObservableObject {
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
+	// map of document id to doc types
+	public var docIdAndTypes: [String: String]
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	
-	public init(presentationService: any PresentationService, userAuthenticationRequired: Bool) {
+	public init(presentationService: any PresentationService, docIdAndTypes: [String: String], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
+		self.docIdAndTypes = docIdAndTypes
 		self.userAuthenticationRequired = userAuthenticationRequired
 	}
 	
@@ -55,14 +58,18 @@ public class PresentationSession: ObservableObject {
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
-	func decodeRequest(_ request: [String: Any]) {
+	func decodeRequest(_ request: [String: Any]) throws {
+		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
 		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
-		var tmp = validRequestItems.toDocElementViewModels(valid: true)
-		if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
-			tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(valid: false))
+		disclosedDocuments = [DocElementsViewModel]()
+		for (docId, docType) in docIdAndTypes {
+			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, valid: true)
+			if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
+				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, valid: false))
+			}
+			disclosedDocuments.append(contentsOf: tmp)
 		}
-		disclosedDocuments = tmp
 		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
 			readerCertIssuer = readerAuthority
 			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
@@ -112,7 +119,7 @@ public class PresentationSession: ObservableObject {
 	public func receiveRequest() async -> [String: Any]? {
 		do {
 			let request = try await presentationService.receiveRequest()
-			await decodeRequest(request)
+			try await decodeRequest(request)
 			return request
 		} catch {
 			await setError(error)
