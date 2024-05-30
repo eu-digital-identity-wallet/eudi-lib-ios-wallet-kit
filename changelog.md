@@ -1,5 +1,8 @@
+## v0.4.2
+Openid4vp, BLE: Support sending multiple documents with same doc-type
+
 ## v0.4.1
-OpenID4VCI: fix to use credential identifier with msoMdoc format
+Refactoring for issuing documents with IssuerSigned cbor data
 
 ## v0.4.0
 OpenID4VCI: fix for filtering resolved identifiers
