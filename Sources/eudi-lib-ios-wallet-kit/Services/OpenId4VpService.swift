@@ -31,10 +31,11 @@ import X509
 public class OpenId4VpService: PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
-	var docs: [IssuerSigned]!
+	// map of document id to data
+	var docs: [String: IssuerSigned]!
 	var iaca: [SecCertificate]!
 	var dauthMethod: DeviceAuthMethod
-	var devicePrivateKeys: [CoseKeyPrivate]!
+	var devicePrivateKeys: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
 	var presentationDefinition: PresentationDefinition?
 	var resolvedRequestData: ResolvedRequestData?

@@ -82,12 +82,16 @@ public class StorageManager: ObservableObject {
 	}
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
-		guard let (iss,dpk) = doc.getCborData() else { return nil }
+		guard let (iss, dpk) = doc.getCborData() else { return nil }
 		return switch doc.docType {
-		case EuPidModel.euPidDocType: EuPidModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk)
-		case IsoMdlModel.isoDocType: IsoMdlModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk)
-		default: GenericMdocModel(id: doc.id, createdAt: doc.createdAt, issuerSigned: iss, devicePrivateKey: dpk, docType: doc.docType, title: doc.docType.translated())
+		case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)!
+		case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)!
+		default: GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, title: doc.docType.translated())
 		}
+	}
+	
+	public func getDocIdsToTypes() -> [String: String] {
+		Dictionary(uniqueKeysWithValues: documentIds.enumerated().compactMap { i, id in if let id, let dt = docTypes[i] { return (id, dt) } else { return nil} })
 	}
 	
 	/// Load documents from storage

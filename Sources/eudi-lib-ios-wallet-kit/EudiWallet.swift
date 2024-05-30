@@ -220,7 +220,7 @@ public final class EudiWallet: ObservableObject {
 			if let docType { guard docs.count > 0 else { throw WalletError(description: "No documents of type \(docType) found") } }
 			let cborsWithKeys = docs.compactMap { $0.getCborData() }
 			guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
-			parameters = [InitializeKeys.document_signup_issuer_signed_obj.rawValue: cborsWithKeys.map(\.iss), InitializeKeys.device_private_key_obj.rawValue: cborsWithKeys.map(\.dpk)]
+			parameters = [InitializeKeys.document_signup_issuer_signed_obj.rawValue: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.iss)), InitializeKeys.device_private_key_obj.rawValue: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.dpk))]
 			if let trustedReaderCertificates { parameters[InitializeKeys.trusted_certificates.rawValue] = trustedReaderCertificates }
 			parameters[InitializeKeys.device_auth_method.rawValue] = deviceAuthMethod.rawValue
 		default:
@@ -238,18 +238,19 @@ public final class EudiWallet: ObservableObject {
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		do {
 			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
+			let docIdAndTypes = storage.getDocIdsToTypes()
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
-				return PresentationSession(presentationService: bleSvc, userAuthenticationRequired: userAuthenticationRequired)
+				return PresentationSession(presentationService: bleSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
 			case .openid4vp(let qrCode):
 				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri)
-				return PresentationSession(presentationService: openIdSvc, userAuthenticationRequired: userAuthenticationRequired)
+				return PresentationSession(presentationService: openIdSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
 			default:
-				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), userAuthenticationRequired: false)
+				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), docIdAndTypes: docIdAndTypes, userAuthenticationRequired: false)
 			}
 		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error), userAuthenticationRequired: false)
+			return PresentationSession(presentationService: FaultPresentationService(error: error), docIdAndTypes: [:], userAuthenticationRequired: false)
 		}
 	}
 	
@@ -260,7 +261,7 @@ public final class EudiWallet: ObservableObject {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(service: any PresentationService) -> PresentationSession {
-		PresentationSession(presentationService: service, userAuthenticationRequired: userAuthenticationRequired)
+		PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
 	}
 	
 	@MainActor
