@@ -1,12 +1,22 @@
-## v0.4.2
+## v0.4.4
+### Breaking change - mdocModels contains not-nil items (SwiftUI breaks with nil items)
+@Published public var mdocModels: [any MdocDecodable] = []
+
+## v0.4.3
 Openid4vp, BLE: Support sending multiple documents with same doc-type
+- DocElementsViewModel: added `public var docId: String`
+- PresentationSession / func sendResponse: itemsToSend dictionary is keyed by docId (and not docType) 
+
+## v0.4.2
+Refactoring for issuing documents with IssuerSigned cbor data
+### Breaking change: Document data is saved as encoded IssuerSigned cbor
 
 ## v0.4.1
-Refactoring for issuing documents with IssuerSigned cbor data
-
-## v0.4.0
 OpenID4VCI: fix for filtering resolved identifiers
 Support mdoc Authentication for OpenId4Vp #46
+
+## v0.4.0
+OpenID4VCI fix
 
 ## v0.3.9
 OpenID4VCI: Allow partial issuing when some documents fail to issue
