@@ -1,3 +1,7 @@
+## v0.4.4
+### Breaking change - mdocModels contains not-nil items (SwiftUI breaks with nil items)
+@Published public var mdocModels: [any MdocDecodable] = []
+
 ## v0.4.3
 Openid4vp, BLE: Support sending multiple documents with same doc-type
 - DocElementsViewModel: added `public var docId: String`
