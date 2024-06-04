@@ -18,7 +18,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", .upToNextMajor(from: "0.2.7")),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", .upToNextMajor(from: "0.2.0")),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.0.74"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.0.7"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.0.9"),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
