@@ -32,7 +32,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	var bindingKey: BindingKey!
 	var usedSecureEnclave: Bool!
 	let logger: Logger
-	let config: WalletOpenId4VCIConfig
+	let config: OpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
 	static var metadataCache = [String: CredentialOffer]()
 	
@@ -65,7 +65,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	/// - Returns: The data of the document
 	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = true) async throws -> Data {
 		try initSecurityKeys(useSecureEnclave)
-		let str = try await issueByDocType(docType, format: format) 
+		let str = try await issueByDocType(docType, format: format)
 		guard let data = Data(base64URLEncoded: str) else { throw OpenId4VCIError.dataNotValid }
 		return data
 	}
@@ -120,7 +120,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier, .init(value: "openid")], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
+				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
 				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
@@ -131,8 +131,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		case .failure:
 			throw WalletError(description: "Invalid issuer metadata")
 		}
-	}	
-
+	}
+	
 	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> String {
 		switch authorized {
 		case .noProofRequired:
@@ -198,7 +198,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 		guard !pushedAuthorizationRequestEndpoint.isEmpty else { throw WalletError(description: "pushed Authorization Request Endpoint is nil") }
 		logger.info("--> [AUTHORIZATION] Placing PAR to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
-		let parPlaced = await issuer.pushAuthorizationCodeRequest(credentialOffer: offer)
+		let parPlaced = try await issuer.pushAuthorizationCodeRequest(credentialOffer: offer)
 		
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
@@ -209,8 +209,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			switch unAuthorized {
 			case .success(let request):
 				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
-				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _) = authorized {
-					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token \(token)")
+				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _) = authorized {
+					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
 					return authorized
 				}
 			case .failure(let error):
@@ -225,7 +225,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
 		switch noProofRequiredState {
 		case .noProofRequired:
-			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, claimSet: claimSet, requestCredentialIdentifier: (credentialConfigurationIdentifier, nil), responseEncryptionSpecProvider: { Issuer.createResponseEncryptionSpec($0) })
+			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
+			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
+			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 			switch requestOutcome {
 			case .success(let request):
 				switch request {
@@ -253,10 +255,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, claimSet: ClaimSet? = nil) async throws -> String {
-		guard let credentialConfigurationIdentifier else {
-			throw WalletError(description: "Credential configuration identifier not found")
-		}
-		let requestOutcome = try await issuer.requestSingle(proofRequest: authorized, bindingKey: bindingKey, claimSet: claimSet, requestCredentialIdentifier: (credentialConfigurationIdentifier, nil), responseEncryptionSpecProvider:  { Issuer.createResponseEncryptionSpec($0) })
+		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
+		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
+		let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
+		let requestOutcome = try await issuer.requestSingle(proofRequest: authorized, bindingKey: bindingKey, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
 			switch request {
