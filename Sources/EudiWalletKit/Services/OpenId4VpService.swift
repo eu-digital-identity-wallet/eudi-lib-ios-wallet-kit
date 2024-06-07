@@ -92,6 +92,7 @@ public class OpenId4VpService: PresentationService {
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
+					if let ln = resolvedRequestData.legalName { result[UserRequestKeys.reader_legal_name.rawValue] = ln }
 					if let readerCertificateIssuer {
 						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated
 						result[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: readerCertificateIssuer)
@@ -145,7 +146,7 @@ public class OpenId4VpService: PresentationService {
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
 		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let cert = SecCertificateCreateWithData(nil, data as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](data)) else { return result }
 		self.readerCertificateIssuer = x509.subject.description
-		let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		return result
