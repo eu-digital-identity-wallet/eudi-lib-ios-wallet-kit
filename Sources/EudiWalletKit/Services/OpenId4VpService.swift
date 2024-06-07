@@ -41,6 +41,7 @@ public class OpenId4VpService: PresentationService {
 	var resolvedRequestData: ResolvedRequestData?
 	var siopOpenId4Vp: SiopOpenID4VP!
 	var openId4VpVerifierApiUri: String?
+	var openId4VpVerifierLegalName: String?
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
@@ -49,7 +50,7 @@ public class OpenId4VpService: PresentationService {
 	var eReaderPub: CoseKey?
 	public var flow: FlowType
 
-	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
+	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
@@ -60,6 +61,7 @@ public class OpenId4VpService: PresentationService {
 		}
 		self.openid4VPlink = openid4VPlink
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
+		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
 	}
 	
 	public func startQrEngagement() async throws -> String? { nil }
@@ -69,7 +71,7 @@ public class OpenId4VpService: PresentationService {
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> [String: Any] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
-		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri))
+		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
 			case .notSecured(data: _):
 				throw PresentationSession.makeError(str: "Not secure request received.")
@@ -83,9 +85,9 @@ public class OpenId4VpService: PresentationService {
 					}
 					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
 					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
-					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.clientId,
+					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id,
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
-					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.clientId), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
+					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
@@ -126,7 +128,7 @@ public class OpenId4VpService: PresentationService {
 			.vpToken(vpToken: .msoMdoc(vpTokenStr, apu: mdocGeneratedNonce.base64urlEncode), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
-		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri))
+		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
@@ -151,14 +153,14 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	/// OpenId4VP wallet configuration
-	func getWalletConf(verifierApiUrl: String?) -> WalletOpenId4VPConfiguration? {
+	func getWalletConf(verifierApiUrl: String?, verifierLegalName: String?) -> WalletOpenId4VPConfiguration? {
 		guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
 					let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
 		var supportedClientIdSchemes: [SupportedClientIdScheme] = [.x509SanDns(trust: chainVerifier), .x509SanDns(trust: chainVerifier)]
-		if let verifierApiUrl {
-			let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
+		if let verifierApiUrl, let verifierLegalName {
+			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 	  }
 		let res = WalletOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [])
