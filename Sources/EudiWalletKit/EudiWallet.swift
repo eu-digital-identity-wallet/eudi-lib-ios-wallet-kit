@@ -39,6 +39,8 @@ public final class EudiWallet: ObservableObject {
 	public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
 	/// OpenID4VP verifier api URL (used for preregistered clients)
 	public var verifierApiUri: String?
+	/// OpenID4VP verifier legal name (used for preregistered clients)
+	public var verifierLegalName: String?
 	/// OpenID4VCI issuer url
 	public var openID4VciIssuerUrl: String?
 	/// OpenID4VCI client id
@@ -244,7 +246,7 @@ public final class EudiWallet: ObservableObject {
 				let bleSvc = try BlePresentationService(parameters: parameters)
 				return PresentationSession(presentationService: bleSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
 			case .openid4vp(let qrCode):
-				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri)
+				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri, openId4VpVerifierLegalName: self.verifierLegalName)
 				return PresentationSession(presentationService: openIdSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
 			default:
 				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), docIdAndTypes: docIdAndTypes, userAuthenticationRequired: false)

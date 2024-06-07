@@ -50,7 +50,7 @@ public class OpenId4VpService: PresentationService {
 	var eReaderPub: CoseKey?
 	public var flow: FlowType
 
-	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws {
+	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
 			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
@@ -61,6 +61,7 @@ public class OpenId4VpService: PresentationService {
 		}
 		self.openid4VPlink = openid4VPlink
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
+		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
 	}
 	
 	public func startQrEngagement() async throws -> String? { nil }
