@@ -143,8 +143,8 @@ public class OpenId4VpService: PresentationService {
 		let chainVerifier = X509CertificateChainVerifier()
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
-		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let str = String(data: data, encoding: .utf8) else { return result }
-		guard let certData = Data(base64Encoded: str.removeCertificateDelimiters()), let cert = SecCertificateCreateWithData(nil, certData as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](certData)) else { return result }
+		print(certificates.first!)
+		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let cert = SecCertificateCreateWithData(nil, data as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](data)) else { return result }
 		self.readerCertificateIssuer = x509.subject.description
 		let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
@@ -158,7 +158,7 @@ public class OpenId4VpService: PresentationService {
 					let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
-		var supportedClientIdSchemes: [SupportedClientIdScheme] = [.x509SanDns(trust: chainVerifier), .x509SanDns(trust: chainVerifier)]
+		var supportedClientIdSchemes: [SupportedClientIdScheme] = [.x509SanUri(trust: chainVerifier), .x509SanDns(trust: chainVerifier)]
 		if let verifierApiUrl, let verifierLegalName {
 			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]

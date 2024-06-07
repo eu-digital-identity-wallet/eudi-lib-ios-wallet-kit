@@ -68,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "59505ca96b1ed7ff262b7bb11df21d954ac1a4ff",
-        "version" : "0.1.0"
+        "revision" : "0423c93112b9b2b11a1e202addf02a93f88d3e96",
+        "version" : "0.1.1"
       }
     },
     {
@@ -86,8 +86,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Hitch.git",
       "state" : {
-        "revision" : "733c8e04e04813bc6e3cc105850a4eb657bdacfb",
-        "version" : "0.4.133"
+        "revision" : "1a415afbf026005e77d32b536fa8d26c1b29e59f",
+        "version" : "0.4.138"
       }
     },
     {
