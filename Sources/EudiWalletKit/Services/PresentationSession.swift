@@ -27,6 +27,8 @@ public class PresentationSession: ObservableObject {
 	public var presentationService: any PresentationService
 	/// Reader certificate issuer (only for BLE flow wih verifier using reader authentication)
 	@Published public var readerCertIssuer: String?
+	/// Reader legal name (if provided)
+	@Published public var readerLegalName: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
 	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
@@ -75,6 +77,7 @@ public class PresentationSession: ObservableObject {
 			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
 			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String
 		}
+		readerLegalName = request[UserRequestKeys.reader_legal_name.rawValue] as? String
 		status = .requestReceived
 	}
 	
