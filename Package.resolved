@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "bf62cc73ae2cea61e98020d2d037c153500207e7",
-        "version" : "0.2.5"
+        "revision" : "12314daf45d637a1afeda321d605f328d422fe8d",
+        "version" : "0.2.6"
       }
     },
     {
@@ -32,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "4e18b4b5de1ab2e9c5b9495574667b1a27508a9e",
-        "version" : "0.2.8"
+        "revision" : "ceeddd2a37f579212752bfb38e54efa87ec567e3",
+        "version" : "0.2.9"
       }
     },
     {
