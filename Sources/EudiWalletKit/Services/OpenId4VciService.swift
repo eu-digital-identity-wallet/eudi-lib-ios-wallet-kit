@@ -76,9 +76,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
 	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> [OfferedDocModel] {
-		guard let uriOfferNormalized = uriOffer.removingPercentEncoding else { throw WalletError(description: "Invalid uri offer \(uriOffer)")}
-		guard let offerUrlNormalied = URL(string: uriOfferNormalized) else { throw WalletError(description: "Invalid URL string \(uriOffer)")}
-		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: offerUrlNormalied.absoluteString))
+		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: uriOffer))
 		switch result {
 		case .success(let offer):
 			Self.metadataCache[uriOffer] = offer
