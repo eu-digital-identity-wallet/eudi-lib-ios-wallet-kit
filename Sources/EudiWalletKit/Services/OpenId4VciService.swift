@@ -54,7 +54,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
-		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey)
+		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey, issuer: config.clientId)
 	}
 	
 	/// Issue a document with the given `docType` using OpenId4Vci protocol
@@ -75,30 +75,35 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	///   - uriOffer: Uri of the offer (from a QR or a deep link)
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
-	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> [OfferedDocModel] {
+	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> OfferedIssueModel {
 		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: uriOffer))
 		switch result {
 		case .success(let offer):
+			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 			Self.metadataCache[uriOffer] = offer
-			let credentialInfo = try getCredentialIdentifiers(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
-			return credentialInfo.map(\.offered)
+			let credentialInfo = try getCredentialIdentifiers(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
+			return OfferedIssueModel(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, docModels: credentialInfo.map(\.offered), txCodeSpecification:  code?.txCode)
 		case .failure(let error):
 			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
 	}
 	
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCode: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
 		}
+		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
+		let txCodeSpec: TxCode? = code?.txCode
+		let preAuthorizedCode: String? = code?.preAuthorizedCode
 		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
-		let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-		let data = try await credentialInfo.asyncCompactMap {
+		let authorized = if let preAuthorizedCode, let txCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCode).get() } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
+		let data = await credentialInfo.asyncCompactMap {
 			do {
 				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
 				let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
+				logger.info("Credential str:\n\(str)")
 				return Data(base64URLEncoded: str)
 			} catch {
 				logger.error("Failed to issue document with scope \($0.scope)")
@@ -176,11 +181,11 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	func getCredentialIdentifiers(issuerName: String, credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], format: DataFormat) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
+	func getCredentialIdentifiers(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], format: DataFormat) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
 		switch format {
 		case .cbor:
 			let credentialInfos = credentialsSupported.compactMap {
-				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(issuerName: issuerName, docType: msoMdocCred.docType, displayName: msoMdocCred.display.getName() ?? msoMdocCred.docType) { (identifier: $0.key, scope: scope, offered: offered) } else { nil } }
+				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(docType: msoMdocCred.docType, displayName: msoMdocCred.display.getName() ?? msoMdocCred.docType) { (identifier: $0.key, scope: scope,offered: offered) } else { nil } }
 			return credentialInfos
 		default:
 			throw WalletError(description: "Format \(format) not yet supported")

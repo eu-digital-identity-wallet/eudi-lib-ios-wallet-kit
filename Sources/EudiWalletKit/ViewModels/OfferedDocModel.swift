@@ -15,9 +15,15 @@ limitations under the License.
 */
 
 import Foundation
+import OpenID4VCI
+
+public struct OfferedIssueModel {
+	public let issuerName: String
+	public let docModels: [OfferedDocModel]
+	public let txCodeSpecification: TxCode?
+}
 
 public struct OfferedDocModel {
-	public let issuerName: String
 	public let docType: String
 	public let displayName: String
 }

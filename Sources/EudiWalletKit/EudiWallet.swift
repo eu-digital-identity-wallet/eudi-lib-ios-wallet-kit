@@ -100,13 +100,9 @@ public final class EudiWallet: ObservableObject {
 	
 	func finalizeIssuing(id: String, data: Data, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		let iss = IssuerSigned(data: [UInt8](data))
-		let deviceResponse = iss != nil ? nil : DeviceResponse(data: [UInt8](data))
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
-		let docTypeToSave = docType ?? (format == .cbor ? iss?.issuerAuth.mso.docType ?? deviceResponse?.documents?.first?.docType : nil)
+		let docTypeToSave = docType ?? (format == .cbor ? iss?.issuerAuth.mso.docType : nil)
 		var dataToSave: Data? = data
-		if let deviceResponse {
-			if let iss = deviceResponse.documents?.first?.issuerSigned { dataToSave = Data(iss.encode(options: CBOROptions())) } else { dataToSave = nil }
-		}
 		guard let docTypeToSave else { throw WalletError(description: "Unknown document type") }
 		guard let dataToSave else { throw WalletError(description: "Issued data cannot be recognized") }
 		var issued: WalletStorage.Document
@@ -127,8 +123,8 @@ public final class EudiWallet: ObservableObject {
 	///   - uriOffer: url with offer
 	///   - format: data format
 	///   - useSecureEnclave: whether to use secure enclave (if supported)
-	/// - Returns: Offered document info model
-	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] {
+	/// - Returns: Offered issue information model
+	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel {
 		let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil)
 		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOffer, format: format)
 	}
@@ -137,15 +133,16 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - offerUri: url with offer
 	///   - docTypes: doc types to be issued
+	///   - txCode: Transaction code given to user 
 	///   - format: data format
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - useSecureEnclave: whether to use secure enclave (if supported)
 	///   - claimSet: claim set (optional)
 	/// - Returns: Array of issued and stored documents
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat = .cbor, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCode: String? = nil, format: DataFormat = .cbor, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		var (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docTypes.map(\.docType).joined(separator: ", "), promptMessage: promptMessage)
-		let docsData = try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, format: format, useSecureEnclave: useSecureEnclave, claimSet: claimSet)
+		let docsData = try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCode: txCode, format: format, useSecureEnclave: useSecureEnclave, claimSet: claimSet)
 		var documents = [WalletStorage.Document]()
 		for (i, docData) in docsData.enumerated() {
 			if i > 0 { (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil) }
