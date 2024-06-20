@@ -23,6 +23,7 @@ import Logging
 import CryptoKit
 import Security
 import WalletStorage
+import SwiftCBOR
 
 public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
@@ -98,7 +99,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let data = try await credentialInfo.asyncCompactMap {
 			do {
 				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
-				let str = try await issueOfferedCredentialWithProof(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
+				let str = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
 				return Data(base64URLEncoded: str)
 			} catch {
 				logger.error("Failed to issue document with scope \($0.scope)")
@@ -140,7 +141,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
+	private func issueOfferedCredentialInternalValidated(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
 		let issuerMetadata = offer.credentialIssuerMetadata
 		guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == credentialConfigurationIdentifier.value }) else {
 			throw WalletError(description: "Cannot find credential identifier \(credentialConfigurationIdentifier.value) in offer")
@@ -289,7 +290,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			case .issued(_, let credential):
 				return credential
 			case .issuancePending(let transactionId):
-				throw WalletError(description: "Credential not ready yet. Try after \(transactionId.interval ?? 0)")
+				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
+				return (try! CodableCBOREncoder().encode(DeferredIssueModel(credentialIssuerUrl: credentialIssuerURL, accessToken: authorized.accessToken?.accessToken ?? "", refreshToken: nil, transactionId: transactionId.value))).base64URLEncodedString()
 			case .errored(_, let errorDescription):
 				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")
 			}

@@ -99,16 +99,15 @@ public final class EudiWallet: ObservableObject {
 	}
 	
 	func finalizeIssuing(id: String, data: Data, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
-		let iss = IssuerSigned(data: [UInt8](data))
-		let deviceResponse = iss != nil ? nil : DeviceResponse(data: [UInt8](data))
-		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
-		let docTypeToSave = docType ?? (format == .cbor ? iss?.issuerAuth.mso.docType ?? deviceResponse?.documents?.first?.docType : nil)
-		var dataToSave: Data? = data
-		if let deviceResponse {
-			if let iss = deviceResponse.documents?.first?.issuerSigned { dataToSave = Data(iss.encode(options: CBOROptions())) } else { dataToSave = nil }
+		var dataToSave: Data = data
+		guard var ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
+		if var defTO = try? CodableCBORDecoder().decode(DeferredIssueModel.self, from: data) {
+			ddt = DocDataType.deferred
+			defTO.docType = docType; defTO.format = format.rawValue
+			dataToSave = try! CodableCBOREncoder().encode(defTO)
 		}
+		let docTypeToSave = if format == .cbor { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType } else { docType }
 		guard let docTypeToSave else { throw WalletError(description: "Unknown document type") }
-		guard let dataToSave else { throw WalletError(description: "Issued data cannot be recognized") }
 		var issued: WalletStorage.Document
 		if !openId4VCIService.usedSecureEnclave {
 			issued = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date())

@@ -21,3 +21,4 @@ public struct OfferedDocModel {
 	public let docType: String
 	public let displayName: String
 }
+
