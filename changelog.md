@@ -1,3 +1,44 @@
+## v0.5.2
+### Support Pre-Authorized Code Flow
+
+The flow is supported by existing methods:
+
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel`
+### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
+
+2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `issueDocumentsByOfferUrl` must include the transaction code (parameter `txCodeValue`). 
+
+- Note: for the clientId value the `EudiWallet/openID4VciClientId` is used.
+
+## v0.5.1
+### Update eudi-lib-ios-openid4vci-swift dependency to version 0.1.5
+
+- Update eudi-lib-ios-openid4vci-swift dependency to version 0.1.5
+- Fixes iOS16 offer url parsing issue
+
+## v0.5.0
+- `EuPidModel` updated with new PID docType
+
+## v0.4.9
+### Openid4VP fixes and updates
+
+- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.1
+- Fix openid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
+- Add `readerLegalName` property to PresentationSession
+
+## v0.4.8
+- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+- Added wallet configuration parameter `public var verifierLegalName: String?` (used for Openid4VP preregistered clients)
+
+## v0.4.7
+###Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+
+## v0.4.6
+### Update openid4vci to version 0.1.2
+
+##v0.4.5
+### Update eudi-lib-ios-openid4vci-swift to version 0.0.9
+
 ## v0.4.4
 ### Breaking change - mdocModels contains not-nil items (SwiftUI breaks with nil items)
 @Published public var mdocModels: [any MdocDecodable] = []

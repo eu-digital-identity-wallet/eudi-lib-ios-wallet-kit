@@ -15,9 +15,26 @@ limitations under the License.
 */
 
 import Foundation
+import OpenID4VCI
 
-public struct OfferedDocModel {
+/// Offered issue model contains information gathered by resolving an issue offer URL.
+///
+/// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:useSecureEnclave:)``
+public struct OfferedIssueModel {
+	/// Issuer name (currently the URL)
 	public let issuerName: String
+	/// Document types included in the offer
+	public let docModels: [OfferedDocModel]
+	/// Transaction code specification (in case of preauthorized flow)
+	public let txCodeSpec: TxCode?
+	/// Helper var for transaction code requirement
+	public var isTxCodeRequired: Bool { txCodeSpec != nil }
+}
+
+/// Information about an offered document type
+public struct OfferedDocModel {
+	/// Document type
 	public let docType: String
+	/// Display name for document type
 	public let displayName: String
 }
