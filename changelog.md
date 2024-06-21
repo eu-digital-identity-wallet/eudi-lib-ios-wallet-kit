@@ -2,6 +2,7 @@
 ### Support Pre-Authorized Code Flow
 
 The flow is supported by existing methods:
+
 1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel`
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
 
