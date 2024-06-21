@@ -7,6 +7,8 @@ The flow is supported by existing methods:
 
 2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `issueDocumentsByOfferUrl` must include the transaction code (parameter `txCodeValue`). 
 
+- Note: for the clientId value the `EudiWallet/openID4VciClientId` is used.
+
 ## v0.5.1
 ### Update eudi-lib-ios-openid4vci-swift dependency to version 0.1.5
 
