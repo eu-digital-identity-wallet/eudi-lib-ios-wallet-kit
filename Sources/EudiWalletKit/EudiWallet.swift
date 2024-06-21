@@ -126,8 +126,8 @@ public final class EudiWallet: ObservableObject {
 	///   - uriOffer: url with offer
 	///   - format: data format
 	///   - useSecureEnclave: whether to use secure enclave (if supported)
-	/// - Returns: Offered document info model
-	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] {
+	/// - Returns: Offered issue information model
+	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel {
 		let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil)
 		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOffer, format: format)
 	}
@@ -136,15 +136,16 @@ public final class EudiWallet: ObservableObject {
 	/// - Parameters:
 	///   - offerUri: url with offer
 	///   - docTypes: doc types to be issued
+	///   - txCodeValue: Transaction code given to user
 	///   - format: data format
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - useSecureEnclave: whether to use secure enclave (if supported)
 	///   - claimSet: claim set (optional)
 	/// - Returns: Array of issued and stored documents
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat = .cbor, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, format: DataFormat = .cbor, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		var (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: docTypes.map(\.docType).joined(separator: ", "), promptMessage: promptMessage)
-		let docsData = try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, format: format, useSecureEnclave: useSecureEnclave, claimSet: claimSet)
+		let docsData = try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, format: format, useSecureEnclave: useSecureEnclave, claimSet: claimSet)
 		var documents = [WalletStorage.Document]()
 		for (i, docData) in docsData.enumerated() {
 			if i > 0 { (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil) }
