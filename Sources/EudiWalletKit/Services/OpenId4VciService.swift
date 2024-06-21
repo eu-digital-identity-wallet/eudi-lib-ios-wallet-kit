@@ -82,13 +82,13 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 			Self.metadataCache[uriOffer] = offer
 			let credentialInfo = try getCredentialIdentifiers(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
-			return OfferedIssueModel(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, docModels: credentialInfo.map(\.offered), txCodeSpecification:  code?.txCode)
+			return OfferedIssueModel(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
 		case .failure(let error):
 			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
 	}
 	
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCode: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
@@ -98,7 +98,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
 		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
-		let authorized = if let preAuthorizedCode, let txCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCode).get() } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
+		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
+		let authorized = if let preAuthorizedCode, let txCodeValue, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get() } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
 		let data = await credentialInfo.asyncCompactMap {
 			do {
 				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
