@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "caf034c60163f0e2b6a046b780f9b19ce0761b32",
-        "version" : "0.1.5"
+        "revision" : "fa4f7a6ccc0d2860ae7e158c8168f58ec284d9f5",
+        "version" : "0.2.1"
       }
     },
     {
@@ -68,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "0423c93112b9b2b11a1e202addf02a93f88d3e96",
-        "version" : "0.1.1"
+        "revision" : "5dd09f50c8a4dc30c68930010964b4d462bb867a",
+        "version" : "0.2.1"
       }
     },
     {
