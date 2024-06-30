@@ -38,3 +38,4 @@ public struct OfferedDocModel {
 	/// Display name for document type
 	public let displayName: String
 }
+
