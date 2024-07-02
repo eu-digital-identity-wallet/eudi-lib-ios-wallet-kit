@@ -1,3 +1,10 @@
+## v0.5.4
+### Custom URLSession variable
+- Added `public var urlSession: URLSession` variable to `EudiWallet` class. This variable can be used to set a custom URLSession for network requests. Allows for custom configuration of the URLSession, such as setting a custom timeout interval or Self-Signed certificates.
+
+## v0.5.3
+- Library updates
+
 ## v0.5.2
 ### Support Pre-Authorized Code Flow
 
