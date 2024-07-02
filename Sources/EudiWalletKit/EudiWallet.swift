@@ -49,6 +49,7 @@ public final class EudiWallet: ObservableObject {
 	public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize"
 	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
+	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
 	
 	/// Initialize a wallet instance. All parameters are optional.
