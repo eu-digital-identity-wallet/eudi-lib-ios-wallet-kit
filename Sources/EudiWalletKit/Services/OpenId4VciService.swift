@@ -35,10 +35,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let config: OpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
 	static var metadataCache = [String: CredentialOffer]()
+	var urlSession: URLSession
 	
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String, urlSession: URLSession) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
+		self.urlSession = urlSession
 		logger = Logger(label: "OpenId4VCI")
 		config = .init(clientId: clientId, authFlowRedirectionURI: URL(string: callbackScheme)!)
 	}
@@ -76,7 +78,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
 	public func resolveOfferDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> OfferedIssueModel {
-		let result = await CredentialOfferRequestResolver().resolve(source: try .init(urlString: uriOffer))
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: urlSession), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession))).resolve(source: try .init(urlString: uriOffer))
 		switch result {
 		case .success(let offer):
 			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
@@ -88,6 +90,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
+	public func getIssuer(offer: CredentialOffer) throws -> Issuer {
+		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
+	}
+	
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
@@ -97,7 +103,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
-		let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
+		let issuer = try getIssuer(offer: offer)
 		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
 		let authorized = if let preAuthorizedCode, let txCodeValue, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get() } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
 		let data = await credentialInfo.asyncCompactMap {
@@ -118,15 +124,15 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	func issueByDocType(_ docType: String, format: DataFormat, claimSet: ClaimSet? = nil) async throws -> String {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
-		let issuerMetadata = await CredentialIssuerMetadataResolver().resolve(source: .credentialIssuer(credentialIssuerIdentifier))
+		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
-				let authServerMetadata = await AuthorizationServerMetadataResolver().resolve(url: authorizationServer)
+				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
-				let issuer = try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config)
+				let issuer = try getIssuer(offer: offer)
 				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 			} else {
