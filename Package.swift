@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "EudiWalletKit",
-	platforms: [.macOS(.v12), .iOS(.v14)],
+	platforms: [.macOS(.v13), .iOS(.v14)],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
@@ -14,9 +14,11 @@ let package = Package(
     ],
     dependencies: [
 		.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", branch: "develop"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", branch: "main"),
-		.package(url: "https://github.com/apple/swift-log.git", branch: "main"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.3"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.2.9"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", .upToNextMajor(from: "0.2.0")),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.3.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.3.1"),
 	],
     targets: [
         // Targets are the basic building∫ blocks of a package, defining a module or a test suite.
@@ -24,12 +26,16 @@ let package = Package(
         .target(
             name: "EudiWalletKit", dependencies: [
 		    	.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
+				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "SiopOpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
-	    	    .product(name: "Logging", package: "swift-log"),
-	        ]
+				.product(name: "OpenID4VCI", package: "eudi-lib-ios-openid4vci-swift"),
+                .product(name: "Logging", package: "swift-log"),
+            ]
         ),
         .testTarget(
             name: "EudiWalletKitTests",
-            dependencies: ["EudiWalletKit"]),
+            dependencies: ["EudiWalletKit"],
+						resources: [.process("Resources")]
+						)
     ]
 )

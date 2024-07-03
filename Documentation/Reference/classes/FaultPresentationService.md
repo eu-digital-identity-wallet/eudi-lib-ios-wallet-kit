@@ -7,57 +7,66 @@
 - [Properties](#properties)
   - `status`
   - `flow`
-  - `error`
 - [Methods](#methods)
+  - `init(msg:)`
   - `init(error:)`
-  - `generateQRCode()`
+  - `startQrEngagement()`
   - `receiveRequest()`
-  - `sendResponse(userAccepted:itemsToSend:)`
+  - `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-class FaultPresentationService: PresentationService
+public class FaultPresentationService: PresentationService
 ```
+
+Fault presentation service. Used to communicate error state to the user
 
 ## Properties
 ### `status`
 
 ```swift
-var status: TransferStatus = .error
+public var status: TransferStatus = .error
 ```
 
 ### `flow`
 
 ```swift
-var flow: FlowType = .ble
-```
-
-### `error`
-
-```swift
-var error: Error
+public var flow: FlowType = .other
 ```
 
 ## Methods
+### `init(msg:)`
+
+```swift
+public init(msg: String)
+```
+
 ### `init(error:)`
 
 ```swift
-init(error: Error)
+public init(error: Error)
 ```
 
-### `generateQRCode()`
+### `startQrEngagement()`
 
 ```swift
-func generateQRCode() async throws -> Data?
+public func startQrEngagement() async throws -> String?
 ```
 
 ### `receiveRequest()`
 
 ```swift
-func receiveRequest() async throws -> [String : Any]
+public func receiveRequest() async throws -> [String : Any]
 ```
 
-### `sendResponse(userAccepted:itemsToSend:)`
+### `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems,  onSuccess: ((URL?) -> Void)?) async throws
 ```
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | True if user accepted to send the response |
+| itemsToSend | The selected items to send organized in document types and namespaces (see `RequestItems`) |

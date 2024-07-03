@@ -6,130 +6,71 @@
 
 - [Properties](#properties)
   - `status`
-  - `openid4VPlink`
-  - `docs`
-  - `iaca`
-  - `devicePrivateKey`
-  - `logger`
-  - `presentationDefinition`
-  - `resolvedRequestData`
-  - `siopOpenId4Vp`
   - `flow`
-  - `walletConf`
 - [Methods](#methods)
-  - `init(parameters:qrCode:)`
-  - `generateQRCode()`
+  - `init(parameters:qrCode:openId4VpVerifierApiUri:)`
+  - `startQrEngagement()`
   - `receiveRequest()`
-  - `sendResponse(userAccepted:itemsToSend:)`
-  - `parsePresentationDefinition(_:)`
+  - `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-class OpenId4VpService: PresentationService
+public class OpenId4VpService: PresentationService
 ```
+
+Implements remote attestation presentation to online verifier
+Implementation is based on the OpenID4VP – Draft 18 specification
 
 ## Properties
 ### `status`
 
 ```swift
-var status: TransferStatus = .initialized
-```
-
-### `openid4VPlink`
-
-```swift
-var openid4VPlink: String
-```
-
-### `docs`
-
-```swift
-var docs: [DeviceResponse]!
-```
-
-### `iaca`
-
-```swift
-var iaca: [SecCertificate]!
-```
-
-### `devicePrivateKey`
-
-```swift
-var devicePrivateKey: CoseKeyPrivate!
-```
-
-### `logger`
-
-```swift
-var logger = Logger(label: "OpenId4VpService")
-```
-
-### `presentationDefinition`
-
-```swift
-var presentationDefinition: PresentationDefinition?
-```
-
-### `resolvedRequestData`
-
-```swift
-var resolvedRequestData: ResolvedRequestData?
-```
-
-### `siopOpenId4Vp`
-
-```swift
-var siopOpenId4Vp: SiopOpenID4VP!
+public var status: TransferStatus = .initialized
 ```
 
 ### `flow`
 
 ```swift
-var flow: FlowType
-```
-
-### `walletConf`
-
-```swift
-static var walletConf: WalletOpenId4VPConfiguration? = {
-	let VERIFIER_API = ProcessInfo.processInfo.environment["VERIFIER_API"] ?? "http://localhost:8080"
-	let verifierMetaData = PreregisteredClient(clientId: "Verifier", jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(VERIFIER_API)/wallet/public-keys.json")!))
-	guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
-		  let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
-	guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
-	guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
-	var res = WalletOpenId4VPConfiguration(subjectSyntaxTypesSupported: [], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), idTokenTTL: 10 * 60, presentationDefinitionUriSupported: true, signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])], vpFormatsSupported: [])
-	return res
-}()
+public var flow: FlowType
 ```
 
 ## Methods
-### `init(parameters:qrCode:)`
+### `init(parameters:qrCode:openId4VpVerifierApiUri:)`
 
 ```swift
-init(parameters: [String: Any], qrCode: Data) throws
+public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?) throws
 ```
 
-### `generateQRCode()`
+### `startQrEngagement()`
 
 ```swift
-func generateQRCode() async throws -> Data?
+public func startQrEngagement() async throws -> String?
 ```
 
 ### `receiveRequest()`
 
 ```swift
-func receiveRequest() async throws -> [String: Any]
+public func receiveRequest() async throws -> [String: Any]
 ```
 
-### `sendResponse(userAccepted:itemsToSend:)`
+ Receive request from an openid4vp URL
+
+- Returns: The requested items.
+
+### `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws
 ```
 
-### `parsePresentationDefinition(_:)`
+Send response via openid4vp
 
-```swift
-func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition) -> RequestItems?
-```
+- Parameters:
+  - userAccepted: True if user accepted to send the response
+  - itemsToSend: The selected items to send organized in document types and namespaces
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | True if user accepted to send the response |
+| itemsToSend | The selected items to send organized in document types and namespaces |

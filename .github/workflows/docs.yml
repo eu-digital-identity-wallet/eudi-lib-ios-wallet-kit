@@ -3,17 +3,23 @@
 
 name: Documentation
 
-on: [push]
+on: 
+  push:
+    branches:
+      - main
 
 jobs:
   build:
 
-    runs-on: macos-latest
+    runs-on: macos-latest-xlarge
 
     steps:
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest
       - uses: swift-actions/setup-swift@v1
       - name: Get swift version
-        run: swift --version # Swift 5.8
+        run: swift --version 
       - uses: actions/checkout@v3
       - name: Fix Up Private GitHub URLs
         # Add personal access token to all private repo URLs 

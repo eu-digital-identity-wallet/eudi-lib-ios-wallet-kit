@@ -6,25 +6,25 @@
 public protocol PresentationService
 ```
 
+Presentation service abstract protocol
+
 ## Properties
-### `status`
-
-```swift
-var status: TransferStatus
-```
-
 ### `flow`
 
 ```swift
 var flow: FlowType
 ```
 
+instance of a presentation ``FlowType``
+
 ## Methods
-### `generateQRCode()`
+### `startQrEngagement()`
 
 ```swift
-func generateQRCode() async throws -> Data?
+func startQrEngagement() async throws -> String?
 ```
+
+Generate a QR code to be shown to verifier (optional)
 
 ### `receiveRequest()`
 
@@ -32,8 +32,23 @@ func generateQRCode() async throws -> Data?
 func receiveRequest() async throws -> [String: Any]
 ```
 
-### `sendResponse(userAccepted:itemsToSend:)`
+- Returns: The requested items.
+Receive request.
+
+### `sendResponse(userAccepted:itemsToSend:onSuccess:)`
 
 ```swift
-func sendResponse(userAccepted: Bool, itemsToSend: RequestItems) async throws
+func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws
 ```
+
+Send response to verifier
+- Parameters:
+  - userAccepted: True if user accepted to send the response
+  - itemsToSend: The selected items to send organized in document types and namespaces (see ``RequestItems``)
+
+#### Parameters
+
+| Name | Description |
+| ---- | ----------- |
+| userAccepted | True if user accepted to send the response |
+| itemsToSend | The selected items to send organized in document types and namespaces (see `RequestItems`) |

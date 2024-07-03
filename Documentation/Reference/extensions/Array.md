@@ -6,8 +6,8 @@ extension Array where Element == DocElementsViewModel
 ```
 
 ## Properties
-### `docSelectedDictionary`
+### `items`
 
 ```swift
-public var docSelectedDictionary: RequestItems
+public var items: RequestItems
 ```

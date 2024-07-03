@@ -6,21 +6,23 @@
 
 - [Cases](#cases)
   - `cbor`
-  - `jwt`
+  - `sdjwt`
 
 ```swift
-public enum DataFormat
+public enum DataFormat: String
 ```
+
+Data format of the exchanged data
 
 ## Cases
 ### `cbor`
 
 ```swift
-case cbor
+case cbor = "cbor"
 ```
 
-### `jwt`
+### `sdjwt`
 
 ```swift
-case jwt
+case sdjwt = "sdjwt"
 ```
