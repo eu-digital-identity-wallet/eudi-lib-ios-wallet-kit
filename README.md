@@ -153,7 +153,7 @@ catch {
 
 
 ## Reference
-Detailed documentation is provided [here](Documentation/Reference/README.md) 
+Detailed documentation is provided [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/) 
 
 ### Dependencies
 
