@@ -43,9 +43,13 @@ The library provides the following functionality:
 - Document issuance
     - [x] Support for OpenId4VCI document issuance
         - [x] Authorization Code Flow
-        - [ ] Pre-authorization Code Flow
+        - [x] Pre-authorization Code Flow
         - [x] Support for mso_mdoc format
         - [ ] Support for sd-jwt-vc format
+        - [x] Support credential offer
+        - [x] Support for DPoP JWT in authorization
+        - [x] Support for JWT and CWT proof types
+        - [ ] Support for deferred issuing
 - Proximity document presentation
     - [x] Support for ISO-18013-5 device retrieval
         - [x] QR device engagement
@@ -64,11 +68,23 @@ It is based on the following specifications:
 - OpenID4VP – Draft 18
 - SIOPv2 – Draft
 
+### Disclaimer
+The released software is a initial development release version: 
+-  The initial development release is an early endeavor reflecting the efforts of a short timeboxed period, and by no means can be considered as the final product.  
+-  The initial development release may be changed substantially over time, might introduce new features but also may change or remove existing ones, potentially breaking compatibility with your existing code.
+-  The initial development release is limited in functional scope.
+-  The initial development release may contain errors or design flaws and other problems that could cause system or other failures and data loss.
+-  The initial development release has reduced security, privacy, availability, and reliability standards relative to future releases. This could make the software slower, less reliable, or more vulnerable to attacks than mature software.
+-  The initial development release is not yet comprehensively documented. 
+-  Users of the software must perform sufficient engineering and additional testing in order to properly evaluate their application and determine whether any of the open-sourced components is suitable for use in that application.
+-  We strongly recommend to not put this version of the software into production use.
+-  Only the latest version of the software will be supported
+
 ## Installation
 To use EUDI Wallet Kit, add the following dependency to your Package.swift:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.2.0"))
+    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.5.6"))
 ]
 ```
 
@@ -87,6 +103,11 @@ let wallet = EudiWallet.standard
 wallet.userAuthenticationRequired = true
 wallet.trustedReaderCertificates = [...] // array of der certificate data
 wallet.openId4VpVerifierApiUri = "https:// ... verifier api uri ..."
+wallet.verifierApiUri = configLogic.verifierConfig.apiUri
+wallet.verifierLegalName = configLogic.verifierConfig.legalName
+wallet.openID4VciIssuerUrl = configLogic.vciConfig.issuerUrl
+wallet.openID4VciClientId = configLogic.vciConfig.clientId
+wallet.openID4VciRedirectUri = configLogic.vciConfig.redirectUri
 wallet.loadDocuments()
 ```	
 
@@ -103,8 +124,117 @@ The storage model provides the following models for the supported well-known doc
 
 For other document types the [GenericMdocModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/GenericMdocModel.md) is provided.
 
+
+### Manage documents
+
+The library provides a set of methods to work with documents.
+
+#### Listing documents
+
+The `EudiWallet.loadDocuments` method that returns the list of documents stored in the library.
+
+The following example shows how to retrieve issued documents:
+
+```swift
+ public func loadDocuments() async throws {
+    let documents = try await wallet.loadDocuments()
+  }
+```
+
+#### Retrieving a document
+
+The `EudiWallet.loadDocument(id:)` method that returns a document with the given id.
+
+The following example shows how to retrieve a document:
+
+```swift
+let document = try await wallet.loadDocument(id: documentId)
+```
+
+#### Deleting a document
+
+The `EudiWallet.deleteDocument(id:)` method that deletes a document with the given id.
+
+The following example shows how to delete a document:
+
+```swift
+try await wallet.deleteDocument(id: documentId)
+```
+
+## Issue document using OpenID4VCI
+
+The library provides the functionality to issue documents using OpenID4VCI. To issue a document
+using this functionality, EudiWallet must be property initialized. 
+If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
+After issuing a document, the document data and corresponding private key are stored in the wallet storage.
+
+### Issue document by docType
+When the document docType to be issued use the `issueDocument(docType:format:)` method.
+
+_Important Notes_:
+
+- Currently, only mso_mdoc format is supported
+- Currently, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
+  publicKey.
+
+The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
+
+```swift
+wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
+wallet.openID4VciClientId = "wallet-dev"
+wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
+do {
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
+  // document has been added to wallet storage, you can display it
+}
+catch {
+  // display error
+}
+```
+#### Resolving Credential offer
+
+The library provides the `resolveOfferUrlDocTypes(uriOffer:)` method that resolves the credential offer URI.
+The method returns the resolved `OfferedIssueModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
+user.
+
+The following example shows how to resolve a credential offer:
+
+```swift
+ func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel {
+    return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer)
+  }
+```
+
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
+The `txCodeValue` parameter is not used in the case of the authorization code flow.
+The following example shows how to issue documents by offer URL:
+```swift
+ let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers, format: .cbor, txCodeValue: txCodeValue )
+```
+
+#### Authorization code flow
+
+For the authorization code flow to work, the redirect URI must be specified specified by setting the the `openID4VciRedirectUri` property.
+The user is redirected in an authorization web view to the issuer's authorization endpoint. After the user authenticates and authorizes the request, the issuer redirects the user back to the application with an authorization code. The library exchanges the authorization code for an access token and issues the document.
+
+#### Pre-Authorization code flow
+
+When Issuer supports the pre-authorization code flow, the resolved offer will also contain the corresponding
+information. Specifically, the `txCodeSpec` field in the `OfferedIssueModel` object will contain:
+
+- The input mode, whether it is NUMERIC or TEXT
+- The expected length of the input
+- The description of the input
+
+From the user's perspective, the application must provide a way to input the transaction code.
+
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
+When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
+
+passing the transaction code as in the `txCode` parameter.
+
 ## Presentation Service
-The [presentation service protocol](Documentation/Reference/protocols/PresentationService.md) abstracts the presentation flow. The [BlePresentationService](Documentation/Reference/classes/BlePresentationService.md) and [OpenId4VpService](Documentation/Reference/classes/OpenId4VpService.md) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](Documentation/Reference/classes/PresentationSession.md) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](Documentation/Reference/enums/FlowType.md).
+The [presentation service protocol](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationservice) abstracts the presentation flow. The [BlePresentationService](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/blepresentationservice) and [OpenId4VpService](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/openid4vpservice) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationsession) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/flowtype).
 
 ```swift
 let session = eudiWallet.beginPresentation(flow: flow)
@@ -131,27 +261,6 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
 		})
 ```
 
-## Issue document using OpenID4VCI
-
-The library provides the functionality to issue documents using OpenID4VCI. To issue a document
-using this functionality, EudiWallet must be property initialized. 
-To issue a document using OpenID4VCI, you need to know the document's docType.
-If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
-```swift
-wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
-wallet.openID4VciClientId = "wallet-dev"
-wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
-do {
-  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
-  // document has been added to wallet storage, you can display it
-}
-catch {
-  // display error
-}
-
-```
-
-
 ## Reference
 Detailed documentation is provided [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/) 
 
@@ -164,17 +273,10 @@ The detailed functionality of the wallet kit is implemented in the following Swi
 ### Sample application  
 A sample application that demonstrates the usage of this library is [App Wallet UI](https://github.com/eu-digital-identity-wallet/eudi-app-ios-wallet-ui).
 
-### Disclaimer
-The released software is a initial development release version: 
--  The initial development release is an early endeavor reflecting the efforts of a short timeboxed period, and by no means can be considered as the final product.  
--  The initial development release may be changed substantially over time, might introduce new features but also may change or remove existing ones, potentially breaking compatibility with your existing code.
--  The initial development release is limited in functional scope.
--  The initial development release may contain errors or design flaws and other problems that could cause system or other failures and data loss.
--  The initial development release has reduced security, privacy, availability, and reliability standards relative to future releases. This could make the software slower, less reliable, or more vulnerable to attacks than mature software.
--  The initial development release is not yet comprehensively documented. 
--  Users of the software must perform sufficient engineering and additional testing in order to properly evaluate their application and determine whether any of the open-sourced components is suitable for use in that application.
--  We strongly recommend to not put this version of the software into production use.
--  Only the latest version of the software will be supported
+## How to contribute
+
+We welcome contributions to this project. To ensure that the process is smooth for everyone
+involved, follow the guidelines found in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### License details
 
