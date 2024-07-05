@@ -96,7 +96,7 @@ dependencies: [
 ```
 
 ## Initialization
-The [EudiWallet](Documentation/Reference/classes/EudiWallet.md) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
+The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/eudiwallet) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
 ```swift
 let wallet = EudiWallet.standard
@@ -112,17 +112,17 @@ wallet.loadDocuments()
 ```	
 
 ## Storage Manager
-The read-only property ``storage`` is an instance of a [StorageManager](Documentation/Reference/classes/StorageManager.md) 
+The read-only property ``storage`` is an instance of a [StorageManager](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/storagemanager) 
 Currently the keychain implementation is used. It provides document management functionality using the iOS KeyChain.
 
 The storage model provides the following models for the supported well-known document types:
 
 |DocType|Model|
 |-------|-----|
-|eu.europa.ec.eudiw.pid.1|[EuPidModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/EuPidModel.md)|
-|org.iso.18013.5.1.mDL|[IsoMdlModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/IsoMdlModel.md)|
+|eu.europa.ec.eudiw.pid.1|[EuPidModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/eupidmodel)|
+|org.iso.18013.5.1.mDL|[IsoMdlModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/isomdlmodel)|
 
-For other document types the [GenericMdocModel](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model/blob/main/Documentation/Reference/structs/GenericMdocModel.md) is provided.
+For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
 
 
 ### Manage documents
@@ -230,8 +230,6 @@ From the user's perspective, the application must provide a way to input the tra
 
 After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
-
-passing the transaction code as in the `txCode` parameter.
 
 ## Presentation Service
 The [presentation service protocol](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationservice) abstracts the presentation flow. The [BlePresentationService](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/blepresentationservice) and [OpenId4VpService](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/openid4vpservice) classes implement the proximity and remote presentation flows respectively. The [PresentationSession](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationsession) class is used to wrap the presentation service and provide @Published properties for SwiftUI screens. The following example code demonstrates the initialization of a SwiftUI view with a new presentation session of a selected [flow type](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/flowtype).
