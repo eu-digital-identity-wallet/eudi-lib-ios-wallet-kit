@@ -66,11 +66,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	///   - format: format of the exchanged data
 	///   - useSecureEnclave: use secure enclave to protect the private key
 	/// - Returns: The data of the document
-	public func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = true) async throws -> Data {
+	func issueDocument(docType: String, format: DataFormat, useSecureEnclave: Bool = true) async throws -> IssuanceOutcome {
 		try initSecurityKeys(useSecureEnclave)
-		let str = try await issueByDocType(docType, format: format)
-		guard let data = Data(base64URLEncoded: str) else { throw OpenId4VCIError.dataNotValid }
-		return data
+		let res = try await issueByDocType(docType, format: format)
+		return res
 	}
 	
 	/// Resolve issue offer and return available document metadata
@@ -95,7 +94,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
 	}
 	
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [Data] {
+	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [IssuanceOutcome] {
 		guard format == .cbor else { throw fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
@@ -110,9 +109,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let data = await credentialInfo.asyncCompactMap {
 			do {
 				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
-				let str = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
-				logger.info("Credential str:\n\(str)")
-				return Data(base64URLEncoded: str)
+				let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, claimSet: claimSet)
+				// logger.info("Credential str:\n\(str)")
+				return res
 			} catch {
 				logger.error("Failed to issue document with scope \($0.scope)")
 				logger.info("Exception: \(error)")
@@ -123,7 +122,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return data
 	}
 	
-	func issueByDocType(_ docType: String, format: DataFormat, claimSet: ClaimSet? = nil) async throws -> String {
+	func issueByDocType(_ docType: String, format: DataFormat, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
@@ -144,7 +143,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> String {
+	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet?) async throws -> IssuanceOutcome {
 		switch authorized {
 		case .noProofRequired:
 			return try await noProofRequiredSubmissionUseCase(issuer: issuer, noProofRequiredState: authorized, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
@@ -153,7 +152,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func issueOfferedCredentialInternalValidated(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
+	private func issueOfferedCredentialInternalValidated(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		let issuerMetadata = offer.credentialIssuerMetadata
 		guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == credentialConfigurationIdentifier.value }) else {
 			throw WalletError(description: "Cannot find credential identifier \(credentialConfigurationIdentifier.value) in offer")
@@ -233,9 +232,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		throw WalletError(description: "Failed to get push authorization code request")
 	}
 	
-	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> String {
+	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		switch noProofRequiredState {
-		case .noProofRequired:
+		case .noProofRequired(let accessToken, let refreshToken, let credentialIdentifiers):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
 			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
@@ -246,9 +245,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 					if let result = response.credentialResponses.first {
 						switch result {
 						case .deferred(let transactionId):
-							return try await deferredCredentialUseCase(issuer: issuer, authorized: noProofRequiredState, transactionId: transactionId)
+							//return try await deferredCredentialUseCase(issuer: issuer, authorized: noProofRequiredState, transactionId: transactionId)
+							let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+							return .deferred(deferredModel)
 						case .issued(_, let credential, _):
-							return credential
+							guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
+							return .issued(data)
 						}
 					} else {
 						throw WalletError(description: "No credential response results available")
@@ -265,7 +267,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, claimSet: ClaimSet? = nil) async throws -> String {
+	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+		guard case .proofRequired(let accessToken, let refreshToken, let cNonce, let credentialIdentifiers) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
@@ -277,9 +280,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				if let result = response.credentialResponses.first {
 					switch result {
 					case .deferred(let transactionId):
-						return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
+						//return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
+						let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+						return .deferred(deferredModel)
 					case .issued(_, let credential, _):
-						return credential
+						guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
+						return .issued(data)
 					}
 				} else {
 					throw WalletError(description: "No credential response results available")
@@ -293,17 +299,26 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId) async throws -> String {
+	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
 		let deferredRequestResponse = try await issuer.requestDeferredIssuance(proofRequest: authorized, transactionId: transactionId)
 		switch deferredRequestResponse {
 		case .success(let response):
 			switch response {
 			case .issued(_, let credential):
-				return credential
+				guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
+				return .issued(data)
 			case .issuancePending(let transactionId):
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
-				return (try! CodableCBOREncoder().encode(DeferredIssueModel(credentialIssuerUrl: credentialIssuerURL, accessToken: authorized.accessToken?.accessToken ?? "", refreshToken: nil, transactionId: transactionId.value))).base64URLEncodedString()
+				let deferredModel = switch authorized {
+				case .noProofRequired(let accessToken, let refreshToken, let credentialIdentifiers):
+					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+				case .proofRequired(let accessToken, let refreshToken, _, let credentialIdentifiers):
+					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+				}
+				guard let accessToken = authorized.accessToken else { throw WalletError(description: "No access token provided")}
+				 
+				return .deferred(deferredModel)
 			case .errored(_, let errorDescription):
 				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")
 			}

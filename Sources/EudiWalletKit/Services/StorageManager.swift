@@ -188,22 +188,6 @@ public class StorageManager: ObservableObject {
 	
 }
 
-public struct DeferredIssueModel: Codable {
-	let credentialIssuerUrl: String
-	var docType: String?
-	var format: String = DataFormat.cbor.rawValue
-	let accessToken: String
-	let refreshToken: String?
-	let transactionId: String
-	
-	public init(credentialIssuerUrl: String, docType: String? = nil, accessToken: String, refreshToken: String?, transactionId: String) {
-		self.credentialIssuerUrl = credentialIssuerUrl
-		self.docType = docType
-		self.accessToken = accessToken
-		self.refreshToken = refreshToken
-		self.transactionId = transactionId
-	}
-}
 
 
 
