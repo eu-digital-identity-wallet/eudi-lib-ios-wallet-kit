@@ -316,8 +316,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				case .proofRequired(let accessToken, let refreshToken, _, let credentialIdentifiers):
 					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers, transactionId: transactionId)
 				}
-				guard let accessToken = authorized.accessToken else { throw WalletError(description: "No access token provided")}
-				 
 				return .deferred(deferredModel)
 			case .errored(_, let errorDescription):
 				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")
