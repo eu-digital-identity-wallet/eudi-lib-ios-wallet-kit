@@ -246,7 +246,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						switch result {
 						case .deferred(let transactionId):
 							//return try await deferredCredentialUseCase(issuer: issuer, authorized: noProofRequiredState, transactionId: transactionId)
-							let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+							let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers, transactionId: transactionId)
 							return .deferred(deferredModel)
 						case .issued(_, let credential, _):
 							guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
@@ -281,7 +281,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 					switch result {
 					case .deferred(let transactionId):
 						//return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
-						let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+						let deferredModel = DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers, transactionId: transactionId)
 						return .deferred(deferredModel)
 					case .issued(_, let credential, _):
 						guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
@@ -312,9 +312,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
 				let deferredModel = switch authorized {
 				case .noProofRequired(let accessToken, let refreshToken, let credentialIdentifiers):
-					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers, transactionId: transactionId)
 				case .proofRequired(let accessToken, let refreshToken, _, let credentialIdentifiers):
-					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers)
+					DeferredIssuanceModel(credentialIssuerUrl: credentialIssuerURL, accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: credentialIdentifiers, transactionId: transactionId)
 				}
 				guard let accessToken = authorized.accessToken else { throw WalletError(description: "No access token provided")}
 				 
