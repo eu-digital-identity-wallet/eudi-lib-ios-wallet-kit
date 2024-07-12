@@ -2,6 +2,7 @@
 - Update eudi-lib-ios-openid4vci-swift to version 0.3.2
 - Rename `OfferedIssueModel` to `OfferedIssuanceModel` 
 - `EudiWallet`: added property `public var accessGroup: String?` (used for sharing keychain items between apps with the same access group)
+- StorageManager: remove `otherModels`, `docTypes`, `documentIds` properties
 
 ## v0.5.6
 - Update eudi-lib-ios-siop-openid4vp-swift to version 0.3.2
