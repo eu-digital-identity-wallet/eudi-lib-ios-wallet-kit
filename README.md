@@ -194,13 +194,13 @@ catch {
 #### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(uriOffer:)` method that resolves the credential offer URI.
-The method returns the resolved `OfferedIssueModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
+The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
 user.
 
 The following example shows how to resolve a credential offer:
 
 ```swift
- func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel {
+ func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
     return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer)
   }
 ```
@@ -220,7 +220,7 @@ The user is redirected in an authorization web view to the issuer's authorizatio
 #### Pre-Authorization code flow
 
 When Issuer supports the pre-authorization code flow, the resolved offer will also contain the corresponding
-information. Specifically, the `txCodeSpec` field in the `OfferedIssueModel` object will contain:
+information. Specifically, the `txCodeSpec` field in the `OfferedIssuanceModel` object will contain:
 
 - The input mode, whether it is NUMERIC or TEXT
 - The expected length of the input

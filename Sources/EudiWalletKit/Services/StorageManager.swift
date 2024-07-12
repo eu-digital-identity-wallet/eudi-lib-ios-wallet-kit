@@ -95,7 +95,7 @@ public class StorageManager: ObservableObject {
 	/// - Returns: An array of ``WalletStorage.Document`` objects
 	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?  {
 		do {
-			guard let docs = try storageService.loadDocuments() else { return nil }
+			guard let docs = try storageService.loadDocuments(status: .issued) else { return nil }
 			await refreshDocModels(docs)
 			await refreshPublishedVars()
 			return docs
@@ -156,7 +156,7 @@ public class StorageManager: ObservableObject {
 		guard index < documentIds.count else { return }
 		let id = mdocModels[index].id
 		do {
-			try storageService.deleteDocument(id: id)
+			try storageService.deleteDocument(id: id, status: .issued)
 			await MainActor.run {
 				if docTypes[index] == IsoMdlModel.isoDocType { mdlModel = nil }
 				if docTypes[index] == EuPidModel.euPidDocType { pidModel = nil }
@@ -172,7 +172,7 @@ public class StorageManager: ObservableObject {
 	/// Delete documenmts
 	public func deleteDocuments() async throws {
 		do {
-			try storageService.deleteDocuments()
+			try storageService.deleteDocuments(status: .issued)
 			await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
 			await refreshPublishedVars()
 		} catch {

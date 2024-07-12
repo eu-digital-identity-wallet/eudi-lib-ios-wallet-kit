@@ -18,16 +18,19 @@ import Foundation
 import OpenID4VCI
 
 struct DeferredIssuanceModel: Codable {
-	let credentialIssuerUrl: String
+	let deferredCredentialEndpoint: CredentialIssuerEndpoint
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
-	let credentialIdentifiers: AuthorizationDetailsIdentifiers?
 	let transactionId: TransactionId
 }
 
 enum IssuanceOutcome {
 	case issued(Data)
 	case deferred(DeferredIssuanceModel)
+}
+
+extension IssuanceOutcome {
+	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
 }
 
 	

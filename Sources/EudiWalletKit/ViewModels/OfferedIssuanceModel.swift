@@ -20,7 +20,7 @@ import OpenID4VCI
 /// Offered issue model contains information gathered by resolving an issue offer URL.
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:useSecureEnclave:)``
-public struct OfferedIssueModel {
+public struct OfferedIssuanceModel {
 	/// Issuer name (currently the URL)
 	public let issuerName: String
 	/// Document types included in the offer

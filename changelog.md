@@ -1,3 +1,14 @@
+## v0.5.7
+- Update eudi-lib-ios-openid4vci-swift to version 0.3.2
+- Rename `OfferedIssueModel` to `OfferedIssuanceModel` 
+- `EudiWallet`: added property `public var accessGroup: String?` (used for sharing keychain items between apps with the same access group)
+
+## v0.5.6
+- Update eudi-lib-ios-siop-openid4vp-swift to version 0.3.2
+
+## v0.5.5
+- Update eudi-lib-ios-openid4vci-swift to version 0.3.1
+
 ## v0.5.4
 ### Custom URLSession variable
 - Added `public var urlSession: URLSession` variable to `EudiWallet` class. This variable can be used to set a custom URLSession for network requests. Allows for custom configuration of the URLSession, such as setting a custom timeout interval or Self-Signed certificates.
