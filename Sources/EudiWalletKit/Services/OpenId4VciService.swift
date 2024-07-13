@@ -303,6 +303,13 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
+	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
+		let model: DeferredIssuanceModel = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
+		let issuer = try getIssuerForDeferred(data: model)
+		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil)
+		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId)
+	}
+	
 	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
 		let deferredRequestResponse = try await issuer.requestDeferredIssuance(proofRequest: authorized, transactionId: transactionId)

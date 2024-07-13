@@ -26,6 +26,7 @@ public class StorageManager: ObservableObject {
 	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
 	/// Array of document models loaded in the wallet
 	@Published public private(set) var mdocModels: [any MdocDecodable] = []
+	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
 	@Published public private(set) var hasData: Bool = false
@@ -56,15 +57,26 @@ public class StorageManager: ObservableObject {
 	}
 	
 	@MainActor
-	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document]) {
-		mdocModels = docs.compactMap(toModel(doc:))
+	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document], docStatus: WalletStorage.DocumentStatus) {
+		switch docStatus {
+		case .issued:
+			mdocModels = docs.compactMap(toModel(doc:))
+		case .deferred:
+			deferredDocuments = docs
+		}
 	}
 	
 	@MainActor
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) -> (any MdocDecodable)? {
-		let mdoc: (any MdocDecodable)? = toModel(doc: doc)
-		if let mdoc { mdocModels.append(mdoc) }
-		return mdoc
+		switch doc.status {
+		case .issued:
+			let mdoc: (any MdocDecodable)? = toModel(doc: doc)
+			if let mdoc { mdocModels.append(mdoc) }
+			return mdoc
+		case .deferred:
+			deferredDocuments.append(doc)
+			return nil
+		}
 	}
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
@@ -84,12 +96,12 @@ public class StorageManager: ObservableObject {
 	
 	/// Load documents from storage
 	///
-	/// Internally sets the ``docTypes``, ``mdocModels``, ``documentIds``, ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
+	/// Internally sets the ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?  {
+	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus = .issued) async throws -> [WalletStorage.Document]?  {
 		do {
-			guard let docs = try storageService.loadDocuments(status: .issued) else { return nil }
-			await refreshDocModels(docs)
+			guard let docs = try storageService.loadDocuments(status: status) else { return nil }
+			await refreshDocModels(docs, docStatus: status)
 			await refreshPublishedVars()
 			return docs
 		} catch {
@@ -145,17 +157,21 @@ public class StorageManager: ObservableObject {
 	}
 	/// Delete document by Index
 	/// - Parameter index: Index in array of loaded models
-	func deleteDocument(index: Int) async throws {
+	func deleteDocument(index: Int, status: DocumentStatus = .issued) async throws {
 		guard index < mdocModels.count else { return }
 		let id = mdocModels[index].id
 		do {
-			try storageService.deleteDocument(id: id, status: .issued)
-			await MainActor.run {
-				if mdocModels[index].docType == IsoMdlModel.isoDocType { mdlModel = nil }
-				if mdocModels[index].docType == EuPidModel.euPidDocType { pidModel = nil }
-				mdocModels.remove(at: index)
+			try storageService.deleteDocument(id: id, status: status)
+			if status == .issued {
+				await MainActor.run {
+					if mdocModels[index].docType == IsoMdlModel.isoDocType { mdlModel = nil }
+					if mdocModels[index].docType == EuPidModel.euPidDocType { pidModel = nil }
+					mdocModels.remove(at: index)
+				}
+				await refreshPublishedVars()
+			} else {
+				await MainActor.run { deferredDocuments.remove(at: index) }
 			}
-			await refreshPublishedVars()
 		} catch {
 			await setError(error)
 			throw error
