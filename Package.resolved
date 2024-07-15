@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "9e512f934c9e3a62dbc342381ed94ce194881148",
-        "version" : "0.3.2"
+        "revision" : "7a401b73ff0e054828dad87a7f6ff0272462f8c0",
+        "version" : "0.4.0"
       }
     },
     {

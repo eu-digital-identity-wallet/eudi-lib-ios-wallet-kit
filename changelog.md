@@ -1,10 +1,15 @@
 ## v0.5.7
 ### StorageManager changes
-- remove `otherModels`, `docTypes`, `documentIds` properties
 - `loadDocuments` takes an optional `status` parameter of type `WalletStorage.DocumentStatus` (default is `issued`)
+- `deleteDocuments` takes an optional `status` parameter of type `WalletStorage.DocumentStatus` (default is `issued`)
 - new variable `@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []` (documents that are not yet issued)
+### Deferred issuance
+	Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
+   The caller does not need to reload documents, storage manager collections are updated.
+- `@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document`
 ### Other changes
-- Update eudi-lib-ios-openid4vci-swift to version 0.3.2
+- remove `otherModels`, `docTypes`, `documentIds` properties
+- Update eudi-lib-ios-openid4vci-swift to version 0.4.0
 - Rename `OfferedIssueModel` to `OfferedIssuanceModel` 
 - `EudiWallet`: added property `public var accessGroup: String?` (used for sharing keychain items between apps with the same access group)
 

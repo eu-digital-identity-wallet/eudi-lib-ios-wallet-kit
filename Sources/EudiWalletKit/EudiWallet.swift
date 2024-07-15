@@ -103,8 +103,12 @@ public final class EudiWallet: ObservableObject {
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, useSecureEnclave: useSecureEnclave)
 		return try await finalizeIssuing(id: id, data: data, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 	}
-	
-	
+
+	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
+	///
+	/// The caller does not need to reload documents, storage manager collections are updated.
+	/// - Parameter deferredDoc: A stored document with deferred status
+	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document {
 		guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status") }
 		guard let pkt = deferredDoc.privateKeyType, let pk = deferredDoc.privateKey, let format = DataFormat(deferredDoc.docDataType) else { throw WalletError(description: "Invalid document") }
@@ -181,10 +185,6 @@ public final class EudiWallet: ObservableObject {
 		return documents
 	}
 	
-	public func re() {
-		
-	}
-	
 	/// Begin issuing a document by generating an issue request
 	///
 	/// - Parameters:
@@ -217,10 +217,6 @@ public final class EudiWallet: ObservableObject {
 	/// - Returns: An array of ``WalletStorage.Document`` objects
 	public func deleteDocuments(status: WalletStorage.DocumentStatus = .issued) async throws  {
 		return try await storage.deleteDocuments(status: status)
-	}
-	
-	public func deleteDocument(id: String, status: WalletStorage.DocumentStatus = .issued) async throws  {
-		return try await storage.deleteDocument(id: id, status: status)
 	}
 	
 	/// Load sample data from json files
