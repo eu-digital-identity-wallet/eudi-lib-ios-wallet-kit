@@ -98,7 +98,7 @@ public class StorageManager: ObservableObject {
 	///
 	/// Internally sets the ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus = .issued) async throws -> [WalletStorage.Document]?  {
+	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]?  {
 		do {
 			guard let docs = try storageService.loadDocuments(status: status) else { return nil }
 			await refreshDocModels(docs, docStatus: status)
@@ -146,20 +146,9 @@ public class StorageManager: ObservableObject {
 
 	/// Delete document by id
 	/// - Parameter id: Document id
-	public func deleteDocument(id: String) async throws {
-		guard let i: Array<String?>.Index = mdocModels.map(\.id).firstIndex(of: id)  else { return }
-		do {
-			try await deleteDocument(index: i)
-		} catch {
-			await setError(error)
-			throw error
-		}
-	}
-	/// Delete document by Index
-	/// - Parameter index: Index in array of loaded models
-	func deleteDocument(index: Int, status: DocumentStatus = .issued) async throws {
-		guard index < mdocModels.count else { return }
-		let id = mdocModels[index].id
+	public func deleteDocument(id: String, status: DocumentStatus) async throws {
+		let index = switch status { case .issued: mdocModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
+		guard let index else { throw WalletError(description: "Document not found") }
 		do {
 			try storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
@@ -169,8 +158,8 @@ public class StorageManager: ObservableObject {
 					mdocModels.remove(at: index)
 				}
 				await refreshPublishedVars()
-			} else {
-				await MainActor.run { deferredDocuments.remove(at: index) }
+			} else if status == .deferred {
+				await MainActor.run { _ = deferredDocuments.remove(at: index) }
 			}
 		} catch {
 			await setError(error)
@@ -179,11 +168,15 @@ public class StorageManager: ObservableObject {
 	}
 	
 	/// Delete documenmts
-	public func deleteDocuments() async throws {
+	public func deleteDocuments(status: DocumentStatus) async throws {
 		do {
-			try storageService.deleteDocuments(status: .issued)
-			await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
-			await refreshPublishedVars()
+			try storageService.deleteDocuments(status: status)
+			if status == .issued {
+				await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
+				await refreshPublishedVars()
+			} else if status == .deferred {
+				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
+			}
 		} catch {
 			await setError(error)
 			throw error

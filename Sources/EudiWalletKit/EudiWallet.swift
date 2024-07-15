@@ -110,6 +110,7 @@ public final class EudiWallet: ObservableObject {
 		guard let pkt = deferredDoc.privateKeyType, let pk = deferredDoc.privateKey, let format = DataFormat(deferredDoc.docDataType) else { throw WalletError(description: "Invalid document") }
 		let issueReq = try IssueRequest(id: deferredDoc.id, docType: deferredDoc.docType, privateKeyType: pkt, keyData: pk)
 		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", clientId: "", callbackScheme: openID4VciRedirectUri, urlSession: urlSession)
+		openId4VCIService.usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		return try await finalizeIssuing(id: deferredDoc.id, data: data, docType: deferredDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 	}
@@ -139,8 +140,8 @@ public final class EudiWallet: ObservableObject {
 		try endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument)
 		await storage.refreshPublishedVars()
-		if !data.isDeferred, let index = storage.deferredDocuments.firstIndex(where: { $0.id == id }) {
-			try await storage.deleteDocument(index: index)
+		if !data.isDeferred, storage.deferredDocuments.first(where: { $0.id == id }) != nil {
+			try await storage.deleteDocument(id: id, status: .deferred)
 		}
 		return newDocument
 	}
@@ -213,8 +214,12 @@ public final class EudiWallet: ObservableObject {
 	///
 	/// Calls ``storage`` loadDocuments
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	public func deleteDocuments() async throws  {
-		return try await storage.deleteDocuments()
+	public func deleteDocuments(status: WalletStorage.DocumentStatus = .issued) async throws  {
+		return try await storage.deleteDocuments(status: status)
+	}
+	
+	public func deleteDocument(id: String, status: WalletStorage.DocumentStatus = .issued) async throws  {
+		return try await storage.deleteDocument(id: id, status: status)
 	}
 	
 	/// Load sample data from json files
@@ -227,10 +232,10 @@ public final class EudiWallet: ObservableObject {
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
 			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil, status: .issued) }
 		do {
-		for docSample in docSamples {
-			try storageService.saveDocument(docSample, allowOverwrite: true)
-		}
-		try await storage.loadDocuments()
+			for docSample in docSamples {
+				try storageService.saveDocument(docSample, allowOverwrite: true)
+			}
+			try await storage.loadDocuments(status: .issued)
 		} catch {
 			await storage.setError(error)
 			throw WalletError(description: error.localizedDescription, code: (error as NSError).code)

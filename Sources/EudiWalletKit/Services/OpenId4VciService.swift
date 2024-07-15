@@ -95,7 +95,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	func getIssuerForDeferred(data: DeferredIssuanceModel) throws -> Issuer {
-		try Issuer(authorizationServerMetadata: .oauth(AuthorizationServerMetadata(issuer: nil, authorizationEndpoint: nil, tokenEndpoint: nil, introspectionEndpoint: nil, jwksURI: nil, grantTypesSupported: nil, responseTypesSupported: nil, requestObjectSigningAlgValuesSupported: nil, requestObjectEncryptionAlgValuesSupported: nil, requestObjectEncryptionEncValuesSupported: nil, responseModesSupported: nil, registrationEndpoint: nil, tokenEndpointAuthMethodsSupported: nil, tokenEndpointAuthSigningAlgValuesSupported: nil, introspectionEndpointAuthMethodsSupported: nil, introspectionEndpointAuthSigningAlgValuesSupported: nil, authorizationSigningAlgValuesSupported: nil, authorizationEncryptionAlgValuesSupported: nil, authorizationEncryptionEncValuesSupported: nil, scopesSupported: nil, requestParameterSupported: nil, requestURIParameterSupported: nil, requireRequestURIRegistration: nil, codeChallengeMethodsSupported: nil, tlsClientCertificateBoundAccessTokens: nil, dpopSigningAlgValuesSupported: nil, revocationEndpoint: nil, revocationEndpointAuthMethodsSupported: nil, revocationEndpointAuthSigningAlgValuesSupported: nil, deviceAuthorizationEndpoint: nil, backchannelTokenDeliveryModesSupported: nil, backchannelAuthenticationEndpoint: nil, backchannelAuthenticationRequestSigningAlgValuesSupported: nil, requirePushedAuthorizationRequests: nil, pushedAuthorizationRequestEndpoint: nil, mtlsEndpointAliases: nil, authorizationResponseIssParameterSupported: nil)), issuerMetadata: CredentialIssuerMetadata(credentialIssuerIdentifier: CredentialIssuerId(""), authorizationServers: [], credentialEndpoint: data.deferredCredentialEndpoint, batchCredentialEndpoint: nil, deferredCredentialEndpoint: data.deferredCredentialEndpoint, notificationEndpoint: nil, credentialConfigurationsSupported: [:], signedMetadata: nil, display: nil), config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
+		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: urlSession), config: config)
 	}
 	
 	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [IssuanceOutcome] {
@@ -223,7 +223,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			switch unAuthorized {
 			case .success(let request):
 				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
-				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _) = authorized {
+				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
 					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
 					return authorized
 				}
@@ -238,7 +238,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		switch noProofRequiredState {
-		case .noProofRequired(let accessToken, let refreshToken, _):
+		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
 			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
@@ -250,7 +250,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						switch result {
 						case .deferred(let transactionId):
 							//return try await deferredCredentialUseCase(issuer: issuer, authorized: noProofRequiredState, transactionId: transactionId)
-							let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId)
+							let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, timeStamp: timeStamp)
 							return .deferred(deferredModel)
 						case .issued(_, let credential, _):
 							guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
@@ -272,7 +272,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
-		guard case .proofRequired(let accessToken, let refreshToken, let cNonce, let credentialIdentifiers) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
+		guard case .proofRequired(let accessToken, let refreshToken, let cNonce, let credentialIdentifiers, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
@@ -285,7 +285,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 					switch result {
 					case .deferred(let transactionId):
 						//return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
-						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId)
+						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, timeStamp: timeStamp)
 						return .deferred(deferredModel)
 					case .issued(_, let credential, _):
 						guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
@@ -306,7 +306,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
 		let model: DeferredIssuanceModel = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
-		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil)
+		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp)
 		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId)
 	}
 	
@@ -322,10 +322,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			case .issuancePending(let transactionId):
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
 				let deferredModel = switch authorized {
-				case .noProofRequired(let accessToken, let refreshToken, _):
-					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId)
-				case .proofRequired(let accessToken, let refreshToken, _, _):
-					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId)
+				case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
+					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, timeStamp: timeStamp)
+				case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp):
+					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, timeStamp: timeStamp)
 				}
 				return .deferred(deferredModel)
 			case .errored(_, let errorDescription):

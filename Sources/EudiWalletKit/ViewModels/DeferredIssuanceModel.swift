@@ -22,6 +22,7 @@ struct DeferredIssuanceModel: Codable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
+	let timeStamp: TimeInterval
 }
 
 enum IssuanceOutcome {
