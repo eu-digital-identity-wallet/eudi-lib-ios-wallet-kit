@@ -24,25 +24,20 @@ import CryptoKit
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject {
 	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
-	/// Array of doc.types of documents loaded in the wallet
-	public var docTypes: [String] { mdocModels.map(\.docType) }
 	/// Array of document models loaded in the wallet
-	@Published public var mdocModels: [any MdocDecodable] = []
-	/// Array of document identifiers loaded in the wallet
-	public var documentIds: [String] { mdocModels.map(\.id) }
+	@Published public private(set) var mdocModels: [any MdocDecodable] = []
+	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
-	@Published public var hasData: Bool = false
+	@Published public private(set) var hasData: Bool = false
 	/// Whether wallet currently has loaded a document with doc.type included in the ``knownDocTypes`` array
-	@Published public var hasWellKnownData: Bool = false
+	@Published public private(set) var hasWellKnownData: Bool = false
 	/// Count of documents loaded in the wallet
-	@Published public var docCount: Int = 0
+	@Published public private(set) var docCount: Int = 0
 	/// The first driver license model loaded in the wallet (deprecated)
-	@Published public var mdlModel: IsoMdlModel?
+	@Published public private(set) var mdlModel: IsoMdlModel?
 	/// The first PID model loaded in the wallet (deprecated)
-	@Published public var pidModel: EuPidModel?
-	/// Other document models loaded in the wallet
-	@Published public var otherModels: [GenericMdocModel] = []
+	@Published public private(set) var pidModel: EuPidModel?
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
 	let logger: Logger
@@ -55,23 +50,33 @@ public class StorageManager: ObservableObject {
 	@MainActor
 	func refreshPublishedVars() {
 		hasData = mdocModels.count > 0
-		hasWellKnownData = hasData && !Set(docTypes).isDisjoint(with: Self.knownDocTypes)
+		hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.count
 		mdlModel = getTypedDoc()
 		pidModel = getTypedDoc()
-		otherModels = getTypedDocs()
 	}
 	
 	@MainActor
-	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document]) {
-		mdocModels = docs.compactMap(toModel(doc:))
+	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document], docStatus: WalletStorage.DocumentStatus) {
+		switch docStatus {
+		case .issued:
+			mdocModels = docs.compactMap(toModel(doc:))
+		case .deferred:
+			deferredDocuments = docs
+		}
 	}
 	
 	@MainActor
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) -> (any MdocDecodable)? {
-		let mdoc: (any MdocDecodable)? = toModel(doc: doc)
-		if let mdoc { mdocModels.append(mdoc) }
-		return mdoc
+		switch doc.status {
+		case .issued:
+			let mdoc: (any MdocDecodable)? = toModel(doc: doc)
+			if let mdoc { mdocModels.append(mdoc) }
+			return mdoc
+		case .deferred:
+			deferredDocuments.append(doc)
+			return nil
+		}
 	}
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
@@ -91,12 +96,12 @@ public class StorageManager: ObservableObject {
 	
 	/// Load documents from storage
 	///
-	/// Internally sets the ``docTypes``, ``mdocModels``, ``documentIds``, ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
+	/// Internally sets the ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
 	/// - Returns: An array of ``WalletStorage.Document`` objects
-	@discardableResult public func loadDocuments() async throws -> [WalletStorage.Document]?  {
+	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]?  {
 		do {
-			guard let docs = try storageService.loadDocuments() else { return nil }
-			await refreshDocModels(docs)
+			guard let docs = try storageService.loadDocuments(status: status) else { return nil }
+			await refreshDocModels(docs, docStatus: status)
 			await refreshPublishedVars()
 			return docs
 		} catch {
@@ -116,7 +121,7 @@ public class StorageManager: ObservableObject {
 	/// Get document model by index
 	/// - Parameter index: Index in array of loaded models
 	/// - Returns: The ``MdocDecodable`` model
-	public func getDocumentModel(index: Int) -> (any MdocDecodable)? {
+	func getDocumentModel(index: Int) -> (any MdocDecodable)? {
 		guard index < mdocModels.count else { return nil }
 		return mdocModels[index]
 	}
@@ -125,7 +130,7 @@ public class StorageManager: ObservableObject {
 	/// - Parameter id: The id of the document model to return
 	/// - Returns: The ``MdocDecodable`` model
 	public func getDocumentModel(id: String) ->  (any MdocDecodable)? {
-		guard let i = documentIds.firstIndex(of: id)  else { return nil }
+		guard let i = mdocModels.map(\.id).firstIndex(of: id)  else { return nil }
 		return getDocumentModel(index: i)
 	}
 	
@@ -133,36 +138,29 @@ public class StorageManager: ObservableObject {
 	/// - Parameter docType: The docType of the document model to return
 	/// - Returns: The ``MdocDecodable`` model
 	public func getDocumentModels(docType: String) -> [any MdocDecodable] {
-		return (0..<docTypes.count).compactMap { i in
-			guard docTypes[i] == docType else { return nil }
+		return (0..<mdocModels.count).compactMap { i in
+			guard mdocModels[i].docType == docType else { return nil }
 			return getDocumentModel(index: i)
 		}
 	}
 
 	/// Delete document by id
 	/// - Parameter id: Document id
-	public func deleteDocument(id: String) async throws {
-		guard let i: Array<String?>.Index = documentIds.firstIndex(of: id)  else { return }
+	public func deleteDocument(id: String, status: DocumentStatus) async throws {
+		let index = switch status { case .issued: mdocModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
+		guard let index else { throw WalletError(description: "Document not found") }
 		do {
-			try await deleteDocument(index: i)
-		} catch {
-			await setError(error)
-			throw error
-		}
-	}
-	/// Delete document by Index
-	/// - Parameter index: Index in array of loaded models
-	public func deleteDocument(index: Int) async throws {
-		guard index < documentIds.count else { return }
-		let id = mdocModels[index].id
-		do {
-			try storageService.deleteDocument(id: id)
-			await MainActor.run {
-				if docTypes[index] == IsoMdlModel.isoDocType { mdlModel = nil }
-				if docTypes[index] == EuPidModel.euPidDocType { pidModel = nil }
-				mdocModels.remove(at: index)
+			try storageService.deleteDocument(id: id, status: status)
+			if status == .issued {
+				await MainActor.run {
+					if mdocModels[index].docType == IsoMdlModel.isoDocType { mdlModel = nil }
+					if mdocModels[index].docType == EuPidModel.euPidDocType { pidModel = nil }
+					mdocModels.remove(at: index)
+				}
+				await refreshPublishedVars()
+			} else if status == .deferred {
+				await MainActor.run { _ = deferredDocuments.remove(at: index) }
 			}
-			await refreshPublishedVars()
 		} catch {
 			await setError(error)
 			throw error
@@ -170,11 +168,15 @@ public class StorageManager: ObservableObject {
 	}
 	
 	/// Delete documenmts
-	public func deleteDocuments() async throws {
+	public func deleteDocuments(status: DocumentStatus) async throws {
 		do {
-			try storageService.deleteDocuments()
-			await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
-			await refreshPublishedVars()
+			try storageService.deleteDocuments(status: status)
+			if status == .issued {
+				await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
+				await refreshPublishedVars()
+			} else if status == .deferred {
+				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
+			}
 		} catch {
 			await setError(error)
 			throw error
@@ -187,6 +189,7 @@ public class StorageManager: ObservableObject {
 	}
 	
 }
+
 
 
 
