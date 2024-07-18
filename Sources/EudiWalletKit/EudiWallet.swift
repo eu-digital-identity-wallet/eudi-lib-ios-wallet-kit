@@ -244,7 +244,7 @@ public final class EudiWallet: ObservableObject {
 	///   - docType: docType of documents to present (optional)
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A data dictionary that can be used to initialize a presentation service
-	func prepareServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String: Any] {
+	public func loadTransferServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String: Any] {
 		var parameters: [String: Any]
 		switch dataFormat {
 		case .cbor:
@@ -270,7 +270,7 @@ public final class EudiWallet: ObservableObject {
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		do {
-			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
+			let parameters = try loadTransferServiceDataParameters(docType: docType, dataFormat: dataFormat)
 			let docIdAndTypes = storage.getDocIdsToTypes()
 			switch flow {
 			case .ble:
