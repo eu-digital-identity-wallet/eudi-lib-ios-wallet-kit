@@ -59,7 +59,7 @@ public final class EudiWallet: ObservableObject {
 		guard !serviceName.isEmpty, !serviceName.contains(":") else { throw WalletError(description: "Not allowed service name, remove : character") }
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
-		storage = StorageManager(storageService: storageService)
+		storage = StorageManager(storageService: storageService, modelFactory: nil)
 		self.trustedReaderCertificates = trustedReaderCertificates
 		self.userAuthenticationRequired = userAuthenticationRequired
 		#if DEBUG
@@ -244,7 +244,7 @@ public final class EudiWallet: ObservableObject {
 	///   - docType: docType of documents to present (optional)
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A data dictionary that can be used to initialize a presentation service
-	public func loadTransferServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String: Any] {
+	public func prepareServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) throws -> [String: Any] {
 		var parameters: [String: Any]
 		switch dataFormat {
 		case .cbor:
@@ -270,7 +270,7 @@ public final class EudiWallet: ObservableObject {
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) -> PresentationSession {
 		do {
-			let parameters = try loadTransferServiceDataParameters(docType: docType, dataFormat: dataFormat)
+			let parameters = try prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
 			let docIdAndTypes = storage.getDocIdsToTypes()
 			switch flow {
 			case .ble:
