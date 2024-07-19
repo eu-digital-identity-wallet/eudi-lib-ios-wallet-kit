@@ -38,12 +38,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	static var metadataCache = [String: CredentialOffer]()
 	var urlSession: URLSession
 	
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String, urlSession: URLSession) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
 		logger = Logger(label: "OpenId4VCI")
-		config = .init(clientId: clientId, authFlowRedirectionURI: URL(string: callbackScheme)!)
+		self.config = config
 	}
 	
 	fileprivate func initSecurityKeys(_ useSecureEnclave: Bool) throws {

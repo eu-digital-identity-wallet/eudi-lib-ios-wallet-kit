@@ -43,19 +43,19 @@ public final class EudiWallet: ObservableObject {
 	public var verifierApiUri: String?
 	/// OpenID4VP verifier legal name (used for preregistered clients)
 	public var verifierLegalName: String?
-	/// OpenID4VCI issuer url
+	/// OpenID4VCI issuer URL
 	public var openID4VciIssuerUrl: String?
-	/// OpenID4VCI client id
-	public var openID4VciClientId: String?
-	/// OpenID4VCI redirect URI. Defaults to "eudi-openid4ci://authorize/"
-	public var openID4VciRedirectUri: String = "eudi-openid4ci://authorize"
+	/// OpenID4VCI issuer parameters
+	public var openID4VciConfig: OpenId4VCIConfig?
 	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
 	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
+	public static var defaultClientId = "wallet-dev"
+	public static var defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
 	
 	/// Initialize a wallet instance. All parameters are optional.
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciClientId: String? = nil, openID4VciRedirectUri: String? = nil, urlSession: URLSession? = nil) throws {
+	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil) throws {
 		guard !serviceName.isEmpty, !serviceName.contains(":") else { throw WalletError(description: "Not allowed service name, remove : character") }
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
@@ -67,8 +67,7 @@ public final class EudiWallet: ObservableObject {
 		#endif
 		self.verifierApiUri	= verifierApiUri
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
-		self.openID4VciClientId = openID4VciClientId
-		if let openID4VciRedirectUri { self.openID4VciRedirectUri = openID4VciRedirectUri }
+		self.openID4VciConfig = openID4VciConfig
 		self.urlSession = urlSession ?? URLSession.shared
 		useSecureEnclave = SecureEnclave.isAvailable
 	}
@@ -80,13 +79,14 @@ public final class EudiWallet: ObservableObject {
 	/// - Returns: (Issue request key pair, vci service, unique id)
 	func prepareIssuing(docType: String?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-		guard let openID4VciClientId else { throw WalletError(description: "clientId not defined")}
+		guard openID4VciConfig?.clientId != nil else { throw WalletError(description: "clientId not defined")}
+		guard openID4VciConfig?.authFlowRedirectionURI != nil else { throw WalletError(description: "Auth flow Redirect URI not defined")}
 		let id: String = UUID().uuidString
 		let issueReq = try await Self.authorizedAction(action: {
 			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
 		}, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(docType ?? "", comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
-		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, clientId: openID4VciClientId, callbackScheme: openID4VciRedirectUri, urlSession: urlSession)
+		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, config: openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		return (issueReq, openId4VCIService, id)
 	}
 	
@@ -113,7 +113,7 @@ public final class EudiWallet: ObservableObject {
 		guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status") }
 		guard let pkt = deferredDoc.privateKeyType, let pk = deferredDoc.privateKey, let format = DataFormat(deferredDoc.docDataType) else { throw WalletError(description: "Invalid document") }
 		let issueReq = try IssueRequest(id: deferredDoc.id, docType: deferredDoc.docType, privateKeyType: pkt, keyData: pk)
-		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", clientId: "", callbackScheme: openID4VciRedirectUri, urlSession: urlSession)
+		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", config: self.openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		openId4VCIService.usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_) = data else { return deferredDoc }
