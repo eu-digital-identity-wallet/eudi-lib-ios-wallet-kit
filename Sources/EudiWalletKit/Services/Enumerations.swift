@@ -17,6 +17,7 @@ limitations under the License.
 //  TransferStatus.swift
 
 import Foundation
+import WalletStorage
 
 /// Data exchange flow type
 public enum FlowType: Codable, Hashable {
@@ -33,6 +34,16 @@ public enum FlowType: Codable, Hashable {
 public enum DataFormat: String {
 	case cbor = "cbor"
 	case sdjwt = "sdjwt"
+}
+
+public extension DataFormat {
+	init?(_ docDataType: DocDataType) {
+		switch docDataType {
+		case .cbor:	self = .cbor
+		case .sjwt:	self = .sdjwt
+		default: return nil
+		}
+	}
 }
 
 public enum StorageType {
