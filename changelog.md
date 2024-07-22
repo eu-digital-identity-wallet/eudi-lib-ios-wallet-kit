@@ -1,15 +1,21 @@
+## v0.5.8
+- Update eudi-lib-ios-openid4vci-swift to version [0.4.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.2)
+- New `EudiWallet` property `public var openID4VciConfig: OpenId4VCIConfig?` to pass OpenID4VCI issuer parameters
+- Removed `EudiWallet` properties `var openID4VciClientId` and `var openID4VciRedirectUri`
+- New `EudiWallet` property `public var modelFactory: (any MdocModelFactory.Type)?` if the UI app wants to pass a model factory type to create custom stronly-typed models. See [`MdocModelFactory`](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocmodelfactory) protocol for more details.
+
 ## v0.5.7
 ### StorageManager changes
 - `loadDocuments` takes an optional `status` parameter of type `WalletStorage.DocumentStatus` (default is `issued`)
 - `deleteDocuments` takes an optional `status` parameter of type `WalletStorage.DocumentStatus` (default is `issued`)
 - new variable `@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []` (documents that are not yet issued)
 ### Deferred issuance
-	Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
-   The caller does not need to reload documents, storage manager collections are updated.
-- `@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document`
+-	Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
+   The caller does not need to reload documents, storage manager `deferredDocuments` and `mdocModels` properties are updated.
+- New function to request deferred issuance: `@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document`
 ### Other changes
-- remove `otherModels`, `docTypes`, `documentIds` properties
-- Update eudi-lib-ios-openid4vci-swift to version 0.4.0
+- Removed `otherModels`, `docTypes`, `documentIds` properties
+- Updated eudi-lib-ios-openid4vci-swift to version [0.4.1](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.1)
 - Rename `OfferedIssueModel` to `OfferedIssuanceModel` 
 - `EudiWallet`: added property `public var accessGroup: String?` (used for sharing keychain items between apps with the same access group)
 

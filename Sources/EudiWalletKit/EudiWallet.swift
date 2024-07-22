@@ -49,6 +49,7 @@ public final class EudiWallet: ObservableObject {
 	public var openID4VciConfig: OpenId4VCIConfig?
 	/// Use iPhone Secure Enclave to protect keys and perform cryptographic operations. Defaults to true (if available)
 	public var useSecureEnclave: Bool { didSet { if !SecureEnclave.isAvailable { useSecureEnclave = false } } }
+	/// Optional model factory type to create custom stronly-typed models
 	public var modelFactory: (any MdocModelFactory.Type)? { didSet { storage.modelFactory = modelFactory } } 
 	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
