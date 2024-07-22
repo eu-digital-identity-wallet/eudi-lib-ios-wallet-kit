@@ -38,12 +38,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	static var metadataCache = [String: CredentialOffer]()
 	var urlSession: URLSession
 	
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, clientId: String, callbackScheme: String, urlSession: URLSession) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
 		logger = Logger(label: "OpenId4VCI")
-		config = .init(clientId: clientId, authFlowRedirectionURI: URL(string: callbackScheme)!)
+		self.config = config
 	}
 	
 	fileprivate func initSecurityKeys(_ useSecureEnclave: Bool) throws {
@@ -99,7 +99,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [IssuanceOutcome] {
-		guard format == .cbor else { throw fatalError("jwt format not implemented") }
+		guard format == .cbor else { fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
@@ -131,7 +131,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
-			if let authorizationServer = metaData?.authorizationServers.first, let metaData {
+			if let authorizationServer = metaData?.authorizationServers?.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
@@ -272,7 +272,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
-		guard case .proofRequired(let accessToken, let refreshToken, let cNonce, let credentialIdentifiers, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
+		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }

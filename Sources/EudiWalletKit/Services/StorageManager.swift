@@ -41,10 +41,12 @@ public class StorageManager: ObservableObject {
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
 	let logger: Logger
+	var modelFactory: (any MdocModelFactory.Type)?
 	
-	public init(storageService: any DataStorageService) {
+	public init(storageService: any DataStorageService, modelFactory: (any MdocModelFactory.Type)? = nil) {
 		logger = Logger(label: "\(StorageManager.self)")
 		self.storageService = storageService
+		self.modelFactory = modelFactory
 	}
 	
 	@MainActor
@@ -81,12 +83,15 @@ public class StorageManager: ObservableObject {
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		guard let (iss, dpk) = doc.getCborData() else { return nil }
-		var retModel: (any MdocDecodable)? = switch doc.docType {
-		case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
-		case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
-		default: nil
+		var retModel: (any MdocDecodable)? = self.modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType)
+		if retModel == nil {
+			let defModel: (any MdocDecodable)? = switch doc.docType {
+			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
+			default: nil
+			}
+			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, title: doc.docType.translated())
 		}
-		retModel = retModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, title: doc.docType.translated())
 		return retModel
 	}
 	
