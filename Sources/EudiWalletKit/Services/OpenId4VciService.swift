@@ -109,7 +109,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
 		let issuer = try getIssuer(offer: offer)
 		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
-		let authorized = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get() } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
+		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
+		if case .presentation_request(let url) = authorizedOutcome { return [.presentation_request(url)] }
+		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 		let data = await credentialInfo.asyncCompactMap {
 			do {
 				logger.info("Starting issuing with identifer \($0.identifier.value) and scope \($0.scope)")
@@ -137,7 +139,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
-				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+				let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+				if case .presentation_request(let url) = authorizedOutcome { return .presentation_request(url) }
+				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 			} else {
 				throw WalletError(description: "Invalid authorization server")
@@ -203,7 +207,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func authorizeRequestWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> AuthorizedRequest {
+	private func authorizeRequestWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> AuthorizeRequestOutcome {
 		var pushedAuthorizationRequestEndpoint = ""
 		if case let .oidc(metaData) = offer.authorizationServerMetadata, let endpoint = metaData.pushedAuthorizationRequestEndpoint {
 			pushedAuthorizationRequestEndpoint = endpoint
@@ -216,24 +220,33 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
-			let authorizationCode = try await loginUserAndGetAuthCode(
-				getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url) ?? { throw WalletError(description: "Could not retrieve authorization code") }()
+			let authResult = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url)
 			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
-			let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
-			switch unAuthorized {
-			case .success(let request):
-				let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
-				if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
-					logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
-					return authorized
-				}
-			case .failure(let error):
-				throw  WalletError(description: error.localizedDescription)
+			switch authResult {
+			case .code(let authorizationCode):
+				return .authorized(try await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode))
+			case .presentation_request(let url):
+				return .presentation_request(url)
 			}
 		} else if case let .failure(failure) = parPlaced {
 			throw WalletError(description: "Authorization error: \(failure.localizedDescription)")
 		}
 		throw WalletError(description: "Failed to get push authorization code request")
+	}
+	
+	private func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest{
+		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
+		switch unAuthorized {
+		case .success(let request):
+			let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
+			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
+				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
+				return authorized
+			}
+			throw WalletError(description: "Failed to get access token")
+		case .failure(let error):
+			throw WalletError(description: error.localizedDescription)
+		}
 	}
 	
 	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
@@ -337,13 +350,19 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	@MainActor
-	private func loginUserAndGetAuthCode(getAuthorizationCodeUrl: URL) async throws -> String? {
+	private func loginUserAndGetAuthCode(getAuthorizationCodeUrl: URL) async throws -> AsWebOutcome {
 		return try await withCheckedThrowingContinuation { c in
-			let authenticationSession = ASWebAuthenticationSession(url: getAuthorizationCodeUrl, callbackURLScheme: config.authFlowRedirectionURI.scheme!) { optionalUrl, optionalError in
-				guard optionalError == nil else { c.resume(throwing: OpenId4VCIError.authRequestFailed(optionalError!)); return }
-				guard let url = optionalUrl else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl); return }
-				guard let code = url.getQueryStringParameter("code") else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoCode); return }
-				c.resume(returning: code)
+			let authenticationSession = ASWebAuthenticationSession(url: getAuthorizationCodeUrl, callbackURLScheme: config.authFlowRedirectionURI.scheme!) { url, error in
+				if let error { c.resume(throwing: OpenId4VCIError.authRequestFailed(error)); return }
+				guard let url else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl); return }
+				if let schemes = Bundle.main.getURLSchemas(), schemes.first(where: { url.absoluteString.hasPrefix($0 + "://") }) != nil {
+					// dynamic issuing case
+					c.resume(returning: .presentation_request(url))
+				} else if let code = url.getQueryStringParameter("code") {
+					c.resume(returning: .code(code))
+				} else {
+					c.resume(throwing: OpenId4VCIError.authorizeResponseNoCode)
+				}
 			}
 			authenticationSession.prefersEphemeralWebBrowserSession = true
 			authenticationSession.presentationContextProvider = self

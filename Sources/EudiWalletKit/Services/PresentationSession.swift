@@ -110,7 +110,7 @@ public class PresentationSession: ObservableObject {
 	@MainActor
 	func setError(_ error: Error) {
 		status = .error
-		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
+		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
 	
 	/// Receive request from verifer

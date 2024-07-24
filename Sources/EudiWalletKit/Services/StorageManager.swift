@@ -190,7 +190,7 @@ public class StorageManager: ObservableObject {
 	
 	@MainActor
 	func setError(_ error: Error) {
-		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
+		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
 	
 }

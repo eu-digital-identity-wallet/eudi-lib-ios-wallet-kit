@@ -135,6 +135,8 @@ public final class EudiWallet: ObservableObject {
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docTypeToSave = docType ?? "DEFERRED"
+		case .presentation_request(let url):
+			throw WalletError.presentation_request(url)
 		}
 		var newDocument: WalletStorage.Document
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : .issued
@@ -237,7 +239,7 @@ public final class EudiWallet: ObservableObject {
 			try await storage.loadDocuments(status: .issued)
 		} catch {
 			await storage.setError(error)
-			throw WalletError(description: error.localizedDescription, code: (error as NSError).code)
+			throw WalletError(description: error.localizedDescription)
 		}
 	}
 	
@@ -336,7 +338,7 @@ public final class EudiWallet: ObservableObject {
 				}
 			}
 		} else if let error {
-			throw WalletError(description: error.localizedDescription, code: error.code)
+			throw WalletError(description: error.localizedDescription)
 		}
 		return nil
 	}

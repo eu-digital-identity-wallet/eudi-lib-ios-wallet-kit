@@ -17,17 +17,20 @@ limitations under the License.
 import Foundation
 import OpenID4VCI
 
-struct DeferredIssuanceModel: Codable {
-	let deferredCredentialEndpoint: CredentialIssuerEndpoint
-	let accessToken: IssuanceAccessToken
-	let refreshToken: IssuanceRefreshToken?
-	let transactionId: TransactionId
-	let timeStamp: TimeInterval
+enum IssuanceOutcome {
+	case issued(Data)
+	case deferred(DeferredIssuanceModel)
+	case presentation_request(URL)
 }
 
-extension IssuanceOutcome {
-	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
+enum AsWebOutcome {
+	case code(String)
+	case presentation_request(URL)
 }
 
-	
+enum AuthorizeRequestOutcome {
+	case authorized(AuthorizedRequest)
+	case presentation_request(URL)
+}
+
 

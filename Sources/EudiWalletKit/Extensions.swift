@@ -30,5 +30,11 @@ extension Array where Element == Display {
 	}
 }
 
+extension Bundle {
+	func getURLSchemas() -> [String]? {
+		guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String:Any]], let schema = urlTypes.first, let urlSchemas = schema["CFBundleURLSchemes"] as? [String] else {return nil}
+		return urlSchemas
+	}
+}
 
 
