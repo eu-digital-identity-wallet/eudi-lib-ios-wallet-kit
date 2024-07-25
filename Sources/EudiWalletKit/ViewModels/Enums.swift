@@ -20,7 +20,7 @@ import OpenID4VCI
 enum IssuanceOutcome {
 	case issued(Data)
 	case deferred(DeferredIssuanceModel)
-	case presentation_request(URL)
+	case pending_authorization(PendingAuthorizationModel)
 }
 
 enum AsWebOutcome {

@@ -27,6 +27,7 @@ public class StorageManager: ObservableObject {
 	/// Array of document models loaded in the wallet
 	@Published public private(set) var mdocModels: [any MdocDecodable] = []
 	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
+	@Published public private(set) var pendingDocuments: [WalletStorage.Document] = []
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
 	@Published public private(set) var hasData: Bool = false
@@ -65,6 +66,8 @@ public class StorageManager: ObservableObject {
 			mdocModels = docs.compactMap(toModel(doc:))
 		case .deferred:
 			deferredDocuments = docs
+		case .pending:
+			pendingDocuments = docs
 		}
 	}
 	
@@ -77,6 +80,9 @@ public class StorageManager: ObservableObject {
 			return mdoc
 		case .deferred:
 			deferredDocuments.append(doc)
+			return nil
+		case .pending:
+			pendingDocuments.append(doc)
 			return nil
 		}
 	}

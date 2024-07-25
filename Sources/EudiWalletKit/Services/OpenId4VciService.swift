@@ -110,7 +110,11 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let issuer = try getIssuer(offer: offer)
 		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
-		if case .presentation_request(let url) = authorizedOutcome { return [.presentation_request(url)] }
+		if case .presentation_request(let url) = authorizedOutcome {
+			let uuids = credentialInfo.map { _ in UUID().uuidString }
+			uuids.forEach { Self.metadataCache[$0] = offer }
+			return credentialInfo.enumerated().map { .pending_authorization(PendingAuthorizationModel(authorizeRedirectUrlString: url.absoluteString, identifier: $1.identifier, docType: $1.docType, metadataKey: uuids[$0])) }
+		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 		let data = await credentialInfo.asyncCompactMap {
 			do {
@@ -135,12 +139,16 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers?.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
-				let (credentialConfigurationIdentifier, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
+				let (credentialConfigurationIdentifier, _, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
 				let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-				if case .presentation_request(let url) = authorizedOutcome { return .presentation_request(url) }
+				if case .presentation_request(let url) = authorizedOutcome {
+					let uuid = UUID().uuidString
+					Self.metadataCache[uuid] = offer
+					return .pending_authorization(PendingAuthorizationModel(authorizeRedirectUrlString: url.absoluteString, identifier: credentialConfigurationIdentifier, docType: docType, metadataKey: uuid))
+				}
 				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 			} else {
@@ -168,7 +176,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 	}
 	
-	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], docType: String, format: DataFormat) throws -> (identifier: CredentialConfigurationIdentifier, scope: String) {
+	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], docType: String, format: DataFormat) throws -> (identifier: CredentialConfigurationIdentifier, scope: String, docType: String) {
 		switch format {
 		case .cbor:
 			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope else {
@@ -176,7 +184,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				throw WalletError(description: "Issuer does not support doc type\(docType)")
 			}
 			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-			return (identifier: credential.key, scope: scope)
+			return (identifier: credential.key, scope: scope, docType: docType)
 		default:
 			throw WalletError(description: "Format \(format) not yet supported")
 		}

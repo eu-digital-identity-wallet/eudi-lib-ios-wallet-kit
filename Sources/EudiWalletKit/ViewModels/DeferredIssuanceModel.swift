@@ -25,6 +25,13 @@ struct DeferredIssuanceModel: Codable {
 	let timeStamp: TimeInterval
 }
 
+struct PendingAuthorizationModel: Codable {
+	let authorizeRedirectUrlString: String
+	let identifier: CredentialConfigurationIdentifier
+	let docType: String
+	let metadataKey: String
+}
+
 extension IssuanceOutcome {
 	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
 }

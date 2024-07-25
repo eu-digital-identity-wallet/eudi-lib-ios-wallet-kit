@@ -135,8 +135,9 @@ public final class EudiWallet: ObservableObject {
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docTypeToSave = docType ?? "DEFERRED"
-		case .presentation_request(let url):
-			throw WalletError.presentation_request(url)
+		case .pending_authorization(let pendingAuthModel):
+			dataToSave = try JSONEncoder().encode(pendingAuthModel)
+			return WalletStorage.Document(id: pendingAuthModel.metadataKey, docType: pendingAuthModel.docType, docDataType: ddt, data: dataToSave, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date(), status: .pending)
 		}
 		var newDocument: WalletStorage.Document
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : .issued
