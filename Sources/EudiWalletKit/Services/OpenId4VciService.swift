@@ -335,13 +335,24 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(let urlString) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)")}
 		guard let webUrl else { throw WalletError(description: "Web URL not specified") }
+		/*
+		let wvr = try await withCheckedThrowingContinuation { @MainActor c in
+			let rr = URL(string: "https://dev.issuer.eudiw.dev/dynamic/redirect_wallet")!
+			let wvc = WebViewController(request: URLRequest(url: webUrl), redirectionURL: rr) { response in
+				c.resume(returning: response)
+			}
+			wvc.present()
+		}
+		
 		let asWeb = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: webUrl)
 		guard case .code(let code) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
+		 */
+		let code = webUrl.getQueryStringParameter("response_code")!
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
 		let issuer = try getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.identifier.value)")
 		// let authResult = authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-		let authorizedRequest = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [], authorizationCode: IssuanceAuthorization(authorizationCode: code), pkceVerifier: PKCEVerifier(codeVerifier: "", codeVerifierMethod: ""))))
+		let authorizedRequest = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [], authorizationCode: IssuanceAuthorization(authorizationCode: code), pkceVerifier: PKCEVerifier(codeVerifier: PKCEGenerator.codeVerifier() ?? "", codeVerifierMethod: CodeChallenge.sha256.rawValue))))
 		guard case .success(let authorized) = authorizedRequest else {	throw WalletError(description: "Pending issuance not authorized")}
 		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, claimSet: nil)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
