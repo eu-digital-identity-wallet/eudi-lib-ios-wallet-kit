@@ -17,6 +17,7 @@ Created on 09/11/2023
 */
 import Foundation
 import OpenID4VCI
+import WalletStorage
 
 extension String {
 	public func translated() -> String {
@@ -37,4 +38,9 @@ extension Bundle {
 	}
 }
 
-
+extension WalletStorage.Document {
+	public var authorizePresentationUrl: String? {
+		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
+		return urlString
+	}
+}

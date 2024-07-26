@@ -17,7 +17,6 @@ import Foundation
 /// Wallet error
 public enum WalletError: LocalizedError {
 	case generic(String)
-	case presentation_request(URL)
 
 	public init(description: String, userInfo: [String: Any]? = nil) {
 		self = .generic(description)
@@ -31,7 +30,6 @@ public enum WalletError: LocalizedError {
 	public var errorDescription: String? {
 		switch self {
 		case .generic(let description): description
-		case .presentation_request(let url): "Request for presentation: \(url)"
 		}
 	}
 	
