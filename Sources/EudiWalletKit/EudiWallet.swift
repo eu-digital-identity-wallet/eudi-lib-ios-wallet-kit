@@ -31,6 +31,8 @@ public final class EudiWallet: ObservableObject {
 	var storageService: any WalletStorage.DataStorageService { storage.storageService }
 	/// Instance of the wallet initialized with default parameters
 	public static private(set) var standard: EudiWallet = try! EudiWallet()
+	/// The [service](https://developer.apple.com/documentation/security/ksecattrservice) used to store documents. Use a different service than the default one if you want to store documents in a different location.
+	public var serviceName: String { didSet { storage.storageService.serviceName = serviceName } }
 	/// The [access group](https://developer.apple.com/documentation/security/ksecattraccessgroup) that documents are stored in.
 	public var accessGroup: String? { didSet { storage.storageService.accessGroup = accessGroup } } 
 	/// Whether user authentication via biometrics or passcode is required before sending user data
@@ -55,10 +57,12 @@ public final class EudiWallet: ObservableObject {
 	public var urlSession: URLSession
 	public static var defaultClientId = "wallet-dev"
 	public static var defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
-	
+	public static var defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
+	public init(storageType: StorageType = .keyChain, serviceName: String = defaultServiceName, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
 		guard !serviceName.isEmpty, !serviceName.contains(":") else { throw WalletError(description: "Not allowed service name, remove : character") }
+		self.serviceName = serviceName
+		self.accessGroup = accessGroup
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
 		storage = StorageManager(storageService: storageService, modelFactory: modelFactory)
