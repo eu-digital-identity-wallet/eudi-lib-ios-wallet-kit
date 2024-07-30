@@ -1,4 +1,5 @@
 ## v0.6.0
+- Update eudi-lib-ios-openid4vci-swift to version 0.4.3
 
 ## v0.5.9
 - `EudiWallet` new property `public var serviceName: String`
