@@ -1,3 +1,11 @@
+## v0.6.0
+
+## v0.5.9
+- `EudiWallet` new property `public var serviceName: String`
+
+Use a different `serviceName` than the default one if you want to store documents in a different location.
+e.g. 	wallet.serviceName = "wallet_dev"
+
 ## v0.5.8
 - Update eudi-lib-ios-openid4vci-swift to version [0.4.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.2)
 - New `EudiWallet` property `public var openID4VciConfig: OpenId4VCIConfig?` to pass OpenID4VCI issuer parameters
