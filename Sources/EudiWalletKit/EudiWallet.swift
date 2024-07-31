@@ -129,23 +129,26 @@ public final class EudiWallet: ObservableObject {
 	func finalizeIssuing(id: String, data: IssuanceOutcome, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		var dataToSave: Data
 		var docTypeToSave: String
+		var displayName: String?
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		switch data {
-		case .issued(let data):
+		case .issued(let data, let dn):
 			dataToSave = data
+			displayName = dn
 			let dt = if format == .cbor { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType } else { docType }
 			guard let dt else { throw WalletError(description: "Unknown document type") }
 			docTypeToSave = dt
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docTypeToSave = docType ?? "DEFERRED"
+			displayName = deferredIssuanceModel.displayName
 		}
 		var newDocument: WalletStorage.Document
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : .issued
 		if !openId4VCIService.usedSecureEnclave {
-			newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date(), status: newDocStatus)
+			newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date(), displayName: displayName,  status: newDocStatus)
 		} else {
-			newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date(), status: newDocStatus)
+			newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: .secureEnclaveP256, privateKey: issueReq.keyData, createdAt: Date(), displayName: displayName, status: newDocStatus)
 		}
 		try issueReq.saveToStorage(storage.storageService, status: newDocStatus)
 		try endIssueDocument(newDocument)
@@ -233,7 +236,7 @@ public final class EudiWallet: ObservableObject {
 		try? storageService.deleteDocuments(status: .issued)
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
-			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil, status: .issued) }
+			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil, displayName: $0.docType == EuPidModel.euPidDocType ? "PID" : ($0.docType == IsoMdlModel.isoDocType ? "mDL" : $0.docType), status: .issued) }
 		do {
 			for docSample in docSamples {
 				try storageService.saveDocument(docSample, allowOverwrite: true)
