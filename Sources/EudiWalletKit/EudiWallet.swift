@@ -122,7 +122,7 @@ public final class EudiWallet: ObservableObject {
 		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", config: self.openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		openId4VCIService.usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
-		guard case .issued(_) = data else { return deferredDoc }
+		guard case .issued(_, _) = data else { return deferredDoc }
 		return try await finalizeIssuing(id: deferredDoc.id, data: data, docType: deferredDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 	}
 	
