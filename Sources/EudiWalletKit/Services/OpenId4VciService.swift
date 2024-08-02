@@ -84,7 +84,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 			Self.metadataCache[uriOffer] = offer
 			let credentialInfo = try getCredentialIdentifiers(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
-			return OfferedIssuanceModel(issuerName: offer.credentialIssuerIdentifier.url.absoluteString, docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
+			return OfferedIssuanceModel(issuerName: offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
 		case .failure(let error):
 			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
