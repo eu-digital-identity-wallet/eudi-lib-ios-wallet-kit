@@ -40,11 +40,9 @@ public class StorageManager: ObservableObject {
 	@Published public private(set) var pidModel: EuPidModel?
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
-	let logger: Logger
 	var modelFactory: (any MdocModelFactory.Type)?
 	
 	public init(storageService: any DataStorageService, modelFactory: (any MdocModelFactory.Type)? = nil) {
-		logger = Logger(label: "\(StorageManager.self)")
 		self.storageService = storageService
 		self.modelFactory = modelFactory
 	}

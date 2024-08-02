@@ -1,3 +1,22 @@
+## v0.6.2
+### Fix 
+- [Wrong text on success message after issuing a document](https://github.com/eu-digital-identity-wallet/eudi-doc-testing-application-internal/issues/7): `OfferedIssuanceModel`, `issuerName` now has only the domain
+### Logging mechanism
+- `EudiWallet` supports logging and retrieval of log contents
+
+	` // If not-nil, logging to the specified log file name will be configured
+	 public var logFileName: String? { didSet { try? initializeLogging() } }
+	 
+	// Helper method to return a file URL from a file name. 
+	public static func getLogFileURL(_ fileName: String) throws -> URL? 
+	 
+	// Reset a log file stored in the caches directory 
+	public func resetLogFile(_ fileName: String) throws  
+
+	// Get the contents of a log file stored in the caches directory
+	public func getLogFileContents(_ fileName: String) throws -> String	
+  `	
+
 ## v0.6.1
 - Set WalletStorage.Document displayName property when saving a document
 

@@ -23,6 +23,8 @@ import LocalAuthentication
 import CryptoKit
 import OpenID4VCI
 import SwiftCBOR
+import Logging
+import FileLogging
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -55,11 +57,13 @@ public final class EudiWallet: ObservableObject {
 	public var modelFactory: (any MdocModelFactory.Type)? { didSet { storage.modelFactory = modelFactory } } 
 	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
+	/// If not-nil, logging to the specified log file name will be configured
+	public var logFileName: String? { didSet { try? initializeLogging() } }
 	public static var defaultClientId = "wallet-dev"
 	public static var defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
 	public static var defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
-	public init(storageType: StorageType = .keyChain, serviceName: String = defaultServiceName, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
+	public init(storageType: StorageType = .keyChain, serviceName: String = defaultServiceName, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, logFileName: String? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
 		guard !serviceName.isEmpty, !serviceName.contains(":") else { throw WalletError(description: "Not allowed service name, remove : character") }
 		self.serviceName = serviceName
 		self.accessGroup = accessGroup
@@ -75,7 +79,52 @@ public final class EudiWallet: ObservableObject {
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
 		self.openID4VciConfig = openID4VciConfig
 		self.urlSession = urlSession ?? URLSession.shared
+		self.logFileName = logFileName
 		useSecureEnclave = SecureEnclave.isAvailable
+	}
+	
+	/// Helper method to return a file URL from a file name.
+	///
+	/// The file is created in the caches directory
+	/// - Parameter fileName: A file name
+	/// - Returns: Th URL of a log file stored in the caches directory
+	public static func getLogFileURL(_ fileName: String) throws -> URL? {
+		return try FileManager.getCachesDirectory().appendingPathComponent(fileName)
+	}
+	
+	/// Get the contents of a log file stored in the caches directory
+	/// - Parameter fileName: A file name
+	/// - Returns: The file contents
+	public func getLogFileContents(_ fileName: String) throws -> String {
+		let logFileURL = try Self.getLogFileURL(fileName)
+		guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(fileName)") }
+		return try String(contentsOf: logFileURL, encoding: .utf8)
+	}
+	
+	/// Reset a log file stored in the caches directory
+	/// - Parameter fileName: A file name
+	public func resetLogFile(_ fileName: String) throws {
+		let logFileURL = try Self.getLogFileURL(fileName)
+		guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(fileName)") }
+		try FileManager.default.removeItem(at: logFileURL)
+	}
+	
+	private func initializeLogging() throws {
+		LoggingSystem.bootstrap { [unowned self] label in
+			var handlers:[LogHandler] = []
+			if _isDebugAssertConfiguration() {
+				handlers.append(StreamLogHandler.standardOutput(label: label))
+			}
+			if let logFileName {
+				do {
+					let logFileURL = try Self.getLogFileURL(logFileName)
+					guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(logFileName)") }
+					let fileLogger = try FileLogging(to: logFileURL)
+					handlers.append(FileLogHandler(label: label, fileLogger: fileLogger))
+				} catch { fatalError("Logging setup failed: \(error.localizedDescription)") }
+			}
+			return MultiplexLogHandler(handlers)
+		}
 	}
 	
 	/// Prepare issuing

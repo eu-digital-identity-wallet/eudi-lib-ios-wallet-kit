@@ -30,5 +30,14 @@ extension Array where Element == Display {
 	}
 }
 
+extension FileManager {
+	public static func getCachesDirectory() throws -> URL {
+			let paths = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+			guard paths.count > 0 else {
+				throw WalletError(description: "No downloads directory found")
+			}
+			return paths[0]
+	}
+}
 
 
