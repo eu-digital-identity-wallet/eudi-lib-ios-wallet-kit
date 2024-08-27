@@ -22,6 +22,7 @@ struct DeferredIssuanceModel: Codable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
+	let displayName: String
 	let timeStamp: TimeInterval
 }
 
@@ -34,6 +35,11 @@ struct PendingIssuanceModel: Codable {
 	let identifier: CredentialConfigurationIdentifier
 	let docType: String
 	let metadataKey: String
+}
+
+enum IssuanceOutcome {
+	case issued(Data, String?)
+	case deferred(DeferredIssuanceModel)
 }
 
 extension IssuanceOutcome {

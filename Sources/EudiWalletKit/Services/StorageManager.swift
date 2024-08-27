@@ -41,11 +41,9 @@ public class StorageManager: ObservableObject {
 	@Published public private(set) var pidModel: EuPidModel?
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
-	let logger: Logger
 	var modelFactory: (any MdocModelFactory.Type)?
 	
 	public init(storageService: any DataStorageService, modelFactory: (any MdocModelFactory.Type)? = nil) {
-		logger = Logger(label: "\(StorageManager.self)")
 		self.storageService = storageService
 		self.modelFactory = modelFactory
 	}
@@ -89,14 +87,14 @@ public class StorageManager: ObservableObject {
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		guard let (iss, dpk) = doc.getCborData() else { return nil }
-		var retModel: (any MdocDecodable)? = self.modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType)
+		var retModel: (any MdocDecodable)? = self.modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName)
 		if retModel == nil {
 			let defModel: (any MdocDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1)
+			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, displayName: doc.displayName)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, displayName: doc.displayName)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, title: doc.docType.translated())
+			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName)
 		}
 		return retModel
 	}

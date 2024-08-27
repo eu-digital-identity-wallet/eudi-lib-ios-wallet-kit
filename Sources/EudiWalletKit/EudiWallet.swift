@@ -23,6 +23,9 @@ import LocalAuthentication
 import CryptoKit
 import OpenID4VCI
 import SwiftCBOR
+import Logging
+import FileLogging
+import UIKit
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -31,6 +34,8 @@ public final class EudiWallet: ObservableObject {
 	var storageService: any WalletStorage.DataStorageService { storage.storageService }
 	/// Instance of the wallet initialized with default parameters
 	public static private(set) var standard: EudiWallet = try! EudiWallet()
+	/// The [service](https://developer.apple.com/documentation/security/ksecattrservice) used to store documents. Use a different service than the default one if you want to store documents in a different location.
+	public var serviceName: String { didSet { storage.storageService.serviceName = serviceName } }
 	/// The [access group](https://developer.apple.com/documentation/security/ksecattraccessgroup) that documents are stored in.
 	public var accessGroup: String? { didSet { storage.storageService.accessGroup = accessGroup } } 
 	/// Whether user authentication via biometrics or passcode is required before sending user data
@@ -53,13 +58,18 @@ public final class EudiWallet: ObservableObject {
 	public var modelFactory: (any MdocModelFactory.Type)? { didSet { storage.modelFactory = modelFactory } } 
 	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
+	/// If not-nil, logging to the specified log file name will be configured
+	public var logFileName: String? { didSet { try? initializeLogging() } }
 	public static var defaultClientId = "wallet-dev"
 	public static var defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
 	public static var defaultOpenId4VCIConfig = OpenId4VCIConfig(clientId: defaultClientId, authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
 	
+	public static var defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
-	public init(storageType: StorageType = .keyChain, serviceName: String = "eudiw", accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
+	public init(storageType: StorageType = .keyChain, serviceName: String = defaultServiceName, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, logFileName: String? = nil, modelFactory: (any MdocModelFactory.Type)? = nil) throws {
 		guard !serviceName.isEmpty, !serviceName.contains(":") else { throw WalletError(description: "Not allowed service name, remove : character") }
+		self.serviceName = serviceName
+		self.accessGroup = accessGroup
 		let keyChainObj = KeyChainStorageService(serviceName: serviceName, accessGroup: accessGroup)
 		let storageService = switch storageType { case .keyChain:keyChainObj }
 		storage = StorageManager(storageService: storageService, modelFactory: modelFactory)
@@ -72,7 +82,52 @@ public final class EudiWallet: ObservableObject {
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
 		self.openID4VciConfig = openID4VciConfig
 		self.urlSession = urlSession ?? URLSession.shared
+		self.logFileName = logFileName
 		useSecureEnclave = SecureEnclave.isAvailable
+	}
+	
+	/// Helper method to return a file URL from a file name.
+	///
+	/// The file is created in the caches directory
+	/// - Parameter fileName: A file name
+	/// - Returns: Th URL of a log file stored in the caches directory
+	public static func getLogFileURL(_ fileName: String) throws -> URL? {
+		return try FileManager.getCachesDirectory().appendingPathComponent(fileName)
+	}
+	
+	/// Get the contents of a log file stored in the caches directory
+	/// - Parameter fileName: A file name
+	/// - Returns: The file contents
+	public func getLogFileContents(_ fileName: String) throws -> String {
+		let logFileURL = try Self.getLogFileURL(fileName)
+		guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(fileName)") }
+		return try String(contentsOf: logFileURL, encoding: .utf8)
+	}
+	
+	/// Reset a log file stored in the caches directory
+	/// - Parameter fileName: A file name
+	public func resetLogFile(_ fileName: String) throws {
+		let logFileURL = try Self.getLogFileURL(fileName)
+		guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(fileName)") }
+		try FileManager.default.removeItem(at: logFileURL)
+	}
+	
+	private func initializeLogging() throws {
+		LoggingSystem.bootstrap { [unowned self] label in
+			var handlers:[LogHandler] = []
+			if _isDebugAssertConfiguration() {
+				handlers.append(StreamLogHandler.standardOutput(label: label))
+			}
+			if let logFileName {
+				do {
+					let logFileURL = try Self.getLogFileURL(logFileName)
+					guard let logFileURL else { throw WalletError(description: "Cannot create URL for file name \(logFileName)") }
+					let fileLogger = try FileLogging(to: logFileURL)
+					handlers.append(FileLogHandler(label: label, fileLogger: fileLogger))
+				} catch { fatalError("Logging setup failed: \(error.localizedDescription)") }
+			}
+			return MultiplexLogHandler(handlers)
+		}
 	}
 	
 	/// Prepare issuing
@@ -119,7 +174,7 @@ public final class EudiWallet: ObservableObject {
 		let openId4VCIService = OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", config: self.openID4VciConfig ?? Self.defaultOpenId4VCIConfig, urlSession: urlSession)
 		openId4VCIService.usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
-		guard case .issued(_) = data else { return deferredDoc }
+		guard case .issued(_, _) = data else { return deferredDoc }
 		return try await finalizeIssuing(id: deferredDoc.id, data: data, docType: deferredDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 	}
 	
@@ -139,10 +194,12 @@ public final class EudiWallet: ObservableObject {
 	func finalizeIssuing(id: String, data: IssuanceOutcome, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		var dataToSave: Data
 		var docTypeToSave: String
+		var displayName: String?
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
 		switch data {
-		case .issued(let data):
+		case .issued(let data, let dn):
 			dataToSave = data
+			displayName = dn
 			let dt = if format == .cbor { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType } else { docType }
 			guard let dt else { throw WalletError(description: "Unknown document type") }
 			docTypeToSave = dt
@@ -242,7 +299,7 @@ public final class EudiWallet: ObservableObject {
 		try? storageService.deleteDocuments(status: .issued)
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
-			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil, status: .issued) }
+			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, privateKeyType: .x963EncodedP256, privateKey: $0.pkData, createdAt: Date.distantPast, modifiedAt: nil, displayName: $0.docType == EuPidModel.euPidDocType ? "PID" : ($0.docType == IsoMdlModel.isoDocType ? "mDL" : $0.docType), status: .issued) }
 		do {
 			for docSample in docSamples {
 				try storageService.saveDocument(docSample, allowOverwrite: true)
@@ -326,6 +383,7 @@ public final class EudiWallet: ObservableObject {
 	///   - isFallBack: true if fallback (ask for pin code)
 	///   - dismiss: action to dismiss current page
 	///   - action: action to perform after authentication
+	@MainActor
 	static func authorizedAction<T>(isFallBack: Bool = false, action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
 		guard !disabled else {
 			return try await action()
@@ -337,6 +395,10 @@ public final class EudiWallet: ObservableObject {
 			do {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success {
+					if !UIApplication.shared.connectedScenes.allSatisfy({ $0.activationState == .foregroundActive }) {
+					  // Delay the task by 1 second if not foreground
+						try await Task.sleep(nanoseconds: 1_000_000_000)
+					}
 					return try await action()
 				}
 				else { dismiss()}

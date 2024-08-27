@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Chronometer.git",
       "state" : {
-        "revision" : "b4808d59a175b1f764cc3d7e2e927e5476b10427",
-        "version" : "0.1.11"
+        "revision" : "d21b89e5cb5929b5175bdb3ad710a52cbf497eaa",
+        "version" : "0.1.12"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "7bd825a94d78955b7a176cd3ed1058b30d7f266b",
-        "version" : "0.2.9"
+        "revision" : "907e5dbdb58fcaf4916507a8fcfff7a79cbd0efd",
+        "version" : "0.3.0"
       }
     },
     {
@@ -32,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "ceeddd2a37f579212752bfb38e54efa87ec567e3",
-        "version" : "0.2.9"
+        "revision" : "380ebcf5e054adf651580faf7cd627052ef3de12",
+        "version" : "0.3.0"
       }
     },
     {
@@ -41,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "41a7ba66ff5d614c9ef7d50607ef0a9af7ebb577",
-        "version" : "0.2.1"
+        "revision" : "8b77e16221f169b5a5de7e81342411c15e46cf37",
+        "version" : "0.2.3"
       }
     },
     {
@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "c7fa372fff466f5fc3d923ab01b5e97f07a0e3b6",
-        "version" : "0.4.2"
+        "revision" : "5ecb1a0ab6301622f7fbef77d1feda3995b0dd79",
+        "version" : "0.4.3"
       }
     },
     {
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
       "state" : {
-        "revision" : "8ebf1f0cf0edb2854b7b098cd90c32e0da5c9c34",
-        "version" : "0.2.2"
+        "revision" : "2fbdcb70dca4d14383b06dc584d1346959fd26f6",
+        "version" : "0.2.4"
       }
     },
     {

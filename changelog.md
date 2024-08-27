@@ -1,3 +1,34 @@
+## v0.6.2
+### Fix 
+- [Wrong text on success message after issuing a document](https://github.com/eu-digital-identity-wallet/eudi-doc-testing-application-internal/issues/7): `OfferedIssuanceModel`, `issuerName` now has only the domain
+### Logging mechanism
+- `EudiWallet` supports logging and retrieval of log contents
+
+	` // If not-nil, logging to the specified log file name will be configured
+	 public var logFileName: String? { didSet { try? initializeLogging() } }
+	 
+	// Helper method to return a file URL from a file name. 
+	public static func getLogFileURL(_ fileName: String) throws -> URL? 
+	 
+	// Reset a log file stored in the caches directory 
+	public func resetLogFile(_ fileName: String) throws  
+
+	// Get the contents of a log file stored in the caches directory
+	public func getLogFileContents(_ fileName: String) throws -> String	
+  `	
+
+## v0.6.1
+- Set WalletStorage.Document displayName property when saving a document
+
+## v0.6.0
+- Update eudi-lib-ios-openid4vci-swift to version 0.4.3
+
+## v0.5.9
+- `EudiWallet` new property `public var serviceName: String`
+
+Use a different `serviceName` than the default one if you want to store documents in a different location.
+e.g. 	wallet.serviceName = "wallet_dev"
+
 ## v0.5.8
 - Update eudi-lib-ios-openid4vci-swift to version [0.4.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.2)
 - New `EudiWallet` property `public var openID4VciConfig: OpenId4VCIConfig?` to pass OpenID4VCI issuer parameters
