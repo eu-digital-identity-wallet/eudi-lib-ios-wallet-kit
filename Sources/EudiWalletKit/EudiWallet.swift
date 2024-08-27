@@ -25,6 +25,7 @@ import OpenID4VCI
 import SwiftCBOR
 import Logging
 import FileLogging
+import UIKit
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -369,6 +370,7 @@ public final class EudiWallet: ObservableObject {
 	///   - isFallBack: true if fallback (ask for pin code)
 	///   - dismiss: action to dismiss current page
 	///   - action: action to perform after authentication
+	@MainActor
 	static func authorizedAction<T>(isFallBack: Bool = false, action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
 		guard !disabled else {
 			return try await action()
@@ -380,8 +382,10 @@ public final class EudiWallet: ObservableObject {
 			do {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success {
-					// Delay the task by 1 second:
-					try await Task.sleep(nanoseconds: 1_000_000_000)
+					if !UIApplication.shared.connectedScenes.allSatisfy({ $0.activationState == .foregroundActive }) {
+					  // Delay the task by 1 second if not foreground
+						try await Task.sleep(nanoseconds: 1_000_000_000)
+					}
 					return try await action()
 				}
 				else { dismiss()}
