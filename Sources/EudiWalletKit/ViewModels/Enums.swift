@@ -17,12 +17,6 @@ limitations under the License.
 import Foundation
 import OpenID4VCI
 
-enum IssuanceOutcome {
-	case issued(Data)
-	case deferred(DeferredIssuanceModel)
-	case pending(PendingIssuanceModel)
-}
-
 enum AsWebOutcome {
 	case code(String)
 	case presentation_request(URL)

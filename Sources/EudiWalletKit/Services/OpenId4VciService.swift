@@ -113,7 +113,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		if case .presentation_request(let url) = authorizedOutcome {
 			let uuids = credentialInfo.map { _ in UUID().uuidString }
 			uuids.forEach { Self.metadataCache[$0] = offer }
-			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, docType: $1.docType, metadataKey: uuids[$0])) }
+			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, displayName: $1.displayName ?? "", metadataKey: uuids[$0])) }
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 		let data = await credentialInfo.asyncCompactMap {
@@ -139,7 +139,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		case .success(let metaData):
 			if let authorizationServer = metaData?.authorizationServers?.first, let metaData {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
-				let (credentialConfigurationIdentifier, _, _) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
+				let (credentialConfigurationIdentifier, _, displayName) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
@@ -147,15 +147,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				if case .presentation_request(let url) = authorizedOutcome {
 					let uuid = UUID().uuidString
 					Self.metadataCache[uuid] = offer
-					return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, docType: docType, metadataKey: uuid))
+					return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, displayName: displayName ?? "", metadataKey: uuid))
 				}
 				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
-				let (credentialConfigurationIdentifier, _, displayName) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
-				// Authorize with auth code flow
-				let issuer = try getIssuer(offer: offer)
-				let authorized = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: displayName, claimSet: claimSet)
 			} else {
 				throw WalletError(description: "Invalid authorization server")
@@ -279,7 +273,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 					if let result = response.credentialResponses.first {
 						switch result {
 						case .deferred(let transactionId):
-							//return try await deferredCredentialUseCase(issuer: issuer, authorized: noProofRequiredState, transactionId: transactionId)
 							let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 							return .deferred(deferredModel)
 						case .issued(_, let credential, _):
@@ -362,8 +355,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		logger.info("Starting issuing with identifer \(model.identifier.value)")
 		// let authResult = authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
 		let authorizedRequest = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [], authorizationCode: IssuanceAuthorization(authorizationCode: code), pkceVerifier: PKCEVerifier(codeVerifier: PKCEGenerator.codeVerifier() ?? "", codeVerifierMethod: CodeChallenge.sha256.rawValue))))
-		guard case .success(let authorized) = authorizedRequest else {	throw WalletError(description: "Pending issuance not authorized")}
-		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, claimSet: nil)
+		guard case .success(let authorized) = authorizedRequest else {throw WalletError(description: "Pending issuance not authorized")}
+		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, displayName: model.displayName, claimSet: nil)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return res
 	}

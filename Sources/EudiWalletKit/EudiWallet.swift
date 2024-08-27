@@ -211,7 +211,7 @@ public final class EudiWallet: ObservableObject {
 			docTypeToSave = docType ?? "PENDING"
 		}
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : (data.isPending ? .pending : .issued)
-		let newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: openId4VCIService.usedSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date(), status: newDocStatus)
+		let newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, privateKeyType: openId4VCIService.usedSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, privateKey: issueReq.keyData, createdAt: Date(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument); return newDocument }
 		try issueReq.saveToStorage(storage.storageService, status: newDocStatus)
 		try endIssueDocument(newDocument)

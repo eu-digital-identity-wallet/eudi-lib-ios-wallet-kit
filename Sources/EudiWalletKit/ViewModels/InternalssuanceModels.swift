@@ -33,13 +33,14 @@ struct PendingIssuanceModel: Codable {
 	}
 	let pendingReason: PendingReason
 	let identifier: CredentialConfigurationIdentifier
-	let docType: String
+	let displayName: String
 	let metadataKey: String
 }
 
 enum IssuanceOutcome {
 	case issued(Data, String?)
 	case deferred(DeferredIssuanceModel)
+	case pending(PendingIssuanceModel)
 }
 
 extension IssuanceOutcome {
