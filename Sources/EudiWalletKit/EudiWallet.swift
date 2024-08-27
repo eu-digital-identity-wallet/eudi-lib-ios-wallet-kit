@@ -380,6 +380,8 @@ public final class EudiWallet: ObservableObject {
 			do {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success {
+					// Delay the task by 1 second:
+					try await Task.sleep(nanoseconds: 1_000_000_000)
 					return try await action()
 				}
 				else { dismiss()}
