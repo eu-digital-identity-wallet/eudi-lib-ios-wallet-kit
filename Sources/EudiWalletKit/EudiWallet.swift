@@ -25,7 +25,7 @@ import OpenID4VCI
 import SwiftCBOR
 import Logging
 import FileLogging
-#if os(iOS)
+#if canImport(UIKit)
 import UIKit
 #endif
 
@@ -415,7 +415,7 @@ public final class EudiWallet: ObservableObject {
 		guard !disabled else {
 			return try await action()
 		}
-		#if os(iOS)
+		#if canImport(UIKit)
 			return try await action()
 		#else
 		let context = LAContext()
