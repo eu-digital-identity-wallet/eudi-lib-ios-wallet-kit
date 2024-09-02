@@ -24,8 +24,9 @@ import CryptoKit
 import OpenID4VCI
 import SwiftCBOR
 import Logging
-import FileLogging
+// ios specific imports
 #if canImport(UIKit)
+import FileLogging
 import UIKit
 #endif
 
@@ -120,6 +121,7 @@ public final class EudiWallet: ObservableObject {
 			if _isDebugAssertConfiguration() {
 				handlers.append(StreamLogHandler.standardOutput(label: label))
 			}
+			#if canImport(UIKit)
 			if let logFileName {
 				do {
 					let logFileURL = try Self.getLogFileURL(logFileName)
@@ -128,6 +130,7 @@ public final class EudiWallet: ObservableObject {
 					handlers.append(FileLogHandler(label: label, fileLogger: fileLogger))
 				} catch { fatalError("Logging setup failed: \(error.localizedDescription)") }
 			}
+			#endif
 			return MultiplexLogHandler(handlers)
 		}
 	}
