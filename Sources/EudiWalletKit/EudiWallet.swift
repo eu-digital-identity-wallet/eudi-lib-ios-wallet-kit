@@ -415,7 +415,7 @@ public final class EudiWallet: ObservableObject {
 		guard !disabled else {
 			return try await action()
 		}
-		#if canImport(UIKit)
+		#if !os(iOS)
 			return try await action()
 		#else
 		let context = LAContext()
