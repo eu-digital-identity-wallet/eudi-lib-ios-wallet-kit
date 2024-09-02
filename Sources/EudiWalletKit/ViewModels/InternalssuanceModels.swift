@@ -35,6 +35,8 @@ struct PendingIssuanceModel: Codable {
 	let identifier: CredentialConfigurationIdentifier
 	let displayName: String
 	let metadataKey: String
+	let pckeCodeVerifier: String
+	let pckeCodeVerifierMethod: String
 }
 
 enum IssuanceOutcome {

@@ -28,8 +28,6 @@ import SwiftCBOR
 public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
-	var privateKey: SecKey!
-	var publicKey: SecKey!
 	var bindingKey: BindingKey!
 	var usedSecureEnclave: Bool!
 	let logger: Logger
@@ -37,6 +35,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let alg = JWSAlgorithm(.ES256)
 	static var metadataCache = [String: CredentialOffer]()
 	var urlSession: URLSession
+	var parRequested: ParRequested?
 	
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
@@ -46,7 +45,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		self.config = config
 	}
 	
-	fileprivate func initSecurityKeys(_ useSecureEnclave: Bool) throws {
+	func initSecurityKeys(_ useSecureEnclave: Bool) throws {
+		var privateKey: SecKey
+		var publicKey: SecKey
 		usedSecureEnclave = useSecureEnclave && SecureEnclave.isAvailable
 		if !usedSecureEnclave {
 			let key = try P256.KeyAgreement.PrivateKey(x963Representation: issueReq.keyData)
@@ -56,7 +57,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 			privateKey = try seKey.toSecKey()
 		}
 		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
-		let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
+		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
 		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey, issuer: config.clientId)
 	}
 	
@@ -81,7 +82,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: urlSession), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession))).resolve(source: try .init(urlString: uriOffer))
 		switch result {
 		case .success(let offer):
-			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
+			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 			Self.metadataCache[uriOffer] = offer
 			let credentialInfo = try getCredentialIdentifiers(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, format: format)
 			return OfferedIssuanceModel(issuerName: offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
@@ -110,10 +111,11 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let issuer = try getIssuer(offer: offer)
 		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
-		if case .presentation_request(let url) = authorizedOutcome {
+		if case .presentation_request(let url) = authorizedOutcome, let parRequested {
+			logger.info("Dynamic issuance request with url: \(url)")
 			let uuids = credentialInfo.map { _ in UUID().uuidString }
 			uuids.forEach { Self.metadataCache[$0] = offer }
-			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, displayName: $1.displayName ?? "", metadataKey: uuids[$0])) }
+			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, displayName: $1.displayName ?? "", metadataKey: uuids[$0], pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod )) }
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 		let data = await credentialInfo.asyncCompactMap {
@@ -144,11 +146,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
 				let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-				if case .presentation_request(let url) = authorizedOutcome {
-					let uuid = UUID().uuidString
-					Self.metadataCache[uuid] = offer
-					return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, displayName: displayName ?? "", metadataKey: uuid))
-				}
 				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: displayName, claimSet: claimSet)
 			} else {
@@ -230,6 +227,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let parPlaced = try await issuer.pushAuthorizationCodeRequest(credentialOffer: offer)
 		
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
+			self.parRequested = parRequested
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
 			let authResult = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url)
 			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
@@ -275,7 +273,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						case .deferred(let transactionId):
 							let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 							return .deferred(deferredModel)
-						case .issued(_, let credential, _):
+						case .issued(let credential, _):
 							guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
 							return .issued(data, displayName)
 						}
@@ -310,7 +308,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 						//return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
 						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 						return .deferred(deferredModel)
-					case .issued(_, let credential, _):
+					case .issued(let credential, _):
 						guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
 						return .issued(data, displayName)
 					}
@@ -335,27 +333,15 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
-		guard case .presentation_request_url(let urlString) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)")}
+		guard case .presentation_request_url(let urlString) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
 		guard let webUrl else { throw WalletError(description: "Web URL not specified") }
-		/*
-		let wvr = try await withCheckedThrowingContinuation { @MainActor c in
-			let rr = URL(string: "https://dev.issuer.eudiw.dev/dynamic/redirect_wallet")!
-			let wvc = WebViewController(request: URLRequest(url: webUrl), redirectionURL: rr) { response in
-				c.resume(returning: response)
-			}
-			wvc.present()
-		}
-		
 		let asWeb = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: webUrl)
-		guard case .code(let code) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
-		 */
-		let code = webUrl.getQueryStringParameter("response_code")!
+		guard case .code(let authorizationCode) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
 		let issuer = try getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.identifier.value)")
-		// let authResult = authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-		let authorizedRequest = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [], authorizationCode: IssuanceAuthorization(authorizationCode: code), pkceVerifier: PKCEVerifier(codeVerifier: PKCEGenerator.codeVerifier() ?? "", codeVerifierMethod: CodeChallenge.sha256.rawValue))))
-		guard case .success(let authorized) = authorizedRequest else {throw WalletError(description: "Pending issuance not authorized")}
+		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
+		let authorized = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.identifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier))).get()
 		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, displayName: model.displayName, claimSet: nil)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return res
@@ -367,7 +353,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		switch deferredRequestResponse {
 		case .success(let response):
 			switch response {
-			case .issued(_, let credential):
+			case .issued(let credential):
 				guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
 				return .issued(data, displayName)
 			case .issuancePending(let transactionId):
@@ -389,20 +375,36 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	@MainActor
 	private func loginUserAndGetAuthCode(getAuthorizationCodeUrl: URL) async throws -> AsWebOutcome {
-		return try await withCheckedThrowingContinuation { c in
+		let lock = NSLock()
+		return try await withCheckedThrowingContinuation { continuation in
+			var nillableContinuation: CheckedContinuation<AsWebOutcome, Error>? = continuation
 			let authenticationSession = ASWebAuthenticationSession(url: getAuthorizationCodeUrl, callbackURLScheme: config.authFlowRedirectionURI.scheme!) { url, error in
-				if let error { c.resume(throwing: OpenId4VCIError.authRequestFailed(error)); return }
-				guard let url else { c.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl); return }
+				lock.lock()
+				defer { lock.unlock() }
+				if let error {
+					nillableContinuation?.resume(throwing: OpenId4VCIError.authRequestFailed(error))
+					nillableContinuation = nil
+					return
+				}
+				guard let url else {
+					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl)
+					nillableContinuation = nil
+					return
+				}
 				if let schemes = Bundle.main.getURLSchemas(), schemes.first(where: { url.absoluteString.hasPrefix($0 + "://") }) != nil {
 					// dynamic issuing case
-					c.resume(returning: .presentation_request(url))
+					self.logger.info("Dynamic issuance url: \(url)")
+					nillableContinuation?.resume(returning: .presentation_request(url))
+					nillableContinuation = nil
 				} else if let code = url.getQueryStringParameter("code") {
-					c.resume(returning: .code(code))
+					self.logger.info("Dynamic issuance url: \(url)")
+					nillableContinuation?.resume(returning: .code(code))
+					nillableContinuation = nil
 				} else {
-					c.resume(throwing: OpenId4VCIError.authorizeResponseNoCode)
+					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoCode)
+					nillableContinuation = nil
 				}
 			}
-			authenticationSession.prefersEphemeralWebBrowserSession = true
 			authenticationSession.presentationContextProvider = self
 			authenticationSession.start()
 		}

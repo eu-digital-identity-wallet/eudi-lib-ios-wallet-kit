@@ -50,7 +50,7 @@ public class StorageManager: ObservableObject {
 	
 	@MainActor
 	func refreshPublishedVars() {
-		hasData = mdocModels.count > 0
+		hasData = !mdocModels.isEmpty || !deferredDocuments.isEmpty
 		hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.count
 		mdlModel = getTypedDoc()
@@ -176,7 +176,8 @@ public class StorageManager: ObservableObject {
 		}
 	}
 	
-	/// Delete documenmts
+	/// Delete documents
+	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: DocumentStatus) async throws {
 		do {
 			try storageService.deleteDocuments(status: status)
