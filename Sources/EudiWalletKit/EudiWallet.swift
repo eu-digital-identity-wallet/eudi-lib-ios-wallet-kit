@@ -25,7 +25,9 @@ import OpenID4VCI
 import SwiftCBOR
 import Logging
 import FileLogging
+#if os(iOS)
 import UIKit
+#endif
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -413,6 +415,9 @@ public final class EudiWallet: ObservableObject {
 		guard !disabled else {
 			return try await action()
 		}
+		#if os(iOS)
+			return try await action()
+		#else
 		let context = LAContext()
 		var error: NSError?
 		let policy: LAPolicy = .deviceOwnerAuthentication
@@ -439,5 +444,6 @@ public final class EudiWallet: ObservableObject {
 			throw WalletError(description: error.localizedDescription)
 		}
 		return nil
+	#endif
 	}
 }
