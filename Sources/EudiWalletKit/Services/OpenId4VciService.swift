@@ -333,7 +333,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
-		guard case .presentation_request_url(let urlString) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
+		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
 		guard let webUrl else { throw WalletError(description: "Web URL not specified") }
 		let asWeb = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: webUrl)
 		guard case .code(let authorizationCode) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
