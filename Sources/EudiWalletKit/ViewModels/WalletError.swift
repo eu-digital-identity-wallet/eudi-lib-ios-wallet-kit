@@ -15,31 +15,22 @@
  */
 import Foundation
 /// Wallet error
-public struct WalletError: LocalizedError {
-	
-	var description: String
-	var code: Int
-	
-	public init(key: String, code: Int = 0) {
-		self.description = key.translated()
-		self.code = code
-	}
-	
-	public init(description: String, code: Int = 0, userInfo: [String: Any]? = nil) {
-		self.description = description
-		self.code = code
+public enum WalletError: LocalizedError {
+	case generic(String)
+
+	public init(description: String, userInfo: [String: Any]? = nil) {
+		self = .generic(description)
 		guard let userInfo else { return }
 		var strError: String?
 		if let key = userInfo["key"] as? String { strError = NSLocalizedString(key, comment: "") }
 		if let s = userInfo["%s"] as? String { strError = strError?.replacingOccurrences(of: "%s", with: NSLocalizedString(s, comment: "")) }
-		if let strError { self.description = strError }
+		if let strError { self = .generic(strError) }
 	}
 	
 	public var errorDescription: String? {
-		return description
+		switch self {
+		case .generic(let description): description
+		}
 	}
 	
-	public static func ==(lhs: Self, rhs: Self) -> Bool {
-		return lhs.description == rhs.description
-	}
 }

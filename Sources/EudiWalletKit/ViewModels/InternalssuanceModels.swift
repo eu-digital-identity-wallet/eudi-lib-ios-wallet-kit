@@ -26,13 +26,28 @@ struct DeferredIssuanceModel: Codable {
 	let timeStamp: TimeInterval
 }
 
+struct PendingIssuanceModel: Codable {
+	// pending reason
+	enum PendingReason: Codable {
+		case presentation_request_url(String)
+	}
+	let pendingReason: PendingReason
+	let identifier: CredentialConfigurationIdentifier
+	let displayName: String
+	let metadataKey: String
+	let pckeCodeVerifier: String
+	let pckeCodeVerifierMethod: String
+}
+
 enum IssuanceOutcome {
 	case issued(Data, String?)
 	case deferred(DeferredIssuanceModel)
+	case pending(PendingIssuanceModel)
 }
 
 extension IssuanceOutcome {
 	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
+	var isPending: Bool { switch self { case .pending(_): true; default: false } }
 }
 
 	

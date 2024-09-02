@@ -94,6 +94,7 @@ public class OpenId4VpService: PresentationService {
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
+					logger.info("Verifer requested items: \(items)")
 					if let ln = resolvedRequestData.legalName { result[UserRequestKeys.reader_legal_name.rawValue] = ln }
 					if let readerCertificateIssuer {
 						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated

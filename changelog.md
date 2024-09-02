@@ -1,3 +1,24 @@
+## v0.6.4
+- New wallet methods: 
+
+` public func loadAllDocuments() async throws -> [WalletStorage.Document]? `
+
+` public func deleteAllDocuments() async throws `
+
+` public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> WalletStorage.Document `
+
+- Dynamic issuance handling: 
+After calling issueDocumentsByOfferUrl the wallet application need to check if the issuance is pending:
+
+`if let urlString = newDocs.first?.authorizePresentationUrl { `
+
+`	// perform openid4vp presentation using the urlString `
+
+`	// on success call resumePendingIssuance using the url provided by the server `
+
+## v0.6.3
+- Fixed issuing error when wallet `userAuthenticationRequired` property is true
+
 ## v0.6.2
 ### Fix 
 - [Wrong text on success message after issuing a document](https://github.com/eu-digital-identity-wallet/eudi-doc-testing-application-internal/issues/7): `OfferedIssuanceModel`, `issuerName` now has only the domain

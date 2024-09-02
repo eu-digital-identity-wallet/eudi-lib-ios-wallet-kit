@@ -27,6 +27,7 @@ public class StorageManager: ObservableObject {
 	/// Array of document models loaded in the wallet
 	@Published public private(set) var mdocModels: [any MdocDecodable] = []
 	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
+	@Published public private(set) var pendingDocuments: [WalletStorage.Document] = []
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
 	@Published public private(set) var hasData: Bool = false
@@ -49,7 +50,7 @@ public class StorageManager: ObservableObject {
 	
 	@MainActor
 	func refreshPublishedVars() {
-		hasData = mdocModels.count > 0
+		hasData = !mdocModels.isEmpty || !deferredDocuments.isEmpty
 		hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.count
 		mdlModel = getTypedDoc()
@@ -63,6 +64,8 @@ public class StorageManager: ObservableObject {
 			mdocModels = docs.compactMap(toModel(doc:))
 		case .deferred:
 			deferredDocuments = docs
+		case .pending:
+			pendingDocuments = docs
 		}
 	}
 	
@@ -75,6 +78,9 @@ public class StorageManager: ObservableObject {
 			return mdoc
 		case .deferred:
 			deferredDocuments.append(doc)
+			return nil
+		case .pending:
+			pendingDocuments.append(doc)
 			return nil
 		}
 	}
@@ -170,7 +176,8 @@ public class StorageManager: ObservableObject {
 		}
 	}
 	
-	/// Delete documenmts
+	/// Delete documents
+	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: DocumentStatus) async throws {
 		do {
 			try storageService.deleteDocuments(status: status)
@@ -188,7 +195,7 @@ public class StorageManager: ObservableObject {
 	
 	@MainActor
 	func setError(_ error: Error) {
-		uiError = WalletError(description: error.localizedDescription, code: (error as NSError).code, userInfo: (error as NSError).userInfo)
+		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
 	
 }
