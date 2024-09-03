@@ -190,13 +190,16 @@ public final class EudiWallet: ObservableObject {
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@MainActor
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> WalletStorage.Document {
-		guard pendingDoc.status == .pending, let format = DataFormat(pendingDoc.docDataType) else { throw WalletError(description: "Invalid document status") }
-		let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil, displayName: nil, promptMessage: nil)
+		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
+		guard let pkt = pendingDoc.privateKeyType, let pk = pendingDoc.privateKey, let format = DataFormat(pendingDoc.docDataType) else { throw WalletError(description: "Invalid document") }
+		let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil, displayName: nil, promptMessage: nil)
 		openId4VCIService.usedSecureEnclave = pendingDoc.privateKeyType == .secureEnclaveP256
+		let issueReq = try IssueRequest(id: pendingDoc.id, docType: pendingDoc.docType, privateKeyType: pkt, keyData: pk)
 		try openId4VCIService.initSecurityKeys(openId4VCIService.usedSecureEnclave)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		guard case .issued(_, _) = outcome else { return pendingDoc }
-		return try await finalizeIssuing(id: id, data: outcome, docType: pendingDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		let res = try await finalizeIssuing(id: pendingDoc.id, data: outcome, docType: pendingDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		return res
 	}
 	
 	func finalizeIssuing(id: String, data: IssuanceOutcome, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
@@ -204,6 +207,7 @@ public final class EudiWallet: ObservableObject {
 		var docTypeToSave: String
 		var displayName: String?
 		guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
+		let pds = data.pendingOrDeferredStatus
 		switch data {
 		case .issued(let data, let dn):
 			dataToSave = data
@@ -226,9 +230,7 @@ public final class EudiWallet: ObservableObject {
 		try endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument)
 		await storage.refreshPublishedVars()
-		if !data.isDeferred, storage.deferredDocuments.first(where: { $0.id == id }) != nil {
-			try await storage.deleteDocument(id: id, status: .deferred)
-		}
+		if pds == nil { try await storage.removePendingOrDeferredDoc(id: id) }
 		return newDocument
 	}
 	

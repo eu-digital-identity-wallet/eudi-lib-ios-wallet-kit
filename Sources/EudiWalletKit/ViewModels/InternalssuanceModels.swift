@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 import OpenID4VCI
+import WalletStorage
 
 struct DeferredIssuanceModel: Codable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
@@ -48,6 +49,7 @@ enum IssuanceOutcome {
 extension IssuanceOutcome {
 	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
 	var isPending: Bool { switch self { case .pending(_): true; default: false } }
+	var pendingOrDeferredStatus: DocumentStatus? { switch self { case .deferred(_): .deferred; case .pending(_): .pending; default: nil } }
 }
 
 	

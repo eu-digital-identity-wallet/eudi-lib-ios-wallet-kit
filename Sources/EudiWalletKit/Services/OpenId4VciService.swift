@@ -146,6 +146,12 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
 				let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+				if case .presentation_request(let url) = authorizedOutcome, let parRequested {
+					logger.info("Dynamic issuance request with url: \(url)")
+					let uuid = UUID().uuidString
+					Self.metadataCache[uuid] = offer
+					return	.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, displayName: displayName ?? "", metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
+				}
 				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: displayName, claimSet: claimSet)
 			} else {
