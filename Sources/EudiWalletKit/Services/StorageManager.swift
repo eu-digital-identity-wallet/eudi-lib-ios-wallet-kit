@@ -84,6 +84,16 @@ public class StorageManager: ObservableObject {
 			return nil
 		}
 	}
+	
+	@MainActor
+	func removePendingOrDeferredDoc(id: String) async throws {
+		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
+			pendingDocuments.remove(at: index)
+		}
+		if deferredDocuments.firstIndex(where: { $0.id == id }) != nil {
+			try await deleteDocument(id: id, status: .deferred)
+		}
+	}
 
 	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		guard let (iss, dpk) = doc.getCborData() else { return nil }
