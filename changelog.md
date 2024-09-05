@@ -1,3 +1,13 @@
+## v0.6.6
+### Refactoring :
+ - `WalletStorage.Document` implements `DocumentProtocol` protocol
+ - `MdocDataModel18013.MdocDecodable` inherits `DocumentProtocol` protocol
+
+## v0.6.5
+### Fixes for dynamic issuance:
+ - Support dynamic issuance in scoped mode 
+ - Remove pending document after finalizing `resumePendingIssuance`
+
 ## v0.6.4
 - New wallet methods: 
 
