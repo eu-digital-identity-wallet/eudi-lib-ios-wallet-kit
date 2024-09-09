@@ -17,6 +17,7 @@ Created on 09/11/2023
 */
 import Foundation
 import OpenID4VCI
+import WalletStorage
 
 extension String {
 	public func translated() -> String {
@@ -30,5 +31,26 @@ extension Array where Element == Display {
 	}
 }
 
+extension Bundle {
+	func getURLSchemas() -> [String]? {
+		guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String:Any]], let schema = urlTypes.first, let urlSchemas = schema["CFBundleURLSchemes"] as? [String] else {return nil}
+		return urlSchemas
+	}
+}
 
+extension FileManager {
+	public static func getCachesDirectory() throws -> URL {
+			let paths = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+			guard paths.count > 0 else {
+				throw WalletError(description: "No downloads directory found")
+			}
+			return paths[0]
+	}
+}
 
+extension WalletStorage.Document {
+	public var authorizePresentationUrl: String? {
+		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
+		return urlString
+	}
+}
