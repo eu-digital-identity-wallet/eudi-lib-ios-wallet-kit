@@ -13,6 +13,7 @@ let package = Package(
             targets: ["EudiWalletKit"]),
     ],
     dependencies: [
+    .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"), 
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.3"),
 		.package(url: "https://github.com/crspybits/swift-log-file", from: "0.1.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.3.1"),
