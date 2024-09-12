@@ -309,6 +309,15 @@ public final class EudiWallet: ObservableObject {
 		return res
 	}
 
+	/// Load a document with a specific status from storage
+	///
+	/// Calls ``storage`` loadDocuments
+	/// - Returns: A ``WalletStorage.Document`` object
+	/// - Parameter status: Status of document to load
+	@discardableResult public func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? {
+		return try await storage.loadDocument(id: id, status: status)
+	}
+
 	/// Delete documents from storage
 	/// 
 	/// Calls ``storage`` deleteDocuments
