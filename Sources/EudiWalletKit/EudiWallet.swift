@@ -135,7 +135,7 @@ public final class EudiWallet: ObservableObject {
 		}
 	}
 	
-	/// Prepare issuing
+	/// Prepare issuing by creating an issue request (id, private key) and an OpenId4VCI service instance
 	/// - Parameters:
 	///   - docType: document type
 	///   - promptMessage: Prompt message for biometric authentication (optional)
@@ -187,6 +187,7 @@ public final class EudiWallet: ObservableObject {
 	///
 	/// The caller does not need to reload documents, storage manager collections are updated.
 	/// - Parameter pendingDoc: A temporary document with pending status
+	/// 
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@MainActor
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> WalletStorage.Document {
@@ -248,9 +249,9 @@ public final class EudiWallet: ObservableObject {
 	/// Issue documents by offer URI.
 	/// - Parameters:
 	///   - offerUri: url with offer
-	///   - docTypes: doc types to be issued
-	///   - txCodeValue: Transaction code given to user
-	///   - format: data format
+	///   - docTypes: offered doc models available to be issued
+	///   - txCodeValue: Transaction code given to user (if available)
+	///   - format: data format (defaults to cbor)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - useSecureEnclave: whether to use secure enclave (if supported)
 	///   - claimSet: claim set (optional)
@@ -309,8 +310,17 @@ public final class EudiWallet: ObservableObject {
 		return res
 	}
 
-	/// Delete documents from storage
-	/// 
+	/// Load a document with a specific status from storage
+	///
+	/// Calls ``storage`` loadDocuments
+	/// - Returns: A `WalletStorage.Document` object
+	/// - Parameter status: Status of document to load
+	@discardableResult public func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? {
+		return try await storage.loadDocument(id: id, status: status)
+	}
+
+	/// Delete documents with a specified status from storage
+	///
 	/// Calls ``storage`` deleteDocuments
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: WalletStorage.DocumentStatus) async throws  {
@@ -323,6 +333,19 @@ public final class EudiWallet: ObservableObject {
 			try await deleteDocuments(status: status)
 		}
 	}
+
+	/// Delete document by id
+
+	/// Deletes a document with the specified ID and status.
+	/// - Parameters:
+	///   - id: The unique identifier of the document to be deleted.
+	///   - status: The current status of the document.
+	///
+	/// - Throws: An error if the document could not be deleted.
+	public func deleteDocument(id: String, status: DocumentStatus) async throws {
+		try await storage.deleteDocument(id: id, status: status)
+	}
+	
 	/// Load sample data from json files
 	///
 	/// The mdoc data are stored in wallet storage as documents
@@ -393,10 +416,11 @@ public final class EudiWallet: ObservableObject {
 	
 	/// Begin attestation presentation to a verifier
 	/// - Parameters:
-	///   - service: A ``PresentationService`` instance
+	///   - service: An instance conforming to the ``PresentationService`` protocol that will
+	///    be used to handle the presentation.
 	///   - docType: DocType of documents to present (optional)
 	///   - dataFormat: Exchanged data ``Format`` type
-	/// - Returns: A presentation session instance,
+	/// - Returns: A `PresentationSession` instance,
 	public func beginPresentation(service: any PresentationService) -> PresentationSession {
 		PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
 	}
@@ -410,12 +434,21 @@ public final class EudiWallet: ObservableObject {
 		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
 	}
 	
-	/// Wrap an action with TouchID or FaceID authentication
-	/// - Parameters:
-	///   - isFallBack: true if fallback (ask for pin code)
-	///   - dismiss: action to dismiss current page
-	///   - action: action to perform after authentication
 	@MainActor
+	/// Executes an authorized action with optional fallback and dismissal handling. 
+	/// The action is performed after successful biometric authentication (TouchID or FaceID).
+	///
+	/// - Parameters:
+	///   - isFallBack: A Boolean value indicating whether the action is a fallback after failed biometric authentication
+	///  (ask for pin code). Default is `false`.
+	///   - action: An asynchronous closure that performs the action and returns a result of type `T`.
+	///   - disabled: A Boolean value indicating whether the action is disabled.
+	///   - dismiss: A closure that handles the dismissal of the action.
+	///   - localizedReason: A localized string providing the reason for the authorization request.
+	///
+	/// - Returns: An optional result of type `T` if the action is successful, otherwise `nil`.
+	///
+	/// - Throws: An error if the action fails.
 	static func authorizedAction<T>(isFallBack: Bool = false, action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
 		guard !disabled else {
 			return try await action()
