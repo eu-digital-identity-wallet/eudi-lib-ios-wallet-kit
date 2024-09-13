@@ -2,7 +2,7 @@
 
 ### Added methods:
 - `public func loadDocument(id:status:) async throws -> WalletStorage.Document?`
-- `public func deleteDocument(id:) async throws`
+- `public func deleteDocument(id:status:) async throws`
 
 ### Documentation
 - Updated README.md with new methods and explanations
