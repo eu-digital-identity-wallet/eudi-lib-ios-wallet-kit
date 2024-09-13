@@ -23,10 +23,17 @@ import CryptoKit
 
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject {
+	/// A static constant array containing known document types.
+	/// This array includes document types from `EuPidModel` and `IsoMdlModel`.
+	/// - Note: The document types included are `euPidDocType` and `isoDocType`.
 	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
-	/// Array of document models loaded in the wallet
+	/// A published property that holds an array of CBOR decoded models conforming to the `MdocDecodable` protocol.
+	/// - Note: The `@Published` property wrapper is used to allow SwiftUI views to automatically update when the value changes.
 	@Published public private(set) var mdocModels: [any MdocDecodable] = []
+	/// A published property that holds an array of deferred documents.
+	/// - Note: This property is used to store documents that are deferred for later processing.
 	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
+	/// A published property that holds an array of pending documents.
 	@Published public private(set) var pendingDocuments: [WalletStorage.Document] = []
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
@@ -35,10 +42,6 @@ public class StorageManager: ObservableObject {
 	@Published public private(set) var hasWellKnownData: Bool = false
 	/// Count of documents loaded in the wallet
 	@Published public private(set) var docCount: Int = 0
-	/// The first driver license model loaded in the wallet (deprecated)
-	@Published public private(set) var mdlModel: IsoMdlModel?
-	/// The first PID model loaded in the wallet (deprecated)
-	@Published public private(set) var pidModel: EuPidModel?
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
 	var modelFactory: (any MdocModelFactory.Type)?
@@ -53,19 +56,31 @@ public class StorageManager: ObservableObject {
 		hasData = !mdocModels.isEmpty || !deferredDocuments.isEmpty
 		hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.count
-		mdlModel = getTypedDoc()
-		pidModel = getTypedDoc()
 	}
 	
 	@MainActor
+	/// Refreshes the document models with the specified status.
+	/// 
+	/// - Parameters:
+	///   - docs: An array of `WalletStorage.Document` objects to be refreshed.
+	///   - docStatus: The status of the documents.
 	fileprivate func refreshDocModels(_ docs: [WalletStorage.Document], docStatus: WalletStorage.DocumentStatus) {
 		switch docStatus {
 		case .issued:
-			mdocModels = docs.compactMap(toModel(doc:))
+			mdocModels = docs.compactMap { Self.toMdocModel(doc:$0, modelFactory: modelFactory) }
 		case .deferred:
 			deferredDocuments = docs
 		case .pending:
 			pendingDocuments = docs
+		}
+	}
+
+	@MainActor
+	fileprivate func refreshDocModel(_ doc: WalletStorage.Document, docStatus: WalletStorage.DocumentStatus) {
+		if docStatus == .issued && mdocModels.first(where: { $0.id == doc.id}) == nil || 
+			docStatus == .deferred && deferredDocuments.first(where: { $0.id == doc.id}) == nil ||
+			docStatus == .pending && pendingDocuments.first(where: { $0.id == doc.id}) == nil {
+			_ = appendDocModel(doc)
 		}
 	}
 	
@@ -73,7 +88,7 @@ public class StorageManager: ObservableObject {
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		switch doc.status {
 		case .issued:
-			let mdoc: (any MdocDecodable)? = toModel(doc: doc)
+			let mdoc: (any MdocDecodable)? = Self.toMdocModel(doc: doc, modelFactory: modelFactory)
 			if let mdoc { mdocModels.append(mdoc) }
 			return mdoc
 		case .deferred:
@@ -95,9 +110,16 @@ public class StorageManager: ObservableObject {
 		}
 	}
 
-	func toModel(doc: WalletStorage.Document) -> (any MdocDecodable)? {
+	/// Converts a `WalletStorage.Document` to an `MdocDecodable` model using an optional `MdocModelFactory`.
+	///
+	/// - Parameters:
+	///   - doc: The `WalletStorage.Document` to be converted.
+	///   - modelFactory: An optional factory conforming to `MdocModelFactory` to create the model. Defaults to `nil`.
+	///
+	/// - Returns: An optional `MdocDecodable` model created from the given document.
+	public static func toMdocModel(doc: WalletStorage.Document, modelFactory: (any MdocModelFactory.Type)? = nil) -> (any MdocDecodable)? {
 		guard let (iss, dpk) = doc.getCborData() else { return nil }
-		var retModel: (any MdocDecodable)? = self.modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName, statusDescription: doc.statusDescription)
+		var retModel: (any MdocDecodable)? = modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName, statusDescription: doc.statusDescription)
 		if retModel == nil {
 			let defModel: (any MdocDecodable)? = switch doc.docType {
 			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, displayName: doc.displayName, statusDescription: doc.statusDescription)
@@ -128,6 +150,23 @@ public class StorageManager: ObservableObject {
 			throw error
 		}
 	}
+
+	/// Load a document from storage
+	///
+	/// - Returns: A ``WalletStorage.Document`` object
+	/// - Parameter id: Identifier of document to load
+	/// - Parameter status: Status of document to load
+	@discardableResult public func loadDocument(id: String, status: DocumentStatus) async throws -> WalletStorage.Document?  {
+		do {
+			guard let doc = try storageService.loadDocument(id: id, status: status) else { return nil }
+			await refreshDocModel(doc, docStatus: status)
+			await refreshPublishedVars()
+			return doc
+		} catch {
+			await setError(error)
+			throw error
+		}
+	}
 	
 	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
 		mdocModels.first(where: { type(of: $0) == of}) as? T
@@ -146,16 +185,17 @@ public class StorageManager: ObservableObject {
 	}
 	
 	/// Get document model by id
-	/// - Parameter id: The id of the document model to return
+	/// - Parameter id: The id of the document model to retrieve
 	/// - Returns: The ``MdocDecodable`` model
 	public func getDocumentModel(id: String) ->  (any MdocDecodable)? {
 		guard let i = mdocModels.map(\.id).firstIndex(of: id)  else { return nil }
 		return getDocumentModel(index: i)
 	}
 	
-	/// Get document model by docType
-	/// - Parameter docType: The docType of the document model to return
-	/// - Returns: The ``MdocDecodable`` model
+	/// Retrieves document models of a specified type.
+	///
+	/// - Parameter docType: A string representing the type of document to retrieve.
+	/// - Returns: An array of objects conforming to the `MdocDecodable` protocol.
 	public func getDocumentModels(docType: String) -> [any MdocDecodable] {
 		return (0..<mdocModels.count).compactMap { i in
 			guard mdocModels[i].docType == docType else { return nil }
@@ -164,7 +204,13 @@ public class StorageManager: ObservableObject {
 	}
 
 	/// Delete document by id
-	/// - Parameter id: Document id
+
+	/// Deletes a document with the specified ID and status.
+	/// - Parameters:
+	///   - id: The unique identifier of the document to be deleted.
+	///   - status: The current status of the document.
+	/// 
+	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
 		let index = switch status { case .issued: mdocModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
 		guard let index else { throw WalletError(description: "Document not found") }
@@ -172,9 +218,7 @@ public class StorageManager: ObservableObject {
 			try storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
 				await MainActor.run {
-					if mdocModels[index].docType == IsoMdlModel.isoDocType { mdlModel = nil }
-					if mdocModels[index].docType == EuPidModel.euPidDocType { pidModel = nil }
-					mdocModels.remove(at: index)
+					_ = mdocModels.remove(at: index)
 				}
 				await refreshPublishedVars()
 			} else if status == .deferred {
@@ -192,7 +236,7 @@ public class StorageManager: ObservableObject {
 		do {
 			try storageService.deleteDocuments(status: status)
 			if status == .issued {
-				await MainActor.run { mdocModels = []; mdlModel = nil; pidModel = nil }
+				await MainActor.run { mdocModels = []; }
 				await refreshPublishedVars()
 			} else if status == .deferred {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
