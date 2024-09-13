@@ -313,14 +313,14 @@ public final class EudiWallet: ObservableObject {
 	/// Load a document with a specific status from storage
 	///
 	/// Calls ``storage`` loadDocuments
-	/// - Returns: A ``WalletStorage.Document`` object
+	/// - Returns: A `WalletStorage.Document` object
 	/// - Parameter status: Status of document to load
 	@discardableResult public func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? {
 		return try await storage.loadDocument(id: id, status: status)
 	}
 
-	/// Delete documents from storage
-	/// 
+	/// Delete documents with a specified status from storage
+	///
 	/// Calls ``storage`` deleteDocuments
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: WalletStorage.DocumentStatus) async throws  {
@@ -333,6 +333,19 @@ public final class EudiWallet: ObservableObject {
 			try await deleteDocuments(status: status)
 		}
 	}
+
+	/// Delete document by id
+
+	/// Deletes a document with the specified ID and status.
+	/// - Parameters:
+	///   - id: The unique identifier of the document to be deleted.
+	///   - status: The current status of the document.
+	///
+	/// - Throws: An error if the document could not be deleted.
+	public func deleteDocument(id: String, status: DocumentStatus) async throws {
+		try await storage.deleteDocument(id: id, status: status)
+	}
+	
 	/// Load sample data from json files
 	///
 	/// The mdoc data are stored in wallet storage as documents

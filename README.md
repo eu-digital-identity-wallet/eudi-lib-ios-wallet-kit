@@ -113,25 +113,12 @@ wallet.openID4VciRedirectUri = configLogic.vciConfig.redirectUri
 wallet.loadAllDocuments()
 ```	
 
-## Storage Manager
-The read-only property ``storage`` is an instance of a [StorageManager](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/storagemanager) class.
-Currently the keychain implementation is used. It provides document management functionality using the iOS KeyChain.
 
-The storage model provides the following models for the supported well-known document types:
-
-|DocType|Model|
-|-------|-----|
-|eu.europa.ec.eudiw.pid.1|[EuPidModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/eupidmodel)|
-|org.iso.18013.5.1.mDL|[IsoMdlModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/isomdlmodel)|
-
-For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
-
-
-### Manage documents
+## Manage documents
 
 The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/eudiwallet) class provides a set of methods to work with documents.
 
-#### Loading documents
+### Loading documents
 
 The `loadDocuments` method returns documents with a specific status from storage.
 
@@ -148,13 +135,8 @@ To retrieve documents of all statuses use the `loadAllDocuments` method.
 ```swift
 let documents = try await wallet.loadAllDocuments()
 ```
-Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager\toMdocModel`` function to decode document raw CBOR data to strongly-typed models conforming to [MdocDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocdecodable) protocol. 
-The above functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``StorageManager\mdocModels`` property. The deferred and pending documents are available in the ``StorageManager\deferredDocuments`` and ``StorageManager\pendingDocuments`` properties respectively.
 
-
-#### Retrieving a document
-
-The `loadDocument(id:status:)` method returns a document with a given id and status.
+The `loadDocument(id:status:)` method returns a document with a given id and status. 
 
 The following example shows how to retrieve a document:
 
@@ -162,9 +144,27 @@ The following example shows how to retrieve a document:
 let document = try await wallet.loadDocument(id: documentId, status: .issued)
 ```
 
-#### Deleting a document
+### Storage manager
+The read-only property ``storage`` is an instance of a [StorageManager](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/storagemanager) class.
+Currently the keychain implementation is used. It provides document management functionality using the iOS KeyChain.
 
-The `EudiWallet.deleteDocument(id:)` method that deletes a document with the given id.
+The storage model provides the following models for the supported well-known document types:
+
+|DocType|Model|
+|-------|-----|
+|eu.europa.ec.eudiw.pid.1|[EuPidModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/eupidmodel)|
+|org.iso.18013.5.1.mDL|[IsoMdlModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/isomdlmodel)|
+
+Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager\toMdocModel`` function to decode document raw CBOR data to strongly-typed models conforming to [MdocDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocdecodable) protocol. 
+
+The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``mdocModels`` property. The deferred and pending documents are available in the ``StorageManager\deferredDocuments`` and ``StorageManager\pendingDocuments`` properties respectively.
+
+For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
+
+
+### Deleting a document
+
+The `deleteDocument(id:)` method that deletes a document with the given id.
 
 The following example shows how to delete a document:
 
@@ -174,7 +174,9 @@ try await wallet.deleteDocument(id: documentId)
 
 ## Issue document using OpenID4VCI
 
-The library provides the functionality to issue documents using OpenID4VCI. To issue a document
+The library provides the functionality to issue documents using OpenID4VCI. 
+
+To issue a document
 using this functionality, EudiWallet must be property initialized. 
 If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
@@ -182,7 +184,7 @@ After issuing a document, the document data and corresponding private key are st
 ### Issue document by docType
 When the document docType to be issued use the `issueDocument(docType:format:)` method.
 
-_Important Notes_:
+__Important Notes__:
 
 - Currently, only mso_mdoc format is supported
 - Currently, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
@@ -202,7 +204,7 @@ catch {
   // display error
 }
 ```
-#### Resolving Credential offer
+### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(uriOffer:)` method that resolves the credential offer URI.
 The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
@@ -223,12 +225,12 @@ The following example shows how to issue documents by offer URL:
  let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers, format: .cbor, txCodeValue: txCodeValue )
 ```
 
-#### Authorization code flow
+### Authorization code flow
 
 For the authorization code flow to work, the redirect URI must be specified specified by setting the the `openID4VciRedirectUri` property.
 The user is redirected in an authorization web view to the issuer's authorization endpoint. After the user authenticates and authorizes the request, the issuer redirects the user back to the application with an authorization code. The library exchanges the authorization code for an access token and issues the document.
 
-#### Pre-Authorization code flow
+### Pre-Authorization code flow
 
 When Issuer supports the pre-authorization code flow, the resolved offer will also contain the corresponding
 information. Specifically, the `txCodeSpec` field in the `OfferedIssuanceModel` object will contain:
@@ -242,7 +244,7 @@ From the user's perspective, the application must provide a way to input the tra
 After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
 
-#### Dynamic issuance
+### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
 After calling `issueDocument(docType:format:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.

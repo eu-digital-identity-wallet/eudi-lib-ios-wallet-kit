@@ -1,3 +1,13 @@
+## v0.6.7
+
+### Added methods:
+- `public func loadDocument(id:status:) async throws -> WalletStorage.Document?`
+- `public func deleteDocument(id:) async throws`
+
+### Documentation
+- Updated README.md with new methods and explanations
+- Added documentation using Swift-DocC (deployed [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/))
+
 ## v0.6.6
 ### Refactoring :
  - `WalletStorage.Document` implements `DocumentProtocol` protocol
