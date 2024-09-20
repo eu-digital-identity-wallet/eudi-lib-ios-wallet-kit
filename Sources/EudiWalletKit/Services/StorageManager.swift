@@ -137,7 +137,7 @@ public class StorageManager: ObservableObject {
 	/// - Returns: An array of ``WalletStorage.Document`` objects
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]?  {
 		do {
-			guard let docs = try storageService.loadDocuments(status: status) else { return nil }
+			guard let docs = try await storageService.loadDocuments(status: status) else { return nil }
 			refreshDocModels(docs, docStatus: status)
 			refreshPublishedVars()
 			return docs
@@ -154,7 +154,7 @@ public class StorageManager: ObservableObject {
 	/// - Parameter status: Status of document to load
 	@discardableResult public func loadDocument(id: String, status: DocumentStatus) async throws -> WalletStorage.Document?  {
 		do {
-			guard let doc = try storageService.loadDocument(id: id, status: status) else { return nil }
+			guard let doc = try await storageService.loadDocument(id: id, status: status) else { return nil }
 			refreshDocModel(doc, docStatus: status)
 			refreshPublishedVars()
 			return doc
@@ -211,14 +211,12 @@ public class StorageManager: ObservableObject {
 		let index = switch status { case .issued: mdocModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
 		guard let index else { throw WalletError(description: "Document not found") }
 		do {
-			try storageService.deleteDocument(id: id, status: status)
+			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
-				await MainActor.run {
-					_ = mdocModels.remove(at: index)
-				}
+				_ = mdocModels.remove(at: index)
 				refreshPublishedVars()
 			} else if status == .deferred {
-				await MainActor.run { _ = deferredDocuments.remove(at: index) }
+				_ = deferredDocuments.remove(at: index)
 			}
 		} catch {
 			setError(error)
@@ -230,12 +228,12 @@ public class StorageManager: ObservableObject {
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: DocumentStatus) async throws {
 		do {
-			try storageService.deleteDocuments(status: status)
+			try await storageService.deleteDocuments(status: status)
 			if status == .issued {
-				await MainActor.run { mdocModels = []; }
+				mdocModels = [];
 				refreshPublishedVars()
 			} else if status == .deferred {
-				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
+				deferredDocuments.removeAll(keepingCapacity:false) 
 			}
 		} catch {
 			setError(error)
