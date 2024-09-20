@@ -18,7 +18,7 @@ import Foundation
 import MdocDataModel18013
 
 /// View model used in SwiftUI for presentation request elements
-public struct DocElementsViewModel: Identifiable {
+public struct DocElementsViewModel: Identifiable, Sendable {
 	public var id: String { docId }
 	public var docId: String
 	public let docType: String
@@ -71,7 +71,7 @@ extension Array where Element == DocElementsViewModel {
 	}
 }
 
-public struct ElementViewModel: Identifiable {
+public struct ElementViewModel: Identifiable, Sendable {
 	public var id: String { "\(nameSpace)_\(elementIdentifier)" }
 	public let nameSpace: String
 	public let elementIdentifier: String

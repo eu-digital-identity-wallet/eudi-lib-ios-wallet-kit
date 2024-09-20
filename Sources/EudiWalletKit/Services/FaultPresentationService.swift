@@ -35,7 +35,7 @@ public class FaultPresentationService: PresentationService {
 		throw error
 	}
 	
-	public func receiveRequest() async throws -> [String : Any] {
+	public func receiveRequest() async throws -> UserRequestInfo {
 		throw error
 	}
 	

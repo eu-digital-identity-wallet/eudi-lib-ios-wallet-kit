@@ -21,7 +21,7 @@ import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
-import SiopOpenID4VP
+@preconcurrency import SiopOpenID4VP
 import JOSESwift
 import Logging
 import X509
@@ -71,7 +71,7 @@ public class OpenId4VpService: PresentationService {
 	///  Receive request from an openid4vp URL
 	///
 	/// - Returns: The requested items.
-	public func receiveRequest() async throws -> [String: Any] {
+	public func receiveRequest() async throws -> UserRequestInfo {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
@@ -93,13 +93,13 @@ public class OpenId4VpService: PresentationService {
 					self.presentationDefinition = vp.presentationDefinition
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
+					var result = UserRequestInfo(validItemsRequested: items)
 					logger.info("Verifer requested items: \(items)")
-					if let ln = resolvedRequestData.legalName { result[UserRequestKeys.reader_legal_name.rawValue] = ln }
+					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {
-						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated
-						result[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: readerCertificateIssuer)
-						result[UserRequestKeys.reader_certificate_validation_message.rawValue] = readerCertificateValidationMessage
+						result.readerAuthValidated = readerAuthValidated
+						result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
+						result.readerCertificateValidationMessage = readerCertificateValidationMessage
 					}
 					return result
 				default: throw PresentationSession.makeError(str: "SiopAuthentication request received, not supported yet.")

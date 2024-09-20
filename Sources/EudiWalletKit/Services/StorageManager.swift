@@ -22,6 +22,7 @@ import Logging
 import CryptoKit
 
 /// Storage manager. Provides services and view models
+@MainActor
 public class StorageManager: ObservableObject {
 	/// A static constant array containing known document types.
 	/// This array includes document types from `EuPidModel` and `IsoMdlModel`.
@@ -51,14 +52,12 @@ public class StorageManager: ObservableObject {
 		self.modelFactory = modelFactory
 	}
 	
-	@MainActor
 	func refreshPublishedVars() {
 		hasData = !mdocModels.isEmpty || !deferredDocuments.isEmpty
 		hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
 		docCount = mdocModels.count
 	}
 	
-	@MainActor
 	/// Refreshes the document models with the specified status.
 	/// 
 	/// - Parameters:
@@ -75,7 +74,6 @@ public class StorageManager: ObservableObject {
 		}
 	}
 
-	@MainActor
 	fileprivate func refreshDocModel(_ doc: WalletStorage.Document, docStatus: WalletStorage.DocumentStatus) {
 		if docStatus == .issued && mdocModels.first(where: { $0.id == doc.id}) == nil || 
 			docStatus == .deferred && deferredDocuments.first(where: { $0.id == doc.id}) == nil ||
@@ -84,7 +82,6 @@ public class StorageManager: ObservableObject {
 		}
 	}
 	
-	@MainActor
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) -> (any MdocDecodable)? {
 		switch doc.status {
 		case .issued:
@@ -100,7 +97,6 @@ public class StorageManager: ObservableObject {
 		}
 	}
 	
-	@MainActor
 	func removePendingOrDeferredDoc(id: String) async throws {
 		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
 			pendingDocuments.remove(at: index)
@@ -142,11 +138,11 @@ public class StorageManager: ObservableObject {
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]?  {
 		do {
 			guard let docs = try storageService.loadDocuments(status: status) else { return nil }
-			await refreshDocModels(docs, docStatus: status)
-			await refreshPublishedVars()
+			refreshDocModels(docs, docStatus: status)
+			refreshPublishedVars()
 			return docs
 		} catch {
-			await setError(error)
+			setError(error)
 			throw error
 		}
 	}
@@ -159,11 +155,11 @@ public class StorageManager: ObservableObject {
 	@discardableResult public func loadDocument(id: String, status: DocumentStatus) async throws -> WalletStorage.Document?  {
 		do {
 			guard let doc = try storageService.loadDocument(id: id, status: status) else { return nil }
-			await refreshDocModel(doc, docStatus: status)
-			await refreshPublishedVars()
+			refreshDocModel(doc, docStatus: status)
+			refreshPublishedVars()
 			return doc
 		} catch {
-			await setError(error)
+			setError(error)
 			throw error
 		}
 	}
@@ -220,12 +216,12 @@ public class StorageManager: ObservableObject {
 				await MainActor.run {
 					_ = mdocModels.remove(at: index)
 				}
-				await refreshPublishedVars()
+				refreshPublishedVars()
 			} else if status == .deferred {
 				await MainActor.run { _ = deferredDocuments.remove(at: index) }
 			}
 		} catch {
-			await setError(error)
+			setError(error)
 			throw error
 		}
 	}
@@ -237,17 +233,16 @@ public class StorageManager: ObservableObject {
 			try storageService.deleteDocuments(status: status)
 			if status == .issued {
 				await MainActor.run { mdocModels = []; }
-				await refreshPublishedVars()
+				refreshPublishedVars()
 			} else if status == .deferred {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
 			}
 		} catch {
-			await setError(error)
+			setError(error)
 			throw error
 		}
 	}
 	
-	@MainActor
 	func setError(_ error: Error) {
 		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
