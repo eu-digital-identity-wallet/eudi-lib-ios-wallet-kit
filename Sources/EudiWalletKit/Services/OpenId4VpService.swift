@@ -28,6 +28,7 @@ import X509
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
+@MainActor 
 public class OpenId4VpService: PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
