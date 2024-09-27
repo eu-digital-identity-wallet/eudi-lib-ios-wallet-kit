@@ -25,7 +25,7 @@ import LocalAuthentication
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 public class PresentationSession: ObservableObject {
 	public var presentationService: any PresentationService
-	/// Reader certificate issuer (only for BLE flow wih verifier using reader authentication)
+	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
 	/// Reader legal name (if provided)
 	@Published public var readerLegalName: String?
@@ -44,12 +44,12 @@ public class PresentationSession: ObservableObject {
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
-	// map of document id to doc types
-	public var docIdAndTypes: [String: String]
+	// map of document id to (doc type, display name) pairs
+	public var docIdAndTypes: [String: (String, String?)]
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	
-	public init(presentationService: any PresentationService, docIdAndTypes: [String: String], userAuthenticationRequired: Bool) {
+	public init(presentationService: any PresentationService, docIdAndTypes: [String: (String, String?)], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
 		self.docIdAndTypes = docIdAndTypes
 		self.userAuthenticationRequired = userAuthenticationRequired
@@ -65,10 +65,10 @@ public class PresentationSession: ObservableObject {
 		// show the items as checkboxes
 		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
 		disclosedDocuments = [DocElementsViewModel]()
-		for (docId, docType) in docIdAndTypes {
-			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, valid: true)
+		for (docId, (docType, displayName)) in docIdAndTypes {
+			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
 			if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
-				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, valid: false))
+				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
 			}
 			disclosedDocuments.append(contentsOf: tmp)
 		}
