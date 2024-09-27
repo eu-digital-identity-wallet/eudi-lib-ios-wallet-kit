@@ -1,3 +1,7 @@
+## v0.6.8
+- Updated OpenID4VCI to version 0.5.0
+- Updated OpenID4VP to version 0.4.0
+
 ## v0.6.7
 
 ### Added methods:
