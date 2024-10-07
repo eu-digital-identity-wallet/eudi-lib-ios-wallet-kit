@@ -22,6 +22,7 @@ public struct DocElementsViewModel: Identifiable, Sendable {
 	public var id: String { docId }
 	public var docId: String
 	public let docType: String
+	public let displayName: String?
 	public var isEnabled: Bool
 	public var elements: [ElementViewModel]
 }
@@ -47,10 +48,10 @@ extension DocElementsViewModel {
 }
 
 extension RequestItems {
-	func toDocElementViewModels(docId: String, docType: String, valid: Bool) -> [DocElementsViewModel] {
+	func toDocElementViewModels(docId: String, docType: String, displayName: String?, valid: Bool) -> [DocElementsViewModel] {
 		compactMap { dType,nsItems in
 			if dType != docType { nil }
-			else { DocElementsViewModel(docId: docId, docType: docType, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
+			else { DocElementsViewModel(docId: docId, docType: docType, displayName: displayName, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
 		}
 	}
 }
@@ -63,7 +64,7 @@ extension Array where Element == DocElementsViewModel {
 		for otherDE in other {
 			if let exist = first(where: { $0.docId == otherDE.docId})	{
 				let newElements = (exist.elements + otherDE.elements).sorted(by: { $0.isEnabled && $1.isDisabled })
-				res.append(DocElementsViewModel(docId: exist.docId, docType: exist.docType, isEnabled: exist.isEnabled, elements: newElements))
+				res.append(DocElementsViewModel(docId: exist.docId, docType: exist.docType, displayName: exist.displayName, isEnabled: exist.isEnabled, elements: newElements))
 			}
 			else { res.append(otherDE) }
 		}

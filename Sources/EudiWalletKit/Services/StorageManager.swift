@@ -127,8 +127,8 @@ public class StorageManager: ObservableObject {
 		return retModel
 	}
 	
-	public func getDocIdsToTypes() -> [String: String] {
-		Dictionary(uniqueKeysWithValues: mdocModels.map { m in (m.id, m.docType) })
+	public func getDocIdsToTypes() -> [String: (String, String?)] {
+		Dictionary(uniqueKeysWithValues: mdocModels.map { m in (m.id, (m.docType, m.displayName) ) })
 	}
 	
 	/// Load documents from storage
