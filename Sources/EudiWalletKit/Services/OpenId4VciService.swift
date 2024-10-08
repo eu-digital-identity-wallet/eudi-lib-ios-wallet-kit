@@ -235,14 +235,19 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
 			self.parRequested = parRequested
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
-			let authResult = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url)
-			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
-			switch authResult {
-			case .code(let authorizationCode):
-				return .authorized(try await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode))
-			case .presentation_request(let url):
-				return .presentation_request(url)
-			}
+            
+            //return authorizationCodeURL
+            return .presentation_request(parRequested.getAuthorizationCodeURL.url)
+            
+            //TODO: Review following code for removal when working on Ausweis sdk integration
+//			let authResult = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url)
+//			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
+//			switch authResult {
+//			case .code(let authorizationCode):
+//				return .authorized(try await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode))
+//			case .presentation_request(let url):
+//				return .presentation_request(url)
+//			}
 		} else if case let .failure(failure) = parPlaced {
 			throw WalletError(description: "Authorization error: \(failure.localizedDescription)")
 		}
