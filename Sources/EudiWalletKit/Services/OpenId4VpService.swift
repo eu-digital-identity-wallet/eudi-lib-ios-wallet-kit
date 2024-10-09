@@ -145,13 +145,17 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
+		guard let self else { return false }
 		let chainVerifier = X509CertificateChainVerifier()
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
-		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let cert = SecCertificateCreateWithData(nil, data as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](data)) else { return result }
-		Task { @MainActor in 
+		let b64certs = certificates; let data = b64certs.compactMap { Data(base64Encoded: $0) }
+		let certs = data.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+		guard certs.count > 0, certs.count == b64certs.count else { return result }
+		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](data.first!)) else { return result }
+		Task { @MainActor in
 			self.readerCertificateIssuer = x509.subject.description
-			let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
+			let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certs, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
 			self.readerAuthValidated = isValid
 			self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		}

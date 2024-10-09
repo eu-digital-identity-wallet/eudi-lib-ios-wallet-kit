@@ -66,8 +66,8 @@ public class PresentationSession: ObservableObject {
 		// show the items as checkboxes
 		disclosedDocuments = [DocElementsViewModel]()
 		for (docId, (docType, displayName)) in docIdAndTypes {
-			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-			if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
+			var tmp = request.validItemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
+			if let errorRequestItems = request.errorItemsRequested, errorRequestItems.count > 0 {
 				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
 			}
 			disclosedDocuments.append(contentsOf: tmp)
