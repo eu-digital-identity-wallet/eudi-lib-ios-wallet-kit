@@ -15,12 +15,12 @@ limitations under the License.
 */
 
 import Foundation
-import OpenID4VCI
+@preconcurrency import OpenID4VCI
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:useSecureEnclave:)``
-public struct OfferedIssuanceModel {
+public struct OfferedIssuanceModel: Sendable {
 	/// Issuer name (currently the URL)
 	public let issuerName: String
 	/// Document types included in the offer
@@ -32,7 +32,7 @@ public struct OfferedIssuanceModel {
 }
 
 /// Information about an offered document type
-public struct OfferedDocModel {
+public struct OfferedDocModel: Sendable {
 	/// Document type
 	public let docType: String
 	/// Display name for document type

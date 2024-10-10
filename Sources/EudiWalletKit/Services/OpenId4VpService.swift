@@ -21,13 +21,14 @@ import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
-import SiopOpenID4VP
+@preconcurrency import SiopOpenID4VP
 import JOSESwift
 import Logging
 import X509
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
+@MainActor 
 public class OpenId4VpService: PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
@@ -71,7 +72,7 @@ public class OpenId4VpService: PresentationService {
 	///  Receive request from an openid4vp URL
 	///
 	/// - Returns: The requested items.
-	public func receiveRequest() async throws -> [String: Any] {
+	public func receiveRequest() async throws -> UserRequestInfo {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
@@ -93,13 +94,13 @@ public class OpenId4VpService: PresentationService {
 					self.presentationDefinition = vp.presentationDefinition
 					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result: [String: Any] = [UserRequestKeys.valid_items_requested.rawValue: items]
+					var result = UserRequestInfo(validItemsRequested: items)
 					logger.info("Verifer requested items: \(items)")
-					if let ln = resolvedRequestData.legalName { result[UserRequestKeys.reader_legal_name.rawValue] = ln }
+					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {
-						result[UserRequestKeys.reader_auth_validated.rawValue] = readerAuthValidated
-						result[UserRequestKeys.reader_certificate_issuer.rawValue] = MdocHelpers.getCN(from: readerCertificateIssuer)
-						result[UserRequestKeys.reader_certificate_validation_message.rawValue] = readerCertificateValidationMessage
+						result.readerAuthValidated = readerAuthValidated
+						result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
+						result.readerCertificateValidationMessage = readerCertificateValidationMessage
 					}
 					return result
 				default: throw PresentationSession.makeError(str: "SiopAuthentication request received, not supported yet.")
@@ -144,14 +145,20 @@ public class OpenId4VpService: PresentationService {
 	}
 	
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
+		guard let self else { return false }
 		let chainVerifier = X509CertificateChainVerifier()
 		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
-		guard let self, let b64cert = certificates.first, let data = Data(base64Encoded: b64cert), let cert = SecCertificateCreateWithData(nil, data as CFData), let x509 = try? X509.Certificate(derEncoded: [UInt8](data)) else { return result }
-		self.readerCertificateIssuer = x509.subject.description
-		let (isValid, validationMessages, _) = SecurityHelpers.isMdocCertificateValid(secCert: cert, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
-		self.readerAuthValidated = isValid
-		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
+		let b64certs = certificates; let data = b64certs.compactMap { Data(base64Encoded: $0) }
+		let certs = data.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+		guard certs.count > 0, certs.count == b64certs.count else { return result }
+		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](data.first!)) else { return result }
+		Task { @MainActor in
+			self.readerCertificateIssuer = x509.subject.description
+			let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certs, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
+			self.readerAuthValidated = isValid
+			self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
+		}
 		return result
 	}
 	
