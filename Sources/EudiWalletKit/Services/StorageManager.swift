@@ -65,18 +65,18 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	///   - docs: An array of `WalletStorage.Document` objects to be refreshed.
 	///   - docStatus: The status of the documents.
 	private func refreshDocModels(_ docs: [WalletStorage.Document], docStatus: WalletStorage.DocumentStatus) async {
-		await MainActor.run {
-			switch docStatus {
-			case .issued:
-				mdocModels = docs.compactMap { Self.toMdocModel(doc:$0, modelFactory: modelFactory) }
-			case .deferred:
-				deferredDocuments = docs
-			case .pending:
-				pendingDocuments = docs
-			}
+		switch docStatus {
+		case .issued:
+			let models = docs.compactMap { Self.toMdocModel(doc:$0, modelFactory: modelFactory) }
+			await MainActor.run { mdocModels = models }
+		case .deferred:
+			await MainActor.run { deferredDocuments = docs }
+		case .pending:
+			await MainActor.run { pendingDocuments = docs }
 		}
 	}
 
+	@MainActor
 	private func refreshDocModel(_ doc: WalletStorage.Document, docStatus: WalletStorage.DocumentStatus) async {
 		if docStatus == .issued && mdocModels.first(where: { $0.id == doc.id}) == nil ||
 			docStatus == .deferred && deferredDocuments.first(where: { $0.id == doc.id}) == nil ||
@@ -86,22 +86,21 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 	
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) async -> (any MdocDecodable)? {
-		await MainActor.run {
-			switch doc.status {
-			case .issued:
-				let mdoc: (any MdocDecodable)? = Self.toMdocModel(doc: doc, modelFactory: modelFactory)
-				if let mdoc { mdocModels.append(mdoc) }
-				return mdoc
-			case .deferred:
-				deferredDocuments.append(doc)
-				return nil
-			case .pending:
-				pendingDocuments.append(doc)
-				return nil
-			}
+		switch doc.status {
+		case .issued:
+			let mdoc: (any MdocDecodable)? = Self.toMdocModel(doc: doc, modelFactory: modelFactory)
+			if let mdoc { await MainActor.run { mdocModels.append(mdoc) } }
+			return mdoc
+		case .deferred:
+			await MainActor.run { deferredDocuments.append(doc) }
+			return nil
+		case .pending:
+			await MainActor.run { pendingDocuments.append(doc) }
+			return nil
 		}
 	}
 	
+	@MainActor
 	func removePendingOrDeferredDoc(id: String) async throws {
 		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
 			pendingDocuments.remove(at: index)

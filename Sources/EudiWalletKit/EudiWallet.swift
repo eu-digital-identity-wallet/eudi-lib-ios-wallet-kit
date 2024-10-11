@@ -155,11 +155,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard openID4VciConfig?.clientId != nil else { throw WalletError(description: "clientId not defined")}
 		guard openID4VciConfig?.authFlowRedirectionURI != nil else { throw WalletError(description: "Auth flow Redirect URI not defined")}
 		let id: String = UUID().uuidString
-		let issueReq = try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
-		//let issueReq = try await Self.authorizedAction(action: {
-		//	return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
-		//}, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
-		// guard let issueReq else { throw LAError(.userCancel)}
+		let issueReq = try await Self.authorizedAction(action: {
+			return try await beginIssueDocument(id: id, privateKeyType: useSecureEnclave ? .secureEnclaveP256 : .x963EncodedP256, saveToStorage: false)
+		}, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
+		guard let issueReq else { throw LAError(.userCancel)}
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, config: openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		return (issueReq, openId4VCIService, id)
 	}
@@ -212,7 +211,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 	
 	func finalizeIssuing(id: String, data: IssuanceOutcome, docType: String?, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
-		await getStorage()
 		var dataToSave: Data
 		var docTypeToSave: String
 		var displayName: String?
@@ -283,7 +281,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - id: Document identifier
 	///   - issuer: Issuer function
 	public func beginIssueDocument(id: String, privateKeyType: PrivateKeyType = .secureEnclaveP256, saveToStorage: Bool = true, bDeferred: Bool = false) async throws -> IssueRequest {
-		await getStorage()
 		let request = try IssueRequest(id: id, privateKeyType: privateKeyType)
 		if saveToStorage { try await request.saveTo(storageService: storage.storageService, status: bDeferred ? .deferred : .issued) }
 		return request
@@ -292,7 +289,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// End issuing by saving the issuing document (and its private key) in storage
 	/// - Parameter issued: The issued document
 	public func endIssueDocument(_ issued: WalletStorage.Document) async throws {
-		await getStorage()
 		try await storage.storageService.saveDocument(issued, allowOverwrite: true)
 	}
 	
@@ -302,7 +298,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: An array of ``WalletStorage.Document`` objects
 	/// - Parameter status: Status of documents to load
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? {
-		await getStorage()
 		return try await storage.loadDocuments(status: status)
 	}
 	
@@ -327,7 +322,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: A `WalletStorage.Document` object
 	/// - Parameter status: Status of document to load
 	@discardableResult public func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? {
-		await getStorage()
 		return try await storage.loadDocument(id: id, status: status)
 	}
 
@@ -336,7 +330,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Calls ``storage`` deleteDocuments
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: WalletStorage.DocumentStatus) async throws  {
-		await getStorage()
 		return try await storage.deleteDocuments(status: status)
 	}
 	
@@ -356,7 +349,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
-		await getStorage()
 		try await storage.deleteDocument(id: id, status: status)
 	}
 	
@@ -365,7 +357,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// The mdoc data are stored in wallet storage as documents
 	/// - Parameter sampleDataFiles: Names of sample files provided in the app bundle
 	public func loadSampleData(sampleDataFiles: [String]? = nil) async throws {
-		await getStorage()
 		try? await storage.storageService.deleteDocuments(status: .issued)
 		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
@@ -387,7 +378,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A data dictionary that can be used to initialize a presentation service
 	public func prepareServiceDataParameters(docType: String? = nil, dataFormat: DataFormat = .cbor ) async throws -> [String: Any] {
-		await getStorage()
 		var parameters: [String: Any]
 		switch dataFormat {
 		case .cbor:
@@ -412,7 +402,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) async -> PresentationSession {
-		await getStorage()
 		do {
 			let parameters = try await prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
 			let docIdAndTypes = await storage.getDocIdsToTypes()
@@ -439,7 +428,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A `PresentationSession` instance,
 	public func beginPresentation(service: any PresentationService) async -> PresentationSession {
-		await getStorage()
 		return await PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
 	}
 	
@@ -480,7 +468,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success, let scene = await UIApplication.shared.connectedScenes.first {
 					let activateState = await scene.activationState
-					while activateState != .foregroundActive {
+					while activateState != .foregroundActive && activateState != .foregroundInactive {
 					  // Delay the task by 0.5 second if not foreground
 						try await Task.sleep(nanoseconds: 500_000_000)
 					}
