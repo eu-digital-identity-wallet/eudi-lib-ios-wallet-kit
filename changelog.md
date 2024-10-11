@@ -1,3 +1,9 @@
+## v0.7.2
+- Removed `@MainActor` annotation from class definitions
+
+## v0.7.1
+- Swift 6 migration
+
 ## v0.7.0
 - Updated OpenID4VCI to version 0.6.0
 

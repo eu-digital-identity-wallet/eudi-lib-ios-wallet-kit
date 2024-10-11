@@ -21,8 +21,8 @@ import MdocDataTransfer18013
 public typealias RequestItems = [String: [String: [String]]]
 
 /// Presentation service abstract protocol
-@MainActor
-public protocol PresentationService {
+
+public protocol PresentationService: Sendable {
 	/// Status of the data transfer
 	//var status: TransferStatus { get }
 	/// instance of a presentation ``FlowType``

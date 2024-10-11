@@ -28,8 +28,8 @@ import X509
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP – Draft 18 specification
-@MainActor 
-public class OpenId4VpService: PresentationService {
+
+public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	// map of document id to data
@@ -153,12 +153,10 @@ public class OpenId4VpService: PresentationService {
 		let certs = data.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
 		guard certs.count > 0, certs.count == b64certs.count else { return result }
 		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](data.first!)) else { return result }
-		Task { @MainActor in
-			self.readerCertificateIssuer = x509.subject.description
-			let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certs, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
-			self.readerAuthValidated = isValid
-			self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
-		}
+		self.readerCertificateIssuer = x509.subject.description
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certs, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
+		self.readerAuthValidated = isValid
+		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		return result
 	}
 	

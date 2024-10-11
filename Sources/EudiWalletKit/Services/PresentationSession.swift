@@ -23,8 +23,7 @@ import LocalAuthentication
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
-@MainActor
-public class PresentationSession: ObservableObject {
+public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
@@ -32,7 +31,7 @@ public class PresentationSession: ObservableObject {
 	@Published public var readerLegalName: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
-	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
+	/// Reader certificate issuer is valid
 	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
@@ -104,7 +103,7 @@ public class PresentationSession: ObservableObject {
 					status = .qrEngagementReady
 				}
 			}
-		} catch { setError(error) }
+		} catch { await setError(error) }
 	}
 	
 	@MainActor
@@ -122,10 +121,10 @@ public class PresentationSession: ObservableObject {
 	public func receiveRequest() async -> UserRequestInfo? {
 		do {
 			let request = try await presentationService.receiveRequest()
-			try decodeRequest(request)
+			try await decodeRequest(request)
 			return request
 		} catch {
-			setError(error)
+			await setError(error)
 			return nil
 		}
 	}
@@ -141,7 +140,7 @@ public class PresentationSession: ObservableObject {
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run {status = .responseSent }
-		} catch { setError(error) }
+		} catch { await setError(error) }
 	}
 	
 	

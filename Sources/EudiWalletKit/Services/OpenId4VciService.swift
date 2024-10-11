@@ -25,10 +25,9 @@ import Security
 import WalletStorage
 import SwiftCBOR
 
-extension CredentialIssuerSource: @unchecked Sendable {}
+extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
 
-@MainActor
-public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
+public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var bindingKey: BindingKey!
@@ -41,6 +40,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	var parRequested: ParRequested?
 	
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
+		usedSecureEnclave = issueRequest.privateKeyType == .secureEnclaveP256 && SecureEnclave.isAvailable
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
@@ -335,6 +335,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
+		usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
 		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp)

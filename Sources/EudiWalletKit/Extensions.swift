@@ -54,3 +54,5 @@ extension WalletStorage.Document {
 		return urlString
 	}
 }
+
+extension ClaimSet: @retroactive @unchecked Sendable {}
