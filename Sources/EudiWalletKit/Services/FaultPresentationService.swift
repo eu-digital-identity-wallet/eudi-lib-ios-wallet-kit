@@ -18,7 +18,7 @@ import Foundation
 import MdocDataTransfer18013
 
 /// Fault presentation service. Used to communicate error state to the user
-public class FaultPresentationService: PresentationService {
+public final class FaultPresentationService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .error
 	public var flow: FlowType = .other
 	var error: Error
