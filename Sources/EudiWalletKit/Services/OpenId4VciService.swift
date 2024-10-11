@@ -25,7 +25,7 @@ import Security
 import WalletStorage
 import SwiftCBOR
 
-extension CredentialIssuerSource: @unchecked Sendable {}
+extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
 
 public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest

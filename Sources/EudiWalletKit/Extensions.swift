@@ -55,4 +55,4 @@ extension WalletStorage.Document {
 	}
 }
 
-extension ClaimSet: @unchecked Sendable {}
+extension ClaimSet: @retroactive @unchecked Sendable {}

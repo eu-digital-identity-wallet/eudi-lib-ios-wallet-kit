@@ -367,7 +367,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			}
 			try await storage.loadDocuments(status: .issued)
 		} catch {
-			await storage.setError(error)
+			storage.setError(error)
 			throw WalletError(description: error.localizedDescription)
 		}
 	}
@@ -404,7 +404,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public func beginPresentation(flow: FlowType, docType: String? = nil, dataFormat: DataFormat = .cbor) async -> PresentationSession {
 		do {
 			let parameters = try await prepareServiceDataParameters(docType: docType, dataFormat: dataFormat)
-			let docIdAndTypes = await storage.getDocIdsToTypes()
+			let docIdAndTypes = storage.getDocIdsToTypes()
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
@@ -428,7 +428,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - dataFormat: Exchanged data ``Format`` type
 	/// - Returns: A `PresentationSession` instance,
 	public func beginPresentation(service: any PresentationService) async -> PresentationSession {
-		return await PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
+		return PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
 	}
 	
 	/// Perform an action after user authorization via TouchID/FaceID/Passcode
