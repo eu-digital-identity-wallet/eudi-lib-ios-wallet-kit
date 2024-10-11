@@ -76,7 +76,6 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	@MainActor
 	private func refreshDocModel(_ doc: WalletStorage.Document, docStatus: WalletStorage.DocumentStatus) async {
 		if docStatus == .issued && mdocModels.first(where: { $0.id == doc.id}) == nil ||
 			docStatus == .deferred && deferredDocuments.first(where: { $0.id == doc.id}) == nil ||
@@ -100,10 +99,9 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 	}
 	
-	@MainActor
 	func removePendingOrDeferredDoc(id: String) async throws {
 		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
-			pendingDocuments.remove(at: index)
+			_ = await MainActor.run { pendingDocuments.remove(at: index) }
 		}
 		if deferredDocuments.firstIndex(where: { $0.id == id }) != nil {
 			try await deleteDocument(id: id, status: .deferred)
@@ -217,10 +215,10 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		do {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
-				_ = mdocModels.remove(at: index)
+				_ = await MainActor.run { mdocModels.remove(at: index) }
 				await refreshPublishedVars()
 			} else if status == .deferred {
-				_ = deferredDocuments.remove(at: index)
+				_ = await MainActor.run { deferredDocuments.remove(at: index) }
 			}
 		} catch {
 			setError(error)
@@ -234,10 +232,10 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		do {
 			try await storageService.deleteDocuments(status: status)
 			if status == .issued {
-				mdocModels = [];
+				await MainActor.run { mdocModels = [] }
 				await refreshPublishedVars()
 			} else if status == .deferred {
-				deferredDocuments.removeAll(keepingCapacity:false) 
+				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
 			}
 		} catch {
 			setError(error)
