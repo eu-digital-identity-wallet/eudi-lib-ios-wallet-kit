@@ -15,7 +15,7 @@
  */
 
 import Foundation
-import OpenID4VCI
+@preconcurrency import OpenID4VCI
 import JOSESwift
 import MdocDataModel18013
 import AuthenticationServices
@@ -25,7 +25,9 @@ import Security
 import WalletStorage
 import SwiftCBOR
 
-public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
+extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
+
+public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var bindingKey: BindingKey!
@@ -38,6 +40,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	var parRequested: ParRequested?
 	
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
+		usedSecureEnclave = issueRequest.privateKeyType == .secureEnclaveP256 && SecureEnclave.isAvailable
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
@@ -114,20 +117,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		if case .presentation_request(let url) = authorizedOutcome, let parRequested {
 			logger.info("Dynamic issuance request with url: \(url)")
 			let uuids = credentialInfo.map { _ in UUID().uuidString }
-			uuids.forEach { Self.metadataCache[$0] = offer }
+			for uid in uuids { Self.metadataCache[uid] = offer }
 			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, displayName: $1.displayName ?? "", metadataKey: uuids[$0], pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod )) }
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-		let data = await credentialInfo.asyncCompactMap {
+		var data = [IssuanceOutcome]()
+		for ci in credentialInfo {
 			do {
-				logger.info("Starting issuing with identifer \($0.identifier.value), scope \($0.scope), displayName: \($0.displayName ?? "-")")
-				let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: $0.identifier, displayName: $0.displayName, claimSet: claimSet)
+				let id = ci.identifier.value; let sc = ci.scope; let dn = ci.displayName ?? ""
+				logger.info("Starting issuing with identifer \(id), scope \(sc), displayName: \(dn)")
+				let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: ci.identifier, displayName: ci.displayName, claimSet: claimSet)
 				// logger.info("Credential str:\n\(str)")
-				return res
+				data.append(res)
 			} catch {
-				logger.error("Failed to issue document with scope \($0.scope)")
+				// logger.error("Failed to issue document with scope \(ci.scope)")
 				logger.info("Exception: \(error)")
-				return nil
 			}
 		}
 		Self.metadataCache.removeValue(forKey: offerUri)
@@ -255,7 +259,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		case .success(let request):
 			let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
 			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
-				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
+				let at = token.accessToken;	logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 				return authorized
 			}
 			throw WalletError(description: "Failed to get access token")
@@ -268,7 +272,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		switch noProofRequiredState {
 		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
-			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
+			let responseEncryptionSpecProvider =  { @Sendable in Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 			switch requestOutcome {
 			case .success(let request):
@@ -302,7 +306,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
-		let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
+		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
 		let requestOutcome = try await issuer.requestSingle(proofRequest: authorized, bindingKey: bindingKey, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
@@ -331,6 +335,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
 	
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
+		usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
 		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp)

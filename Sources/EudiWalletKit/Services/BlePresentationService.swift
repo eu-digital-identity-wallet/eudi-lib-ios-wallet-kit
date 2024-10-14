@@ -21,15 +21,16 @@ import MdocDataTransfer18013
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
 /// Implementation is based on the ISO/IEC 18013-5 specification
-public class BlePresentationService : PresentationService {
+
+public final class BlePresentationService: @unchecked Sendable, PresentationService {
 	var bleServerTransfer: MdocGattServer
 	public var status: TransferStatus = .initializing
 	var continuationQrCode: CheckedContinuation<String, Error>?
-	var continuationRequest: CheckedContinuation<[String: Any], Error>?
+	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
 	var continuationResponse: CheckedContinuation<Void, Error>?
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	var deviceEngagement: String?
-	var request: [String: Any]?
+	var request: UserRequestInfo?
 	public var flow: FlowType { .ble }
 
 	public init(parameters: [String: Any]) throws {
@@ -51,7 +52,7 @@ public class BlePresentationService : PresentationService {
 	///  Receive request via BLE
 	/// 
 	/// - Returns: The requested items. 
-	public func receiveRequest() async throws -> [String: Any] {
+	public func receiveRequest() async throws -> UserRequestInfo {
 		return try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
@@ -62,7 +63,7 @@ public class BlePresentationService : PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)? ) async throws  {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws  {
 		return try await withCheckedThrowingContinuation { c in
 			continuationResponse = c
 			handleSelected?(userAccepted, itemsToSend)
@@ -102,7 +103,7 @@ extension BlePresentationService: MdocOfflineDelegate {
 	/// - Parameters:
 	///   - request: Request items keyed by §UserRequestKeys§
 	///   - handleSelected: Callback function to call after user selection of items to send
-	public func didReceiveRequest(_ request: [String : Any], handleSelected: @escaping (Bool, MdocDataTransfer18013.RequestItems?) -> Void) {
+	public func didReceiveRequest(_ request: UserRequestInfo, handleSelected: @escaping (Bool, MdocDataTransfer18013.RequestItems?) -> Void) {
 		self.handleSelected = handleSelected
 		self.request = request
 		continuationRequest?.resume(returning: request)
