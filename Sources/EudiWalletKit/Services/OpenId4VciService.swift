@@ -143,7 +143,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
-			if let authorizationServer = metaData?.authorizationServers?.first, let metaData {
+			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _, displayName) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())

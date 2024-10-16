@@ -1,3 +1,9 @@
+## v0.7.4
+- Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
+
+## v0.7.3
+- Bug fix
+
 ## v0.7.2
 - Removed `@MainActor` annotation from class definitions
 
