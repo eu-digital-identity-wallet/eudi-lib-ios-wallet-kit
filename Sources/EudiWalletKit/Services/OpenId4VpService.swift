@@ -82,7 +82,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				self.resolvedRequestData = resolvedRequestData
 				switch resolvedRequestData {
 				case let .vpToken(vp):
-					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.ECCurveType(crvName: crv)  {
+					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv)  {
 						logger.info("Found jwks public key with curve \(crv)")
 						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 					}
