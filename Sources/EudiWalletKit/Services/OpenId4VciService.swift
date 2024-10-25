@@ -34,6 +34,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	let config: OpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
 	static var metadataCache = [String: CredentialOffer]()
+    //TODO: remove following, use it in better way
+    static var parReqCache: UnauthorizedRequest?
 	var urlSession: URLSession
 	var parRequested: ParRequested?
     var issuer: Issuer? = nil
@@ -246,6 +248,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let parPlaced = try await issuer.pushAuthorizationCodeRequest(credentialOffer: offer)
 		
 		if case let .success(request) = parPlaced, case let .par(parRequested) = request {
+            OpenId4VCIService.parReqCache = request
 			self.parRequested = parRequested
 			logger.info("--> [AUTHORIZATION] Placed PAR. Get authorization code URL is: \(parRequested.getAuthorizationCodeURL)")
             
@@ -445,7 +448,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
     
     public func getAccessToken(dpopNonce: String, code: String, state: String, location: String) async {
-        
+        do {
+            if let key = OpenId4VCIService.metadataCache.keys.first,
+                let credential = OpenId4VCIService.metadataCache[key],
+                let unauthorizedRequest = OpenId4VCIService.parReqCache {
+                let issuer1 = try getIssuer(offer: credential)
+                
+//                let req = UnauthorizedRequest.par(<#T##ParRequested#>)
+                let authorizedRequest = await issuer1.requestAccessToken (
+                    authorizationCode: unauthorizedRequest
+                )
+                print(authorizedRequest)
+            }
+        } catch {
+            
+        }
       //  guard let offerTemp = OpenId4VCIService.metadataCache[offerUri] else { return }
         
     //    guard let offer else { return }
@@ -455,9 +472,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
         //await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode)
         guard let parRequested else { return }
         
-        let authorizedRequest = await issuer.requestAccessToken (
-            authorizationCode: UnauthorizedRequest.par(parRequested)
-        )
+        
         
         
         }
