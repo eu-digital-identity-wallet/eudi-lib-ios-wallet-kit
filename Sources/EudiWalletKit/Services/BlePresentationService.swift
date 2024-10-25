@@ -45,7 +45,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public func startQrEngagement() async throws -> String? {
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
-			self.bleServerTransfer.performDeviceEngagement()
+			self.bleServerTransfer.performDeviceEngagement(secureArea: SecureAreaRegistry.shared.defaultSecurityArea!)
 		}
 	}
 	

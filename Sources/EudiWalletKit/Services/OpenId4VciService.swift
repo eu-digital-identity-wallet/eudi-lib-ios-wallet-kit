@@ -31,7 +31,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var bindingKey: BindingKey!
-	var usedSecureEnclave: Bool!
 	let logger: Logger
 	let config: OpenId4VCIConfig
 	let alg = JWSAlgorithm(.ES256)
@@ -40,7 +39,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	var parRequested: ParRequested?
 	
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
-		usedSecureEnclave = issueRequest.privateKeyType == .secureEnclaveP256 && SecureEnclave.isAvailable
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
@@ -48,18 +46,9 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		self.config = config
 	}
 	
-	func initSecurityKeys(_ useSecureEnclave: Bool) throws {
-		var privateKey: SecKey
-		var publicKey: SecKey
-		usedSecureEnclave = useSecureEnclave && SecureEnclave.isAvailable
-		if !usedSecureEnclave {
-			let key = try P256.KeyAgreement.PrivateKey(x963Representation: issueReq.keyData)
-			privateKey = try key.toSecKey()
-		} else {
-			let seKey = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: issueReq.keyData)
-			privateKey = try seKey.toSecKey()
-		}
-		publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
+	func initSecurityKeys() throws {
+		let privateKey: SecKey = try issueReq.createKey()
+		let publicKey: SecKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
 		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey, issuer: config.clientId)
 	}
@@ -68,10 +57,9 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	/// - Parameters:
 	///   - docType: the docType of the document to be issued
 	///   - format: format of the exchanged data
-	///   - useSecureEnclave: use secure enclave to protect the private key
 	/// - Returns: The data of the document
-	func issueDocument(docType: String, format: DataFormat, promptMessage: String? = nil, useSecureEnclave: Bool = true) async throws -> IssuanceOutcome {
-		try initSecurityKeys(useSecureEnclave)
+	func issueDocument(docType: String, format: DataFormat, promptMessage: String? = nil) async throws -> IssuanceOutcome {
+		try initSecurityKeys()
 		let res = try await issueByDocType(docType, format: format, promptMessage: promptMessage)
 		return res
 	}
@@ -102,12 +90,12 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: urlSession), config: config)
 	}
 	
-	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [IssuanceOutcome] {
+	func issueDocumentByOfferUrl(offerUri: String, docTypeModel: OfferedDocModel, txCodeValue: String?, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome? {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
-		try initSecurityKeys(useSecureEnclave)
+		try initSecurityKeys()
+		defer { Self.metadataCache.removeValue(forKey: offerUri) }
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
-		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
-		}
+		guard let credentialInfo = try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: docTypeModel.docType, format: format) else { return nil }
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
@@ -116,26 +104,22 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
 		if case .presentation_request(let url) = authorizedOutcome, let parRequested {
 			logger.info("Dynamic issuance request with url: \(url)")
-			let uuids = credentialInfo.map { _ in UUID().uuidString }
-			for uid in uuids { Self.metadataCache[uid] = offer }
-			return credentialInfo.enumerated().map { .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: $1.identifier, displayName: $1.displayName ?? "", metadataKey: uuids[$0], pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod )) }
+			let uuid = UUID().uuidString
+			Self.metadataCache[uuid] = offer
+			return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialInfo.identifier, displayName: credentialInfo.displayName ?? "", metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-		var data = [IssuanceOutcome]()
-		for ci in credentialInfo {
-			do {
-				let id = ci.identifier.value; let sc = ci.scope; let dn = ci.displayName ?? ""
-				logger.info("Starting issuing with identifer \(id), scope \(sc), displayName: \(dn)")
-				let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: ci.identifier, displayName: ci.displayName, claimSet: claimSet)
-				// logger.info("Credential str:\n\(str)")
-				data.append(res)
-			} catch {
-				// logger.error("Failed to issue document with scope \(ci.scope)")
-				logger.info("Exception: \(error)")
-			}
+		do {
+			let id = credentialInfo.identifier.value; let sc = credentialInfo.scope; let dn = credentialInfo.displayName ?? ""
+			logger.info("Starting issuing with identifer \(id), scope \(sc), displayName: \(dn)")
+			let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: credentialInfo.identifier, displayName: credentialInfo.displayName, claimSet: claimSet)
+			// logger.info("Credential str:\n\(str)")
+			return res
+		} catch {
+			// logger.error("Failed to issue document with scope \(ci.scope)")
+			logger.info("Exception: \(error)")
+			return nil
 		}
-		Self.metadataCache.removeValue(forKey: offerUri)
-		return data
 	}
 	
 	func issueByDocType(_ docType: String, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
@@ -335,7 +319,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	}
 	
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
-		usedSecureEnclave = deferredDoc.privateKeyType == .secureEnclaveP256
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
 		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp)
@@ -438,31 +421,6 @@ fileprivate extension URL {
 		return url.queryItems?.first(where: { $0.name == parameter })?.value
 	}
 }
-
-extension SecureEnclave.P256.KeyAgreement.PrivateKey {
-	
-	func toSecKey() throws -> SecKey {
-		var errorQ: Unmanaged<CFError>?
-		guard let sf = SecKeyCreateWithData(Data() as NSData, [
-			kSecAttrKeyType: kSecAttrKeyTypeECSECPrimeRandom,
-			kSecAttrKeyClass: kSecAttrKeyClassPrivate,
-			kSecAttrTokenID: kSecAttrTokenIDSecureEnclave,
-			"toid": dataRepresentation
-		] as NSDictionary, &errorQ) else { throw errorQ!.takeRetainedValue() as Error }
-		return sf
-	}
-}
-
-extension P256.KeyAgreement.PrivateKey {
-	func toSecKey() throws -> SecKey {
-		var error: Unmanaged<CFError>?
-		guard let privateKey = SecKeyCreateWithData(x963Representation as NSData, [kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom, kSecAttrKeyClass: kSecAttrKeyClassPrivate] as NSDictionary, &error) else {
-			throw error!.takeRetainedValue() as Error
-		}
-		return privateKey
-	}
-}
-
 
 public enum OpenId4VCIError: LocalizedError {
 	case authRequestFailed(Error)
