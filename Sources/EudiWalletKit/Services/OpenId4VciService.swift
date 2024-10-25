@@ -95,9 +95,29 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	func getIssuer(offer: CredentialOffer) throws -> Issuer {
-		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
+    func getIssuer(offer: CredentialOffer, dpopConstructor: DPoPConstructor? = nil) throws -> Issuer {
+        try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession), dpopConstructor: dpopConstructor)
 	}
+    public func getIssuerWithDpopConstructor(offer: CredentialOffer) throws -> Issuer? {
+        let privateKey = try? KeyController.generateECDHPrivateKey()
+        if let privateKey,
+           let publicKey = try? KeyController.generateECDHPublicKey(from: privateKey) {
+            let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
+            let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey)
+            return try Issuer(
+                authorizationServerMetadata: offer.authorizationServerMetadata,
+                issuerMetadata: offer.credentialIssuerMetadata,
+                config: config,
+                parPoster: Poster(session: urlSession),
+                tokenPoster: Poster(session: urlSession),
+                requesterPoster: Poster(session: urlSession),
+                deferredRequesterPoster: Poster(session: urlSession),
+                notificationPoster: Poster(session: urlSession),
+                dpopConstructor: dpopConstructor
+            )
+        }
+        return nil
+    }
 	
 	func getIssuerForDeferred(data: DeferredIssuanceModel) throws -> Issuer {
 		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: urlSession), config: config)
@@ -270,17 +290,34 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		throw WalletError(description: "Failed to get push authorization code request")
 	}
 	
-	private func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest{
+    private func handleAuthorizationCode(nonce: String? = "",issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest{
 		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
 		switch unAuthorized {
 		case .success(let request):
-            let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
-			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
-				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
-				return authorized
-			}
-			throw WalletError(description: "Failed to get access token")
-		case .failure(let error):
+           
+            let authorizedRequest = await issuer.requestAccessToken(dpopNonce: nonce, authorizationCode: request)
+            print("Response 2 -------> \(authorizedRequest)")
+            
+//			if case let .success(authorized) = authorizedRequest,
+//               case let .noProofRequired(token, _, _, _) = authorized {
+//				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
+//				return authorized
+//                
+//			}
+            switch authorizedRequest {
+            case .success(let authorized):
+                switch authorized {
+                case .noProofRequired(let request):
+                    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (no proof required) : \(request.accessToken)")
+                    return authorized
+                case .proofRequired(let request):
+                    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (proof required) : \(request.accessToken)")
+                    return authorized
+                }
+            case .failure(let failure):
+                throw WalletError(description: "Failed to request access token: \(failure.localizedDescription)")
+            }
+    	case .failure(let error):
 			throw WalletError(description: error.localizedDescription)
 		}
 	}
@@ -452,30 +489,26 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
             if let key = OpenId4VCIService.metadataCache.keys.first,
                 let credential = OpenId4VCIService.metadataCache[key],
                 let unauthorizedRequest = OpenId4VCIService.parReqCache {
-                let issuer1 = try getIssuer(offer: credential)
                 
-//                let req = UnauthorizedRequest.par(<#T##ParRequested#>)
-                let authorizedRequest = await issuer1.requestAccessToken (
-                    authorizationCode: unauthorizedRequest
-                )
-                print(authorizedRequest)
+                
+                if let issuer1 = try getIssuerWithDpopConstructor(offer: credential) {
+                    
+                    let result = try await handleAuthorizationCode(nonce: dpopNonce, issuer: issuer1, request: unauthorizedRequest, authorizationCode: code)
+                    
+                    print("This is the result ------------> \(result)")
+                    
+                }
+                
+//            let authorizedRequest = await issuer1.requestAccessToken (
+//                    dpopNonce: dpopNonce,
+//                    authorizationCode: unauthorizedRequest
+//                )
+//                print(authorizedRequest)
             }
         } catch {
             
         }
-      //  guard let offerTemp = OpenId4VCIService.metadataCache[offerUri] else { return }
-        
-    //    guard let offer else { return }
-      //  let issuer = getIssuer(offer: offerTemp)
-        guard let issuer else { return }
-        
-        //await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode)
-        guard let parRequested else { return }
-        
-        
-        
-        
-        }
+    }
 }
 
 fileprivate extension URL {
