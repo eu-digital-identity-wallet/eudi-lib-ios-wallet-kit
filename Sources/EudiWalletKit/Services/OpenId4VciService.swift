@@ -36,7 +36,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	static var metadataCache = [String: CredentialOffer]()
 	var urlSession: URLSession
 	var parRequested: ParRequested?
-	
+    var issuer: Issuer? = nil
+    var offer: CredentialOffer? = nil
+    
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
@@ -102,14 +104,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String?, format: DataFormat, useSecureEnclave: Bool = true, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [IssuanceOutcome] {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
 		try initSecurityKeys(useSecureEnclave)
+        
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+       
+        self.offer = offer
+        
 		let credentialInfo = docTypes.compactMap { try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: $0.docType, format: format)
 		}
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
-		let issuer = try getIssuer(offer: offer)
-		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
+        self.issuer = try getIssuer(offer: offer)
+        
+        guard let issuer else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first") }
+		
+        if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
 		if case .presentation_request(let url) = authorizedOutcome, let parRequested {
 			logger.info("Dynamic issuance request with url: \(url)")
@@ -134,33 +143,37 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return data
 	}
 	
-	func issueByDocType(_ docType: String, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
-		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
-		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
-		switch issuerMetadata {
-		case .success(let metaData):
-			if let authorizationServer = metaData?.authorizationServers?.first, let metaData {
-				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
-				let (credentialConfigurationIdentifier, _, displayName) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
-				// Authorize with auth code flow
-				let issuer = try getIssuer(offer: offer)
-				let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-				if case .presentation_request(let url) = authorizedOutcome, let parRequested {
-					logger.info("Dynamic issuance request with url: \(url)")
-					let uuid = UUID().uuidString
-					Self.metadataCache[uuid] = offer
-					return	.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, displayName: displayName ?? "", metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
-				}
-				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: displayName, claimSet: claimSet)
-			} else {
-				throw WalletError(description: "Invalid authorization server")
-			}
-		case .failure:
-			throw WalletError(description: "Invalid issuer metadata")
-		}
-	}
+    func issueByDocType(_ docType: String, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+            let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
+            let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
+            switch issuerMetadata {
+            case .success(let metaData):
+                if let authorizationServer = metaData.authorizationServers?.first {
+                    let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
+                    let (credentialConfigurationIdentifier, _, displayName) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
+                    let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
+                    // Authorize with auth code flow
+                    self.issuer = try getIssuer(offer: offer)
+                    guard let issuer else {
+                        throw WalletError(description: "Invalid issuer ")
+                    }
+                  
+                    let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
+                    if case .presentation_request(let url) = authorizedOutcome, let parRequested {
+                        logger.info("Dynamic issuance request with url: (url)")
+                        let uuid = UUID().uuidString
+                        Self.metadataCache[uuid] = offer
+                        return    .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), identifier: credentialConfigurationIdentifier, displayName: displayName ?? "", metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
+                    }
+                    guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
+                    return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: displayName, claimSet: claimSet)
+                } else {
+                    throw WalletError(description: "Invalid authorization server")
+                }
+            case .failure:
+                throw WalletError(description: "Invalid issuer metadata")
+            }
+        }
 	
 	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, displayName: String?, claimSet: ClaimSet?) async throws -> IssuanceOutcome {
 		
@@ -258,7 +271,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
 		switch unAuthorized {
 		case .success(let request):
-			let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
+            let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
 			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
 				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
 				return authorized
@@ -430,6 +443,24 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		return ASPresentationAnchor()
 #endif
 	}
+    
+    public func getAccessToken(dpopNonce: String, code: String, state: String, location: String) async {
+        
+      //  guard let offerTemp = OpenId4VCIService.metadataCache[offerUri] else { return }
+        
+    //    guard let offer else { return }
+      //  let issuer = getIssuer(offer: offerTemp)
+        guard let issuer else { return }
+        
+        //await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode)
+        guard let parRequested else { return }
+        
+        let authorizedRequest = await issuer.requestAccessToken (
+            authorizationCode: UnauthorizedRequest.par(parRequested)
+        )
+        
+        
+        }
 }
 
 fileprivate extension URL {
