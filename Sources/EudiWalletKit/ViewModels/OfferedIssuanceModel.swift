@@ -37,5 +37,7 @@ public struct OfferedDocModel: Sendable {
 	public let docType: String
 	/// Display name for document type
 	public let displayName: String
+	// Credential signing algorithm values supported
+	public let algValuesSupported: [String]
 }
 

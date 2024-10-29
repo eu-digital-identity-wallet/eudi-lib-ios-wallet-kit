@@ -209,7 +209,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
 		guard let format = DataFormat(pendingDoc.docDataType) else { throw WalletError(description: "Invalid document") }
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: docTypeKeyOptions?[pendingDoc.docType], disablePrompt: true, promptMessage: nil)
-		try await openId4VCIService.initSecurityKeys()
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case let .pending(_) = outcome { return pendingDoc }
 		let res = try await finalizeIssuing(data: outcome, docType: pendingDoc.docType, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
