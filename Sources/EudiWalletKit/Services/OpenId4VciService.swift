@@ -556,7 +556,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 #endif
 	}
     
-    public func getAccessToken(dpopNonce: String, code: String, state: String, location: String) async {
+    public func getAccessToken(dpopNonce: String, code: String, state: String, location: String, claimSet: ClaimSet? = nil) async throws -> (Data?) {
         do {
             try initSecurityKeys(usedSecureEnclave ?? true)
             print(OpenId4VCIService.metadataCache)
@@ -565,6 +565,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                 let unauthorizedRequest = OpenId4VCIService.parReqCache {
                 if let issuer = try getIssuerWithDpopConstructor(offer: credential) {
                     //AuthorizedRequest
+                    print(dpopNonce)
                     let authorized = try await handleAuthorizationCode(nonce: dpopNonce, issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
                     print("This is the result ------------> \(authorized)")
                     
@@ -572,15 +573,26 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                     if let credentialConfigurationIdentifiers = credential.credentialConfigurationIdentifiers.first {
                         do {
                             
-                            let (cbor, newCNonce) = try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil, claimSet: nil)
-                            print(cbor)
-                            print(newCNonce)
+                            let (cbor, _) = try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil, claimSet: claimSet)
+//                            
+//                            guard let newCNonce else {
+//                                throw WalletError(description: "No cNonce for sdjwt issuance")
+//                            }
+//                            
+                            guard let mdocData = Data(base64URLEncoded:  cbor) else {
+                                throw OpenId4VCIError.dataNotValid
+                            }
+                            
+                            // Note:- tice is sending (sdjwt, cbor)
+                           return mdocData
+                           
                             
                         } catch PostError.useDpopNonce(let newCNonce) {
-                            print("Credential generation failed")
+                           
+                            // This was never called.
                             print(newCNonce)
-                            
                             var updatedAuthorized = authorized
+                            
                             if let cnonce = CNonce(value: newCNonce, expiresInSeconds: nil) {
                                 updatedAuthorized.updateCNonce(cnonce)
                                 let (sdjwt, nonce) = try await issueOfferedCredentialInternal(updatedAuthorized,
@@ -598,8 +610,10 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                 }
             }
         } catch  {
-            print("Credential generation failed")
+            throw WalletError(description: "Invalid issuer metadata")
+            //print("Credential generation outside failed")
         }
+        return(nil)
     }
 }
 

@@ -24,11 +24,14 @@ import CryptoKit
 import OpenID4VCI
 import SwiftCBOR
 import Logging
+
 // ios specific imports
 #if canImport(UIKit)
 import FileLogging
 import UIKit
-#endif
+
+
+ #endif
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject {
@@ -509,19 +512,18 @@ public final class EudiWallet: ObservableObject {
 	#endif
 	}
     
-    public func getAccessToken(dpopNonce: String, code: String, state: String, location: String) async {
-        do {
+    public func getAccessToken(docType: String, dpopNonce: String, code: String, state: String, location: String) async throws -> WalletStorage.Document {
+    
             
-            let (_, openId4VCIService, _) = try await prepareIssuing(docType: nil, displayName: nil)
-            await openId4VCIService.getAccessToken(
+            let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil, displayName: nil)
+            let cborData = try await openId4VCIService.getAccessToken(
                 dpopNonce: dpopNonce,
                 code: code,
                 state: state,
                 location: location
             )
-        }
-        catch {
             
-        }
+            return try await finalizeIssuingCborDocument(id: id, data: cborData!, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
+        
     }
 }
