@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 import MdocDataTransfer18013
 
 /// [Doc Types to [Namespace to Items]] dictionary
@@ -28,7 +29,7 @@ public protocol PresentationService: Sendable {
 	/// instance of a presentation ``FlowType``
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
-	func startQrEngagement() async throws -> String?
+	func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String
 	///
 	/// - Returns: The requested items.
 	/// Receive request.

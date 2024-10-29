@@ -97,11 +97,10 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async {
 		do {
-			if let data = try await presentationService.startQrEngagement() {
-				await MainActor.run {
-					deviceEngagement = data
-					status = .qrEngagementReady
-				}
+			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
+			await MainActor.run {
+				deviceEngagement = data
+				status = .qrEngagementReady
 			}
 		} catch { await setError(error) }
 	}

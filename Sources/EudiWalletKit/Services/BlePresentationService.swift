@@ -42,10 +42,10 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
-	public func startQrEngagement() async throws -> String? {
+	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
-			self.bleServerTransfer.performDeviceEngagement(secureArea: SecureAreaRegistry.shared.defaultSecurityArea!)
+			self.bleServerTransfer.performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), crv: crv)
 		}
 	}
 	

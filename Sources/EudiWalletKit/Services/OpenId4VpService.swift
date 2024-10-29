@@ -67,7 +67,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.urlSession = urlSession
 	}
 	
-	public func startQrEngagement() async throws -> String? { nil }
+	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String { "" }
 	
 	///  Receive request from an openid4vp URL
 	///

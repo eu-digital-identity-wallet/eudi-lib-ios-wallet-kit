@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 import MdocDataTransfer18013
 
 /// Fault presentation service. Used to communicate error state to the user
@@ -31,7 +32,7 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 		self.error = error
 	}
 	
-	public func startQrEngagement() async throws -> String? {
+	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		throw error
 	}
 	
