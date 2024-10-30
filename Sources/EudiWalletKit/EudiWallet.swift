@@ -512,8 +512,7 @@ public final class EudiWallet: ObservableObject {
 	#endif
 	}
     
-    public func getAccessToken(docType: String, dpopNonce: String, code: String, state: String, location: String) async throws -> WalletStorage.Document {
-    
+    public func getAccessToken(docType: String, dpopNonce: String, code: String, state: String?, location: String) async throws -> WalletStorage.Document {
             
             let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil, displayName: nil)
             let cborData = try await openId4VCIService.getAccessToken(

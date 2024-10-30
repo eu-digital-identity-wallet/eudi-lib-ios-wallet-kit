@@ -89,7 +89,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                 let issuer = try getIssuer(offer: offer)
                 
               
-                let authorizedOutcome = (try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)).1
+                let authorizedOutcome = (try await authorizePARWithAuthCodeUseCase(issuer: issuer, offer: offer)).1
                 if case .presentation_request(let url) = authorizedOutcome, let parRequested {
                     logger.info("Dynamic issuance request with url: (url)")
                     let uuid = UUID().uuidString
@@ -252,7 +252,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                                 let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) {
             try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, clientId: config.clientId, transactionCode: txCodeValue).get()
         } else {
-            try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer).0
+            try await authorizePARWithAuthCodeUseCase(issuer: issuer, offer: offer).0
         } {
             let credentialData = await credentialInfo.asyncCompactMap { credentialInfoMap in
                 do {
@@ -341,7 +341,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		}
 	}
 	
-	private func authorizeRequestWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> (AuthorizedRequest?, AuthorizeRequestOutcome?) {
+	private func authorizePARWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer) async throws -> (AuthorizedRequest?, AuthorizeRequestOutcome?) {
 		var pushedAuthorizationRequestEndpoint = ""
 		if case let .oidc(metaData) = offer.authorizationServerMetadata, let endpoint = metaData.pushedAuthorizationRequestEndpoint {
 			pushedAuthorizationRequestEndpoint = endpoint
@@ -359,16 +359,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
             
             return (nil, .presentation_request(parRequested.getAuthorizationCodeURL.url))
             
-            
-            //TODO: Review following code for removal when working on Ausweis sdk integration
-//			let authResult = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: parRequested.getAuthorizationCodeURL.url)
-//			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
-//			switch authResult {
-//			case .code(let authorizationCode):
-//				return .authorized(try await handleAuthorizationCode(issuer: issuer, request: request, authorizationCode: authorizationCode))
-//			case .presentation_request(let url):
-//				return .presentation_request(url)
-//			}
 		} else if case let .failure(failure) = parPlaced {
 			throw WalletError(description: "Authorization error: \(failure.localizedDescription)")
 		}
@@ -434,7 +424,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	}
     
     private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, displayName: String?, claimSet: ClaimSet? = nil) async throws -> (String, CNonce?) {
-//        guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, let nonce) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
+
         guard let credentialConfigurationIdentifier else {
             throw WalletError(description: "Credential configuration identifier not found")
         }
@@ -556,7 +546,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 #endif
 	}
     
-    public func getAccessToken(dpopNonce: String, code: String, state: String, location: String, claimSet: ClaimSet? = nil) async throws -> (Data?) {
+    public func getAccessToken(dpopNonce: String, code: String, state: String?, location: String, claimSet: ClaimSet? = nil) async throws -> (Data?) {
         do {
             try initSecurityKeys(usedSecureEnclave ?? true)
             print(OpenId4VCIService.metadataCache)
@@ -564,33 +554,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                 let credential = OpenId4VCIService.metadataCache[key],
                 let unauthorizedRequest = OpenId4VCIService.parReqCache {
                 if let issuer = try getIssuerWithDpopConstructor(offer: credential) {
-                    //AuthorizedRequest
-                    print(dpopNonce)
                     let authorized = try await handleAuthorizationCode(nonce: dpopNonce, issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
-                    print("This is the result ------------> \(authorized)")
-                    
                     
                     if let credentialConfigurationIdentifiers = credential.credentialConfigurationIdentifiers.first {
                         do {
                             
                             let (cbor, _) = try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil, claimSet: claimSet)
-//                            
-//                            guard let newCNonce else {
-//                                throw WalletError(description: "No cNonce for sdjwt issuance")
-//                            }
-//                            
+
                             guard let mdocData = Data(base64URLEncoded:  cbor) else {
                                 throw OpenId4VCIError.dataNotValid
                             }
                             
-                            // Note:- tice is sending (sdjwt, cbor)
                            return mdocData
-                           
                             
                         } catch PostError.useDpopNonce(let newCNonce) {
-                           
-                            // This was never called.
-                            print(newCNonce)
+                            //TODO: As per doc above return error and then following should be called but we are not getting error and it is succeeding with credential, need to evaluate following.
                             var updatedAuthorized = authorized
                             
                             if let cnonce = CNonce(value: newCNonce, expiresInSeconds: nil) {
@@ -599,8 +577,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                                                                                      issuer: issuer,
                                                                                           credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil,
                                                                                           claimSet: nil)
-                                print(sdjwt)
-                                print(nonce)
                             }
                             
                         } catch {
