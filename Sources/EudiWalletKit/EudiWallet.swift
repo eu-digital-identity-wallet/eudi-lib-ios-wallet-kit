@@ -265,14 +265,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - claimSet: claim set (optional)
 	/// - Returns: Array of issued and stored documents
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String? = nil, format: DataFormat = .cbor, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, format: DataFormat = .cbor, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
-		if docTypeModels.isEmpty { return [] }
+		if docTypes.isEmpty { return [] }
 		var documents = [WalletStorage.Document]()
-		for (i, docTypeModel) in docTypeModels.enumerated() {
-			let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypeModels.map(\.docType).joined(separator: ", "), displayName: i > 0 ? nil : docTypeModels.map(\.displayName).joined(separator: ", "), keyOptions: docTypeKeyOptions?[docTypeModel.docType], disablePrompt: i > 0, promptMessage: promptMessage)
+		for (i, docTypeModel) in docTypes.enumerated() {
+			let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypes.map(\.docType).joined(separator: ", "), displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: docTypeKeyOptions?[docTypeModel.docType], disablePrompt: i > 0, promptMessage: promptMessage)
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offerUri: offerUri, docTypeModel: docTypeModel, txCodeValue: txCodeValue, format: format, promptMessage: promptMessage, claimSet: claimSet) else { continue }
-			documents.append(try await finalizeIssuing(data: docData, docType: docData.isDeferred ? docTypeModels[i].docType : nil, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
+			documents.append(try await finalizeIssuing(data: docData, docType: docData.isDeferred ? docTypes[i].docType : nil, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
 		return documents
 	}
