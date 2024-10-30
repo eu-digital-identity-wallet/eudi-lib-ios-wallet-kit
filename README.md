@@ -284,6 +284,17 @@ After the request is received the ``presentationSession.disclosedDocuments`` con
 		})
 ```
 
+## Logging
+The SwiftLog library is used for logging. The library provides a default logger that logs to the console. The main app configures logging outputs such as file logging.
+To use the logger create a logger instance with the desired label. The logger can be used to log messages with different log levels.
+```swift
+import Logging
+// Create a logger with a label
+let logger = Logger(label: "com.example.BestExampleApp.main")
+// log an info message
+logger.info("Hello World!")
+```
+
 ## Reference
 Detailed documentation is provided in the DocC documentation [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/) 
 
