@@ -163,7 +163,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard openID4VciConfig?.clientId != nil else { throw WalletError(description: "clientId not defined")}
 		guard openID4VciConfig?.authFlowRedirectionURI != nil else { throw WalletError(description: "Auth flow Redirect URI not defined")}
 		let issueReq = try await Self.authorizedAction(action: {
-			return try await beginIssueDocument(id: id, keyOptions: keyOptions, saveToStorage: false)
+			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType, comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, config: openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
@@ -239,7 +239,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : (data.isPending ? .pending : .issued)
 		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataType: ddt, data: dataToSave, secureAreaName: docTypeKeyOptions?[docTypeToSave]?.secureAreaName, createdAt: Date(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument); return newDocument }
-		try issueReq.saveToStorage()
 		try await endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument)
 		await storage.refreshPublishedVars()
@@ -283,9 +282,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - id: Document identifier
 	///   - issuer: Issuer function
-	public func beginIssueDocument(id: String, keyOptions: KeyOptions?, saveToStorage: Bool = true, bDeferred: Bool = false) async throws -> IssueRequest {
+	public func beginIssueDocument(id: String, keyOptions: KeyOptions?, bDeferred: Bool = false) async throws -> IssueRequest {
 		let request = try IssueRequest(id: id, keyOptions: keyOptions)
-		if saveToStorage { try request.saveToStorage() }
 		return request
 	}
 	
