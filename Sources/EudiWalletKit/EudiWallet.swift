@@ -210,7 +210,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard let format = DataFormat(pendingDoc.docDataType) else { throw WalletError(description: "Invalid document") }
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: docTypeKeyOptions?[pendingDoc.docType], disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
-		if case let .pending(_) = outcome { return pendingDoc }
+		if case .pending(_) = outcome { return pendingDoc }
 		let res = try await finalizeIssuing(data: outcome, docType: pendingDoc.docType, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 		return res
 	}
@@ -285,7 +285,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - issuer: Issuer function
 	public func beginIssueDocument(id: String, keyOptions: KeyOptions?, saveToStorage: Bool = true, bDeferred: Bool = false) async throws -> IssueRequest {
 		let request = try IssueRequest(id: id, keyOptions: keyOptions)
-		if saveToStorage { try await request.saveToStorage() }
+		if saveToStorage { try request.saveToStorage() }
 		return request
 	}
 	
@@ -361,14 +361,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter sampleDataFiles: Names of sample files provided in the app bundle
 	public func loadSampleData(sampleDataFiles: [String]? = nil) async throws {
 		try? await storage.storageService.deleteDocuments(status: .issued)
-		let docSamples = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
+		let docSamplesData = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
-			.map { Document(docType: $0.docType, docDataType: .cbor, data: $0.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: $0.docType == EuPidModel.euPidDocType ? "PID" : ($0.docType == IsoMdlModel.isoDocType ? "mDL" : $0.docType), status: .issued) }
+		for dsd in docSamplesData {
+			guard let pkCose = CoseKeyPrivate(base64: dsd.pkData.base64EncodedString()) else { continue }
+			let docSample = Document(id: pkCose.privateKeyId, docType: dsd.docType, docDataType: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType), status: .issued)
+			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
+		}
 		do {
-			for docSample in docSamples {
-				try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
-				// privateKeyType: .x963EncodedP256, privateKey: $0.pkData
-			}
 			try await storage.loadDocuments(status: .issued)
 		} catch {
 			storage.setError(error)

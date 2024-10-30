@@ -46,8 +46,8 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	}
 	
 	func initSecurityKeys(algSupported: [String]) throws {
-		var algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
-		var algs = algTypes.map(JWSAlgorithm.init)
+		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
+		let algs = algTypes.map(JWSAlgorithm.init)
 		guard !algs.isEmpty else { throw WalletError(description: "Unable to find supported signing algorithm") }
 		var alg: JWSAlgorithm = algs.first!
 		if let crv = issueReq.keyOptions?.curve, let at = JWSAlgorithm.AlgorithmType(rawValue: crv.defaultSigningAlgorithm.rawValue) {
