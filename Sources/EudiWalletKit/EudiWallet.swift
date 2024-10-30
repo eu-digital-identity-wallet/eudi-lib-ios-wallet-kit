@@ -275,7 +275,7 @@ public final class EudiWallet: ObservableObject {
 	}
     
     func finalizeIssuingCborDocument(id: String, data: Data, docType: String, format: DataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
-        let iss = IssuerSigned(data: [UInt8](data))
+        _ = IssuerSigned(data: [UInt8](data))
         guard let ddt = DocDataType(rawValue: format.rawValue) else { throw WalletError(description: "Invalid format \(format.rawValue)") }
         let docTypeToSave = docType
         let dataToSave: Data = data
@@ -512,17 +512,15 @@ public final class EudiWallet: ObservableObject {
 	#endif
 	}
     
-    public func getAccessToken(docType: String, dpopNonce: String, code: String, state: String?, location: String) async throws -> WalletStorage.Document {
-            
+    public func getCredentials(docType: String, dpopNonce: String, code: String) async throws -> WalletStorage.Document {
             let (issueReq, openId4VCIService, id) = try await prepareIssuing(docType: nil, displayName: nil)
-            let cborData = try await openId4VCIService.getAccessToken(
+            guard let cborData = try await openId4VCIService.getCredentials(
                 dpopNonce: dpopNonce,
-                code: code,
-                state: state,
-                location: location
-            )
-            
-            return try await finalizeIssuingCborDocument(id: id, data: cborData!, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
+                code: code
+            ) else {
+                throw  WalletError(description: "Error in getting access token")
+            }
+            return try await finalizeIssuingCborDocument(id: id, data: cborData, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
         
     }
 }

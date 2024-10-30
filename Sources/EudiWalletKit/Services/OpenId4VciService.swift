@@ -168,7 +168,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                     if let result = response.credentialResponses.first {
                         switch result {
                         case .deferred(let transactionId):
-                            //return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
                             let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
                             return .deferred(deferredModel)
                         case .issued(_, let credential, _):
@@ -375,14 +374,8 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
             
             switch authorizedRequest {
             case .success(let authorized):
-                switch authorized {
-                case .noProofRequired(let request):
-                    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (no proof required) : \(request.accessToken)")
-                    return authorized
-                case .proofRequired(let request):
-                    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (proof required) : \(request.accessToken)")
-                    return authorized
-                }
+                logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (no proof required) : \(authorized.accessToken)")
+                return authorized
             case .failure(let failure):
                 throw WalletError(description: "Failed to request access token: \(failure.localizedDescription)")
             }
@@ -393,7 +386,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 	
     private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, displayName: String?, claimSet: ClaimSet? = nil) async throws -> String {
 		switch noProofRequiredState {
-		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
+        case .noProofRequired(_, _, _, _):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
 			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
@@ -546,10 +539,9 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 #endif
 	}
     
-    public func getAccessToken(dpopNonce: String, code: String, state: String?, location: String, claimSet: ClaimSet? = nil) async throws -> (Data?) {
+    public func getCredentials(dpopNonce: String, code: String, claimSet: ClaimSet? = nil) async throws -> (Data?) {
         do {
             try initSecurityKeys(usedSecureEnclave ?? true)
-            print(OpenId4VCIService.metadataCache)
             if let key = OpenId4VCIService.metadataCache.keys.first,
                 let credential = OpenId4VCIService.metadataCache[key],
                 let unauthorizedRequest = OpenId4VCIService.parReqCache {
@@ -558,13 +550,11 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                     
                     if let credentialConfigurationIdentifiers = credential.credentialConfigurationIdentifiers.first {
                         do {
-                            
                             let (cbor, _) = try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil, claimSet: claimSet)
 
                             guard let mdocData = Data(base64URLEncoded:  cbor) else {
                                 throw OpenId4VCIError.dataNotValid
                             }
-                            
                            return mdocData
                             
                         } catch PostError.useDpopNonce(let newCNonce) {
@@ -573,23 +563,21 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
                             
                             if let cnonce = CNonce(value: newCNonce, expiresInSeconds: nil) {
                                 updatedAuthorized.updateCNonce(cnonce)
-                                let (sdjwt, nonce) = try await issueOfferedCredentialInternal(updatedAuthorized,
+                                let (_, _) = try await issueOfferedCredentialInternal(updatedAuthorized,
                                                                                      issuer: issuer,
                                                                                           credentialConfigurationIdentifier: credentialConfigurationIdentifiers, displayName: nil,
                                                                                           claimSet: nil)
                             }
-                            
                         } catch {
-                            print("Credential generation failed")
+                            throw WalletError(description: "Invalid issuer metadata")
                         }
                     }
                 }
             }
         } catch  {
             throw WalletError(description: "Invalid issuer metadata")
-            //print("Credential generation outside failed")
         }
-        return(nil)
+        return nil
     }
 }
 
