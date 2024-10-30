@@ -63,7 +63,27 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(clientId: defaultClientId, authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
 	public static let defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
+	/// - Parameters:
+	///   - storageType: The type of storage to use. Defaults to `.keyChain`.
+	///   - serviceName: The service name for the keychain. Optional.
+	///   - accessGroup: The access group for the keychain. Optional.
+	///   - trustedReaderCertificates: An array of trusted reader certificates. Optional.
+	///   - userAuthenticationRequired: A boolean indicating if user authentication is required when issuing or presenting a document. Defaults to `true`.
+	///   - verifierApiUri: The URI for the default verifier API. Optional.
+	///   - openID4VciIssuerUrl: The URL for the default OpenID4VCI issuer. Optional.
+	///   - openID4VciConfig: The configuration for OpenID4VCI. Optional.
+	///   - urlSession: The URL session to use for network requests. Optional.
+	///   - logFileName: The name of the log file. Optional.
+	///   - docTypeKeyOptions: A dictionary of document type to key options. Optional.
+	///   - secureAreas: An array of secure areas. Optional.
+	///   - modelFactory: The factory for creating Mdoc models. Optional.
 	///
+	/// - Throws: An error if initialization fails.
+	///
+	/// ```swift
+	/// let wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    ///        logFileName: "temp.txt", docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "Software", accessControl: [.requireUserPresence])] )
+	/// ```
 	public init(storageType: StorageType = .keyChain, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, logFileName: String? = nil, docTypeKeyOptions: [String: KeyOptions]? = nil, secureAreas: [any SecureArea]? = nil, modelFactory: (any MdocModelFactory)? = nil) throws {
 		
 		try Self.validateServiceParams(serviceName: serviceName)
