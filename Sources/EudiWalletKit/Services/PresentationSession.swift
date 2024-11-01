@@ -23,7 +23,7 @@ import LocalAuthentication
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
-public class PresentationSession: ObservableObject {
+public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
@@ -31,7 +31,7 @@ public class PresentationSession: ObservableObject {
 	@Published public var readerLegalName: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
-	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
+	/// Reader certificate issuer is valid
 	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
@@ -60,24 +60,23 @@ public class PresentationSession: ObservableObject {
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
-	func decodeRequest(_ request: [String: Any]) throws {
+	func decodeRequest(_ request: UserRequestInfo) throws {
 		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
-		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
 		disclosedDocuments = [DocElementsViewModel]()
 		for (docId, (docType, displayName)) in docIdAndTypes {
-			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-			if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
+			var tmp = request.validItemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
+			if let errorRequestItems = request.errorItemsRequested, errorRequestItems.count > 0 {
 				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
 			}
 			disclosedDocuments.append(contentsOf: tmp)
 		}
-		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
+		if let readerAuthority = request.readerCertificateIssuer {
 			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
-			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String
+			readerCertIssuerValid = request.readerAuthValidated
+			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
-		readerLegalName = request[UserRequestKeys.reader_legal_name.rawValue] as? String
+		readerLegalName = request.readerLegalName 
 		status = .requestReceived
 	}
 	
@@ -119,7 +118,7 @@ public class PresentationSession: ObservableObject {
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request dictionary keyed by ``MdocDataTransfer.UserRequestKeys``
-	public func receiveRequest() async -> [String: Any]? {
+	public func receiveRequest() async -> UserRequestInfo? {
 		do {
 			let request = try await presentationService.receiveRequest()
 			try await decodeRequest(request)
@@ -135,7 +134,7 @@ public class PresentationSession: ObservableObject {
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: ((URL?) -> Void)? = nil) async {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
 		do {
 			await MainActor.run {status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }

@@ -15,10 +15,10 @@ limitations under the License.
 */
 
 import Foundation
-import OpenID4VCI
+@preconcurrency import OpenID4VCI
 import WalletStorage
 
-struct DeferredIssuanceModel: Codable {
+struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?

@@ -20,7 +20,7 @@ import Foundation
 import WalletStorage
 
 /// Data exchange flow type
-public enum FlowType: Codable, Hashable {
+public enum FlowType: Codable, Hashable, Sendable {
 	
 	case ble
 	case openid4vp(qrCode: Data)
@@ -31,7 +31,7 @@ public enum FlowType: Codable, Hashable {
 }
 
 /// Data format of the exchanged data
-public enum DataFormat: String {
+public enum DataFormat: String, Sendable {
 	case cbor = "cbor"
 	case sdjwt = "sdjwt"
 }
@@ -46,7 +46,7 @@ public extension DataFormat {
 	}
 }
 
-public enum StorageType {
+public enum StorageType: Sendable {
 	case keyChain
 }
 

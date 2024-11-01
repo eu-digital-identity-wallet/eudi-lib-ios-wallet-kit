@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -19,6 +19,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.2.8"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.4.0"),
     .package(url: "https://github.com/Ameenk149/eudi-lib-ios-openid4vci-swift.git", exact: "0.1.2"),
+
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

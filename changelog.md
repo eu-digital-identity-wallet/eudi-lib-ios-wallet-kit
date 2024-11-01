@@ -1,3 +1,21 @@
+## v0.7.4
+- Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
+
+## v0.7.3
+- Bug fix
+
+## v0.7.2
+- Removed `@MainActor` annotation from class definitions
+
+## v0.7.1
+- Swift 6 migration
+
+## v0.7.0
+- Updated OpenID4VCI to version 0.6.0
+
+## v0.6.9
+- Fill document display name in [DocElementsViewModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/docelementsviewmodel/)
+
 ## v0.6.8
 - Updated OpenID4VCI to version 0.5.0
 - Updated OpenID4VP to version 0.4.0

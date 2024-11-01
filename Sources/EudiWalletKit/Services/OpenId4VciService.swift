@@ -15,7 +15,7 @@
  */
 
 import Foundation
-import OpenID4VCI
+@preconcurrency import OpenID4VCI
 import JOSESwift
 import MdocDataModel18013
 import AuthenticationServices
@@ -25,7 +25,9 @@ import Security
 import WalletStorage
 import SwiftCBOR
 
-public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContextProviding {
+extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
+
+public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var bindingKey: BindingKey!
@@ -41,6 +43,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
     var offer: CredentialOffer? = nil
     
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
+		usedSecureEnclave = issueRequest.privateKeyType == .secureEnclaveP256 && SecureEnclave.isAvailable
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.urlSession = urlSession
@@ -368,7 +371,6 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
 		switch unAuthorized {
 		case .success(let request):
-           
             let authorizedRequest = await issuer.requestAccessToken(dpopNonce: nonce, authorizationCode: request)
             print("Response 2 -------> \(authorizedRequest)")
             
@@ -388,7 +390,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
 		switch noProofRequiredState {
         case .noProofRequired(_, _, _, _):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
-			let responseEncryptionSpecProvider = { Issuer.createResponseEncryptionSpec($0) }
+			let responseEncryptionSpecProvider =  { @Sendable in Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 			switch requestOutcome {
 			case .success(let request):
@@ -450,6 +452,7 @@ public class OpenId4VCIService: NSObject, ASWebAuthenticationPresentationContext
         }
     }
 	
+
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> String {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
