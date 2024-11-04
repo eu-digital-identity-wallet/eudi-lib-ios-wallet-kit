@@ -367,7 +367,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			}
 			try await storage.loadDocuments(status: .issued)
 		} catch {
-			storage.setError(error)
+			await storage.setError(error)
 			throw WalletError(description: error.localizedDescription)
 		}
 	}

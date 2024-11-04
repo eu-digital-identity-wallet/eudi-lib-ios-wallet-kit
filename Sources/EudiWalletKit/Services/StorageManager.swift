@@ -144,7 +144,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			await refreshPublishedVars()
 			return docs
 		} catch {
-			setError(error)
+			await setError(error)
 			throw error
 		}
 	}
@@ -161,7 +161,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			await refreshPublishedVars()
 			return doc
 		} catch {
-			setError(error)
+			await setError(error)
 			throw error
 		}
 	}
@@ -221,7 +221,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 				_ = await MainActor.run { deferredDocuments.remove(at: index) }
 			}
 		} catch {
-			setError(error)
+			await setError(error)
 			throw error
 		}
 	}
@@ -238,13 +238,13 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
 			}
 		} catch {
-			setError(error)
+			await setError(error)
 			throw error
 		}
 	}
 	
-	func setError(_ error: Error) {
-		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
+	func setError(_ error: Error) async {
+		await MainActor.run { uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo) }
 	}
 	
 }
