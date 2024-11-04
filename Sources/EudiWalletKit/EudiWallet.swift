@@ -205,7 +205,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let issueReq = try IssueRequest(id: pendingDoc.id, docType: pendingDoc.docType, privateKeyType: pkt, keyData: pk)
 		try await openId4VCIService.initSecurityKeys(pendingDoc.privateKeyType == .secureEnclaveP256)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
-		if case let .pending(_) = outcome { return pendingDoc }
+		if case .pending(_) = outcome { return pendingDoc }
 		let res = try await finalizeIssuing(id: pendingDoc.id, data: outcome, docType: pendingDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 		return res
 	}
