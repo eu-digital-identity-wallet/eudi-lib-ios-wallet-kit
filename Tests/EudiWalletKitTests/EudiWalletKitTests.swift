@@ -21,6 +21,7 @@ import CryptoKit
 import PresentationExchange
 import MdocDataModel18013
 import SwiftCBOR
+import JOSESwift
 
 final class EudiWalletKitTests: XCTestCase {
 	func testExample() throws {
@@ -57,7 +58,17 @@ final class EudiWalletKitTests: XCTestCase {
 		XCTAssertEqual(ANNEX_B_SESSION_TRANSCRIPT, sessionTranscript.toHexString().uppercased())
 	}
 	
-	
+	func testJOSESigner() throws {
+		let keyAgreement = P256.KeyAgreement.PrivateKey()
+		let secKey = try keyAgreement.toSecKey()
+		let signingInput = "Hello, World!".data(using: .utf8)!
+		// jose swift uses the following code to sign the data
+		guard let signatureData = SecKeyCreateSignature(secKey, .ecdsaSignatureMessageX962SHA256, signingInput as CFData, nil) as Data? else { 
+			XCTFail("Failed to create signature"); return }
+		let signature = try P256.Signing.ECDSASignature(derRepresentation: signatureData)
+		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
+	    XCTAssert(keySign.publicKey.isValidSignature(signature, for: signingInput), "Signature is invalid")
+	}
 	
 	
 }

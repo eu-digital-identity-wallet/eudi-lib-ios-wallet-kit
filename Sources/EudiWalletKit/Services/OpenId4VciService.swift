@@ -24,6 +24,7 @@ import CryptoKit
 import Security
 import WalletStorage
 import SwiftCBOR
+import JOSESwift
 
 extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
 
