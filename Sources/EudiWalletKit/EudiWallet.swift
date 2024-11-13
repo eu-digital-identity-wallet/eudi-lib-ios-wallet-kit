@@ -231,6 +231,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: docTypeKeyOptions?[pendingDoc.docType], disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
+		//let res = try await finalizeIssuing(id: pendingDoc.id, data: outcome, docType: pendingDoc.docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
 		let res = try await finalizeIssuing(data: outcome, docType: pendingDoc.docType, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 		return res
 	}
@@ -389,7 +390,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		do {
 			try await storage.loadDocuments(status: .issued)
 		} catch {
-			storage.setError(error)
+			await storage.setError(error)
 			throw WalletError(description: error.localizedDescription)
 		}
 	}
