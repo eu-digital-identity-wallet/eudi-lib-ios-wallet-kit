@@ -57,7 +57,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		let privateKey: SecKey = try issueReq.createKey()
 		let publicKey: SecKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
-		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: privateKey, issuer: config.clientId)
+		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: .secKey(privateKey) , issuer: config.clientId)
 	}
 	
 	/// Issue a document with the given `docType` using OpenId4Vci protocol
