@@ -46,19 +46,19 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		self.config = config
 	}
 	
-	func initSecurityKeys(algSupported: [String]) throws {
+	func initSecurityKeys(algSupported: [String]) async throws {
+		let crvType = issueReq.keyOptions?.curve ?? type(of: issueReq.secureArea).defaultEcCurve
+		let secureAreaSigningAlg: SigningAlgorithm = crvType.defaultSigningAlgorithm
 		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
-		let algs = algTypes.map(JWSAlgorithm.init)
-		guard !algs.isEmpty else { throw WalletError(description: "Unable to find supported signing algorithm") }
-		var alg: JWSAlgorithm = algs.first!
-		if let crv = issueReq.keyOptions?.curve, let at = JWSAlgorithm.AlgorithmType(rawValue: crv.defaultSigningAlgorithm.rawValue) {
-			guard algTypes.contains(at) else { throw WalletError(description: "Unable to find requested signing algorithm \(crv.defaultSigningAlgorithm)") }
-			alg = JWSAlgorithm(at)
+		guard !algTypes.isEmpty, let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue), algTypes.contains(algType) else {
+			throw WalletError(description: "Unable to find supported signing algorithm \(secureAreaSigningAlg)")
 		}
-		let privateKey: SecKey = try issueReq.createKey()
-		let publicKey: SecKey = try KeyController.generateECDHPublicKey(from: privateKey)
-		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
-		bindingKey = .jwk(algorithm: alg, jwk: publicKeyJWK, privateKey: .secKey(privateKey) , issuer: config.clientId)
+		let publicCoseKey = try issueReq.createKey()
+		let publicKey: SecKey = try publicCoseKey.toSecKey()
+		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
+		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
+		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
+		bindingKey = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer) , issuer: config.clientId)
 	}
 	
 	/// Issue a document with the given `docType` using OpenId4Vci protocol
@@ -102,7 +102,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		defer { Self.metadataCache.removeValue(forKey: offerUri) }
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		guard let credentialInfo = try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: docTypeModel.docType, format: format) else { return nil }
-		try initSecurityKeys(algSupported: credentialInfo.algValuesSupported)
+		try await initSecurityKeys(algSupported: credentialInfo.algValuesSupported)
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
@@ -137,7 +137,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let (credentialConfigurationIdentifier, _, displayName, algValues) = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, docType: docType, format: format)
-				try initSecurityKeys(algSupported: algValues)
+				try await initSecurityKeys(algSupported: algValues)
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [credentialConfigurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try getIssuer(offer: offer)
@@ -187,20 +187,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 			//return (identifier: credential.key, scope: scope, docType: docType)
 			let displayName = msoMdocConf.display.getName()
 			return (identifier: credential.key, scope: scope, displayName: displayName, algValuesSupported: msoMdocConf.credentialSigningAlgValuesSupported)
-		default:
-			throw WalletError(description: "Format \(format) not yet supported")
-		}
-	}
-	
-	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], scope: String, format: DataFormat) throws -> (identifier: CredentialConfigurationIdentifier, scope: String, algValuesSupported: [String]) {
-		switch format {
-		case .cbor:
-			guard let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.scope == scope { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope else {
-				logger.error("No credential for scope \(scope). Currently supported credentials: \(credentialsSupported.values)")
-				throw WalletError(description: "Issuer does not support scope \(scope)")
-			}
-			logger.info("Currently supported cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-			return (identifier: credential.key, scope: scope, algValuesSupported: msoMdocConf.credentialSigningAlgValuesSupported)
 		default:
 			throw WalletError(description: "Format \(format) not yet supported")
 		}
@@ -307,7 +293,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 				if let result = response.credentialResponses.first {
 					switch result {
 					case .deferred(let transactionId):
-						//return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: transactionId)
 						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 						return .deferred(deferredModel)
 					case .issued(let credential, _):
@@ -344,7 +329,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		logger.info("Starting issuing with identifer \(model.identifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
 		let authorized = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.identifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier))).get()
-		try initSecurityKeys(algSupported: model.algValuesSupported)
+		try await initSecurityKeys(algSupported: model.algValuesSupported)
 		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, displayName: model.displayName, claimSet: nil)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return res

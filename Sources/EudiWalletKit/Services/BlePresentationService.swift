@@ -43,6 +43,14 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
+		if bleServerTransfer.unlockData == nil {
+			var unlockData = [String: Data]()
+			for (id, key) in bleServerTransfer.devicePrivateKeys {
+				let ud = try await key.secureArea.unlockKey(id: id)
+				if let ud { unlockData[id] = ud }
+			}
+			bleServerTransfer.unlockData = unlockData
+		}
 		return try await withCheckedThrowingContinuation { c in
 			continuationQrCode = c
 			self.bleServerTransfer.performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), crv: crv)
@@ -58,6 +66,12 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		}
 	}
 	
+	public func unlockKey(id: String) async throws -> Data? {
+		if let devicePrivateKey = bleServerTransfer.devicePrivateKeys[id] {
+			return try await devicePrivateKey.secureArea.unlockKey(id: id)
+		}
+		return nil
+	}
 	/// Send response via BLE
 	/// 
 	/// - Parameters:

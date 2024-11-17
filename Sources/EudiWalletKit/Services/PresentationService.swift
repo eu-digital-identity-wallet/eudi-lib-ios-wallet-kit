@@ -30,10 +30,9 @@ public protocol PresentationService: Sendable {
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
 	func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String
-	///
-	/// - Returns: The requested items.
 	/// Receive request.
 	func receiveRequest() async throws -> UserRequestInfo
+	
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
