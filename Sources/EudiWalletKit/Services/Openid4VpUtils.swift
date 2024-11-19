@@ -21,6 +21,7 @@ import Logging
 import PresentationExchange
 import MdocDataModel18013
 import MdocSecurity18013
+import MdocDataTransfer18013
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *
@@ -92,13 +93,20 @@ class Openid4VpUtils {
 			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
 			guard fc.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
 			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
+			let kvs = inputDescriptor.constraints.fields.compactMap { Self.parseField($0, pathRx: pathRx) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
 			if !nsItems.isEmpty { res[docType] = nsItems }
 		}
 		return res
 	}
+	
+	static func parseField(_ field: Field, pathRx: NSRegularExpression) -> (String, RequestItem)? {
+		guard let path = field.paths.first else { return nil }
+		guard let nsItemPair = parsePath(path, pathRx: pathRx) else { return nil }
+		return (nsItemPair.0, RequestItem(elementIdentifier: nsItemPair.1, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
+	}
 
+	/// parse path and return (namespace, itemIdentifier) pair e.g. example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
 	static func parsePath(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
 		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
 		let r1 = match.range(at:1);

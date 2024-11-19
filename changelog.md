@@ -1,7 +1,20 @@
+## v0.7.7
+ - Fix issue [#118](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/118)
+ ### Breaking changes
+- `RequestItems` is now a dictionary with a key of type `String` (doc-type) and a value of type `[String: [RequestItem]]` (namespace to request items)
+- `RequestItem` is a struct with the following properties: `elementIdentifier`, `intentToRetain` and `isOptional`
+ ```swift
+ public typealias RequestItems = [String: [String: [RequestItem]]]
+```
+- ElementViewModel: `public var isMandatory: Bool` is removed
+- ElementViewModel: `public var isOptional: Bool` is added (opposite of `isMandatory`)
+
 ## v0.7.6
 - Refactored security to use SecureArea for cryptographic operations. The wallet developer can specify SecureArea instances which are registered by their name, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas.  The wallet developer can specify Key create options per doc-type such as curve type, secure area name, key unlock policy, key access control and key unlock data.
 
 ## v0.7.5
+
+## v0.7.4
 - Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
 
 ## v0.7.3
