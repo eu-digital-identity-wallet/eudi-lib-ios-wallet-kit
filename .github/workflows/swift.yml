@@ -1,6 +1,10 @@
 name: Swift Build
-
-on: [push]
+on:
+  pull_request:
+    types: [opened, reopened]
+  push:
+    branches: ['main']
+    tags: [ v* ]
 jobs:
   build:
     runs-on: macos-latest

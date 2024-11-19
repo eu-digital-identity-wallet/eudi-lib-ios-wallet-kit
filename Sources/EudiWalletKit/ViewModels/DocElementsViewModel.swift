@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
+import MdocDataTransfer18013
 
 /// View model used in SwiftUI for presentation request elements
 public struct DocElementsViewModel: Identifiable, Sendable {
@@ -27,12 +28,13 @@ public struct DocElementsViewModel: Identifiable, Sendable {
 	public var elements: [ElementViewModel]
 }
 extension DocElementsViewModel {
-	static func fluttenItemViewModels(_ nsItems: [String:[String]], valid isEnabled: Bool, mandatoryElementKeys: [String]) -> [ElementViewModel] {
+	static func fluttenItemViewModels(_ nsItems: [String:[RequestItem]], valid isEnabled: Bool, mandatoryElementKeys: [String]) -> [ElementViewModel] {
 		nsItems.map { k,v in nsItemsToViewModels(k,v, isEnabled, mandatoryElementKeys) }.flatMap {$0}
 	}
 	
-	static func nsItemsToViewModels(_ ns: String, _ items: [String], _ isEnabled: Bool, _ mandatoryElementKeys: [String]) -> [ElementViewModel] {
-		items.map { ElementViewModel(nameSpace: ns, elementIdentifier:$0, isMandatory: mandatoryElementKeys.contains($0), isEnabled: isEnabled) }
+	static func nsItemsToViewModels(_ ns: String, _ items: [RequestItem], _ isEnabled: Bool, _ mandatoryElementKeys: [String]) -> [ElementViewModel] {
+		// default for intent-to-retain is false, default for isOptional is true
+		items.map { ElementViewModel(nameSpace: ns, elementIdentifier: $0.elementIdentifier, isOptional: $0.isOptional ?? !mandatoryElementKeys.contains($0.elementIdentifier), intentToRetain: $0.intentToRetain ?? false, isEnabled: isEnabled) }
 	}
 	
 	static func getMandatoryElementKeys(docType: String) -> [String] {
@@ -76,12 +78,18 @@ public struct ElementViewModel: Identifiable, Sendable {
 	public var id: String { "\(nameSpace)_\(elementIdentifier)" }
 	public let nameSpace: String
 	public let elementIdentifier: String
-	public let isMandatory: Bool
+	public let isOptional: Bool
+	public let intentToRetain: Bool
 	public var isEnabled: Bool
 	public var isDisabled: Bool { !isEnabled }
 	public var isSelected = true
 }
 
 extension Array where Element == ElementViewModel {
-	var nsDictionary: [String: [String]] { Dictionary(grouping: self, by: \.nameSpace).mapValues { $0.map(\.elementIdentifier)} }
+	var nsDictionary: [String: [RequestItem]] {
+		Dictionary(grouping: self, by: \.nameSpace)
+			.mapValues {
+				evm in evm.map { RequestItem(elementIdentifier: $0.elementIdentifier, intentToRetain: $0.intentToRetain, isOptional: $0.isOptional) }
+			}
+	}
 }
