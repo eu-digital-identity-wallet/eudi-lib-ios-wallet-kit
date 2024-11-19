@@ -18,7 +18,7 @@ import Foundation
 import MdocDataTransfer18013
 
 /// [Doc Types to [Namespace to Items]] dictionary
-public typealias RequestItems = [String: [String: [String]]]
+public typealias RequestItems = MdocDataTransfer18013.RequestItems
 
 /// Presentation service abstract protocol
 
