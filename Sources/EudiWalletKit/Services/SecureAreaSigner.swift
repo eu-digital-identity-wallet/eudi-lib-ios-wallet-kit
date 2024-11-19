@@ -17,12 +17,14 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import JOSESwift
+import OpenID4VCI
 
-class SecureAreaSigner: JOSESwift.SignerProtocol {
+class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 	let id: String
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
 	let algorithm: JOSESwift.SignatureAlgorithm
+	var signature: Data?
 	let unlockData: Data?
 	
 	init(secureArea: SecureArea, id: String, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
@@ -48,21 +50,25 @@ class SecureAreaSigner: JOSESwift.SignerProtocol {
 	/// - Returns: The signature.
 	/// - Throws: `JWSError` if any error occurs while signing.
 	func sign(_ signingInput: Data) throws -> Data {
-		let signature = try secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+		return signature!
+	}
+	
+	func signAsync(_ signingInput: Data) async throws -> Data {
+		let signatureDer = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
 		let curveType = algorithm.curveType!
 		// unpack BER encoded ASN.1 format signature to raw format as specified for JWS
-		let ecSignatureTLV = [UInt8](signature.der)
+		let ecSignatureTLV = [UInt8](signatureDer.der)
 		do {
 				let ecSignature = try ecSignatureTLV.read(.sequence)
 				let varlenR = try Data(ecSignature.read(.integer))
 				let varlenS = try Data(ecSignature.skip(.integer).read(.integer))
 				let fixlenR = Asn1IntegerConversion.toRaw(varlenR, of: curveType.coordinateOctetLength)
 				let fixlenS = Asn1IntegerConversion.toRaw(varlenS, of: curveType.coordinateOctetLength)
-				return fixlenR + fixlenS
+				signature = fixlenR + fixlenS
+				return signature!
 		} catch {
 				throw WalletError(description: "Could not unpack ASN.1 EC signature.")
 		}
-
 	}
 	
 }

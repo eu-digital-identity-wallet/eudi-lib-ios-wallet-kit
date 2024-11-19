@@ -53,7 +53,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		guard !algTypes.isEmpty, let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue), algTypes.contains(algType) else {
 			throw WalletError(description: "Unable to find supported signing algorithm \(secureAreaSigningAlg)")
 		}
-		let publicCoseKey = try issueReq.createKey()
+		let publicCoseKey = try await issueReq.createKey()
 		let publicKey: SecKey = try publicCoseKey.toSecKey()
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
