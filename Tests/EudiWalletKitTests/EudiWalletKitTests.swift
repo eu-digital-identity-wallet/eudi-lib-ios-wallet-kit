@@ -62,11 +62,22 @@ final class EudiWalletKitTests: XCTestCase {
 		let secKey = try keyAgreement.toSecKey()
 		let signingInput = "Hello, World!".data(using: .utf8)!
 		// jose swift uses the following code to sign the data
-		guard let signatureData = SecKeyCreateSignature(secKey, .ecdsaSignatureMessageX962SHA256, signingInput as CFData, nil) as Data? else { 
+		guard let signatureDataDer = SecKeyCreateSignature(secKey, .ecdsaSignatureMessageX962SHA256, signingInput as CFData, nil) as Data? else { 
 			XCTFail("Failed to create signature"); return }
-		let signature = try P256.Signing.ECDSASignature(derRepresentation: signatureData)
+		let ecdsaSignature = try P256.Signing.ECDSASignature(derRepresentation: signatureDataDer)
 		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
-	    XCTAssert(keySign.publicKey.isValidSignature(signature, for: signingInput), "Signature is invalid")
+	    XCTAssert(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
+		let ecSignatureTLV = [UInt8](signatureDataDer)
+		
+		let ecSignature = try ecSignatureTLV.read(.sequence)
+		let varlenR = try Data(ecSignature.read(.integer))
+		let varlenS = try Data(ecSignature.skip(.integer).read(.integer))
+		let curveType = ECCurveType.P256
+		let fixlenR = Asn1IntegerConversion.toRaw(varlenR, of: curveType.coordinateOctetLength)
+		let fixlenS = Asn1IntegerConversion.toRaw(varlenS, of: curveType.coordinateOctetLength)
+		let signatureDataRaw = fixlenR + fixlenS
+		XCTAssertEqual(ecdsaSignature.rawRepresentation, signatureDataRaw)
+	
 	}
 	
 	

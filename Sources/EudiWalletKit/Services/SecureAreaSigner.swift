@@ -54,21 +54,8 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 	}
 	
 	func signAsync(_ signingInput: Data) async throws -> Data {
-		let signatureDer = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
-		let curveType = algorithm.curveType!
-		// unpack BER encoded ASN.1 format signature to raw format as specified for JWS
-		let ecSignatureTLV = [UInt8](signatureDer.der)
-		do {
-				let ecSignature = try ecSignatureTLV.read(.sequence)
-				let varlenR = try Data(ecSignature.read(.integer))
-				let varlenS = try Data(ecSignature.skip(.integer).read(.integer))
-				let fixlenR = Asn1IntegerConversion.toRaw(varlenR, of: curveType.coordinateOctetLength)
-				let fixlenS = Asn1IntegerConversion.toRaw(varlenS, of: curveType.coordinateOctetLength)
-				signature = fixlenR + fixlenS
-				return signature!
-		} catch {
-				throw WalletError(description: "Could not unpack ASN.1 EC signature.")
-		}
+		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+		return ecdsaSignature.raw
 	}
 	
 }
