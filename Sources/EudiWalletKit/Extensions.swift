@@ -64,11 +64,11 @@ extension MdocDataModel18013.CoseKeyPrivate {
   // decode private key data cbor string and save private key in key chain
 	public init?(base64: String) {
 			guard let d = Data(base64Encoded: base64), let obj = try? CBOR.decode([UInt8](d)), let coseKey = CoseKey(cbor: obj), let cd = obj[-4], case let CBOR.byteString(rd) = cd else { return nil }
-		var sampleSA = SampleDataSecureArea(storage: SecureAreaRegistry.shared.defaultSecurityArea!.storage)
+		let sampleSA = SampleDataSecureArea(storage: SecureAreaRegistry.shared.defaultSecurityArea!.storage)
 		let keyData = NSMutableData(bytes: [0x04], length: [0x04].count)
 		keyData.append(Data(coseKey.x)); keyData.append(Data(coseKey.y));	keyData.append(Data(rd))
 		sampleSA.x963Key = keyData as Data
-		try? self.init(secureArea: sampleSA)
+		self.init(secureArea: sampleSA)
 	}
 }
 
