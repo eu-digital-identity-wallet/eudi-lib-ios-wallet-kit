@@ -25,7 +25,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "cf7926fcdf85d1c7fc40a051dea112737b372a5a"
+        "revision" : "48a78884b22d8d1abd0d26138a7712f684c8157c"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "66060552751e7d659773f292b3dd9a8cd0c8f816"
+        "revision" : "dc1a5d3220d5982f4ea1ad155752472dded12da8"
       }
     },
     {
@@ -43,7 +43,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "b91fe696b130aa3bd1ae5f016341f76d4965d0d7"
+        "revision" : "19ac64e98219592bbe6cee64cbb6f3fb4de26d92"
       }
     },
     {
@@ -79,7 +79,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-wallet-storage.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "7b8a7cf547dbcb60c055ec979ceeee79666adee9"
+        "revision" : "f730451f3505c0a7a2fe929a9c3dcbe909903641"
       }
     },
     {
