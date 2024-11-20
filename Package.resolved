@@ -1,5 +1,5 @@
 {
-  "originHash" : "751cb5694cd2e9d547658bb43e87ff87c1bec7fe7c5e3372d7734d8835c52c02",
+  "originHash" : "86536d21740c617df3796beb2671eeca81da0f6e482dab2f3e02d577ab2f1079",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -22,28 +22,28 @@
     {
       "identity" : "eudi-lib-ios-iso18013-data-model",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "c1b4383d6fc3387a8ed4c79177548624c4e34e3a",
-        "version" : "0.3.3"
+        "branch" : "SecureArea",
+        "revision" : "cf7926fcdf85d1c7fc40a051dea112737b372a5a"
       }
     },
     {
       "identity" : "eudi-lib-ios-iso18013-data-transfer",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "900416bcab3e95a17dea2fbf224210521c5b68d6",
-        "version" : "0.3.7"
+        "branch" : "SecureArea",
+        "revision" : "66060552751e7d659773f292b3dd9a8cd0c8f816"
       }
     },
     {
       "identity" : "eudi-lib-ios-iso18013-security",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "13d65a1010ee9e6219f8bccbab6eb32f67405d86",
-        "version" : "0.2.6"
+        "branch" : "SecureArea",
+        "revision" : "b91fe696b130aa3bd1ae5f016341f76d4965d0d7"
       }
     },
     {
@@ -76,10 +76,10 @@
     {
       "identity" : "eudi-lib-ios-wallet-storage",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-wallet-storage.git",
       "state" : {
-        "revision" : "9fe492a8648877cd3bc39baed50a1b85d4a50273",
-        "version" : "0.3.0"
+        "branch" : "SecureArea",
+        "revision" : "7b8a7cf547dbcb60c055ec979ceeee79666adee9"
       }
     },
     {
