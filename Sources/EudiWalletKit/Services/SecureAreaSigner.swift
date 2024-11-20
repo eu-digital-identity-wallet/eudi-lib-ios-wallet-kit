@@ -55,7 +55,7 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 	
 	func signAsync(_ signingInput: Data) async throws -> Data {
 		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
-		return ecdsaSignature.raw
+		return ecdsaSignature
 	}
 	
 }
