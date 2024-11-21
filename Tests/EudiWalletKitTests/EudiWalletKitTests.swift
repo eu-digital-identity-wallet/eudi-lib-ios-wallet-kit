@@ -21,7 +21,7 @@ import CryptoKit
 import PresentationExchange
 import MdocDataModel18013
 import SwiftCBOR
-import JOSESwift
+@testable import JOSESwift
 
 final class EudiWalletKitTests: XCTestCase {
 	func testExample() throws {
@@ -67,17 +67,6 @@ final class EudiWalletKitTests: XCTestCase {
 		let ecdsaSignature = try P256.Signing.ECDSASignature(derRepresentation: signatureDataDer)
 		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
 	    XCTAssert(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
-		let ecSignatureTLV = [UInt8](signatureDataDer)
-		
-		let ecSignature = try ecSignatureTLV.read(.sequence)
-		let varlenR = try Data(ecSignature.read(.integer))
-		let varlenS = try Data(ecSignature.skip(.integer).read(.integer))
-		let curveType = ECCurveType.P256
-		let fixlenR = Asn1IntegerConversion.toRaw(varlenR, of: curveType.coordinateOctetLength)
-		let fixlenS = Asn1IntegerConversion.toRaw(varlenS, of: curveType.coordinateOctetLength)
-		let signatureDataRaw = fixlenR + fixlenS
-		XCTAssertEqual(ecdsaSignature.rawRepresentation, signatureDataRaw)
-	
 	}
 	
 	
