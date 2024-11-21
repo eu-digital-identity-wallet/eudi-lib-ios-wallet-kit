@@ -62,13 +62,15 @@ extension ClaimSet: @retroactive @unchecked Sendable {}
 
 extension MdocDataModel18013.CoseKeyPrivate {
   // decode private key data cbor string and save private key in key chain
-	public init?(base64: String) {
-			guard let d = Data(base64Encoded: base64), let obj = try? CBOR.decode([UInt8](d)), let coseKey = CoseKey(cbor: obj), let cd = obj[-4], case let CBOR.byteString(rd) = cd else { return nil }
-		let sampleSA = SampleDataSecureArea(storage: SecureAreaRegistry.shared.defaultSecurityArea!.storage)
+	public static func from(base64: String) async -> MdocDataModel18013.CoseKeyPrivate? {
+		guard let d = Data(base64Encoded: base64), let obj = try? CBOR.decode([UInt8](d)), let coseKey = CoseKey(cbor: obj), let cd = obj[-4], case let CBOR.byteString(rd) = cd else { return nil }
+		let storage = await SecureAreaRegistry.shared.defaultSecurityArea!.getStorage()
+		let sampleSA = SampleDataSecureArea(storage: storage)
 		let keyData = NSMutableData(bytes: [0x04], length: [0x04].count)
 		keyData.append(Data(coseKey.x)); keyData.append(Data(coseKey.y));	keyData.append(Data(rd))
 		sampleSA.x963Key = keyData as Data
-		self.init(secureArea: sampleSA)
+		let res = MdocDataModel18013.CoseKeyPrivate(secureArea: sampleSA)
+		return res
 	}
 }
 
@@ -92,7 +94,9 @@ extension MdocDataModel18013.SignUpResponse {
 	
 	/// Device private key decoded from base64-encoded string
 	public var devicePrivateKey: CoseKeyPrivate? {
-		guard let privateKey else { return nil }
-		return CoseKeyPrivate(base64: privateKey)
+		get async {
+			guard let privateKey else { return nil }
+			return await CoseKeyPrivate.from(base64: privateKey)
+		}
 	}
 }

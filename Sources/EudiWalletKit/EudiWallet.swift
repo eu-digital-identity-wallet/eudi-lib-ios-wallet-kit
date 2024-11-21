@@ -379,7 +379,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let docSamplesData = (sampleDataFiles ?? ["EUDI_sample_data"]).compactMap { Data(name:$0) }
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
 		for dsd in docSamplesData {
-			guard let pkCose = CoseKeyPrivate(base64: dsd.pkData.base64EncodedString()) else { continue }
+			guard let pkCose = await CoseKeyPrivate.from(base64: dsd.pkData.base64EncodedString()) else { continue }
 			let docSample = Document(id: pkCose.privateKeyId, docType: dsd.docType, docDataType: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType), status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}
