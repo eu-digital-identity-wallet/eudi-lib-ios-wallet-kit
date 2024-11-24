@@ -104,8 +104,7 @@ The wallet developer can customize cryptographic key operations by passing `Secu
 
 ```swift
 let wallet = try! EudiWallet(serviceName: "my_wallet_app",
-   trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
-   docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])] )
+   trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!] )
 ```	
 
 
@@ -177,7 +176,7 @@ If ``userAuthenticationRequired`` is true, user authentication is required. The 
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the `issueDocument(docType:format:)` method.
+When the document docType to be issued use the `issueDocument(docType:format:keyOptions:)` method.
 
 __Important Notes__:
 
@@ -192,7 +191,7 @@ wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer"
 wallet.openID4VciClientId = "wallet-dev"
 wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
 do {
-  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor, keyOptions: nil)
   // document has been added to wallet storage, you can display it
 }
 catch {
@@ -213,11 +212,12 @@ The following example shows how to resolve a credential offer:
   }
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
 The following example shows how to issue documents by offer URL:
 ```swift
- let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers, format: .cbor, txCodeValue: txCodeValue )
+ let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers,
+   docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])], format: .cbor, txCodeValue: txCodeValue )
 ```
 
 ### Authorization code flow
@@ -236,13 +236,13 @@ information. Specifically, the `txCodeSpec` field in the `OfferedIssuanceModel` 
 
 From the user's perspective, the application must provide a way to input the transaction code.
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` method.
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
 
 ### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling `issueDocument(docType:format:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.
+After calling `issueDocument(docType:format:keyOptions: KeyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 

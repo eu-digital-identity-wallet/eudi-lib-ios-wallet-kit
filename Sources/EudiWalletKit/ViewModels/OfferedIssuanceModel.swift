@@ -19,7 +19,7 @@ import Foundation
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
 ///
-/// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:useSecureEnclave:)``
+/// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:)``
 public struct OfferedIssuanceModel: Sendable {
 	/// Issuer name (currently the URL)
 	public let issuerName: String
