@@ -178,20 +178,13 @@ After issuing a document, the document data and corresponding private key are st
 ### Issue document by docType
 When the document docType to be issued use the `issueDocument(docType:format:keyOptions:)` method.
 
-__Important Notes__:
-
-- Currently, only mso_mdoc format is supported
-- Currently, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
-  publicKey.
+* Currently, only mso_mdoc format is supported
 
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
 ```swift
-wallet.openID4VciIssuerUrl = "https://eudi.netcompany-intrasoft.com/pid-issuer" 
-wallet.openID4VciClientId = "wallet-dev"
-wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
 do {
-  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor, keyOptions: nil)
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor, keyOptions: KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])])
   // document has been added to wallet storage, you can display it
 }
 catch {
