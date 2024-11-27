@@ -1,5 +1,5 @@
 {
-  "originHash" : "86536d21740c617df3796beb2671eeca81da0f6e482dab2f3e02d577ab2f1079",
+  "originHash" : "1121220f928cb04a935ef966e9ddf7b09b23f4c43c4bc8a04c51d219fd3d4789",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -25,7 +25,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "c31db98a1436e9b6ada82caa1905b1eb65586cbc"
+        "revision" : "2c361ae37523b176f0cdae6cbd3745bb5827bb49"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "56909b8c4c942f1cd677c85cbd0a07b6be7084da"
+        "revision" : "0b998943af9b6f2ae15839a138544a267952e49f"
       }
     },
     {
@@ -43,7 +43,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git",
       "state" : {
         "branch" : "SecureArea",
-        "revision" : "64044b21e1efaa9acf96ecd13b17a158928893bc"
+        "revision" : "13822e420bc3dd72a3a85a696eb441b8a7b012ca"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "branch" : "SecureArea",
-        "revision" : "139b101d860ce2414a57a616b165cbe6bed69a0b"
+        "branch" : "main",
+        "revision" : "18f4906739cebedf63cbf57002d313dc5ab8e087"
       }
     },
     {
@@ -177,8 +177,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "06dc63c6d8da54ee11ceb268cde1fa68161afc96",
-        "version" : "3.9.1"
+        "revision" : "ff0f781cf7c6a22d52957e50b104f5768b50c779",
+        "version" : "3.10.0"
       }
     },
     {
@@ -186,8 +186,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "9cb486020ebf03bfa5b5df985387a14a98744537",
-        "version" : "1.6.1"
+        "revision" : "96a2f8a0fa41e9e09af4585e2724c4e825410b91",
+        "version" : "1.6.2"
       }
     },
     {
