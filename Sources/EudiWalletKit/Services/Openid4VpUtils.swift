@@ -120,12 +120,12 @@ class Openid4VpUtils {
 	
 }
 
-extension ECCurveType {
+extension CoseEcCurve {
 	init?(crvName: String) {
 		switch crvName {
-		case "P-256": self = .p256
-		case "P-384": self = .p384
-		case "P-512": self = .p521
+		case "P-256": self = .P256
+		case "P-384": self = .P384
+		case "P-512": self = .P521
 		default: return nil
 		}
 	}

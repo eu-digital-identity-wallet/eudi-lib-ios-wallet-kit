@@ -50,6 +50,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var sessionTranscript: SessionTranscript!
 	var eReaderPub: CoseKey?
 	var urlSession: URLSession
+	var unlockData: [String: Data]!
 	public var flow: FlowType
 
 	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
@@ -67,7 +68,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.urlSession = urlSession
 	}
 	
-	public func startQrEngagement() async throws -> String? { nil }
+	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
+		if unlockData == nil {
+			unlockData = [String: Data]()
+			for (id, key) in devicePrivateKeys {
+				let ud = try await key.secureArea.unlockKey(id: id)
+				if let ud { unlockData[id] = ud }
+			}
+		}
+		return ""
+	}
 	
 	///  Receive request from an openid4vp URL
 	///
@@ -82,7 +92,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				self.resolvedRequestData = resolvedRequestData
 				switch resolvedRequestData {
 				case let .vpToken(vp):
-					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.ECCurveType(crvName: crv)  {
+					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv)  {
 						logger.info("Found jwks public key with curve \(crv)")
 						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 					}
@@ -122,7 +132,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
-		guard let (deviceResponse, _, _) = try MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docs, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
+		guard let (deviceResponse, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docs, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		// Obtain consent
 		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
 		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
