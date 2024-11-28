@@ -1,3 +1,35 @@
+## v0.8.0
+### Secure area refactoring
+####  `EudiWallet` changes:
+- `init` added `secureAreas`: `[SecureArea]` optional parameter (default is `["SecureEnclave", "Software"]`)
+- `issueDocument`: added `keyOptions` optional parameter to specify the secure area name and other key options for the key creation
+- `issueDocumentsByOfferUrl`: added `docTypeKeyOptions` optional parameter to specify the secure area name and other key options for each doc type 
+
+## v0.7.8
+- `RequestItems` conforms to `Equatable` protocol
+
+## v0.7.7
+ - Fix issue [#118](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/118)
+ ### Breaking changes
+- `RequestItems` is now a dictionary with a key of type `String` (doc-type) and a value of type `[String: [RequestItem]]` (namespace to request items)
+- `RequestItem` is a struct with the following properties: `elementIdentifier`, `intentToRetain` and `isOptional`
+ ```swift
+ public typealias RequestItems = [String: [String: [RequestItem]]]
+```
+- ElementViewModel: `public var isMandatory: Bool` is removed
+- ElementViewModel: `public var isOptional: Bool` is added (opposite of `isMandatory`)
+
+## v0.7.6
+- Refactored security to use SecureArea for cryptographic operations. The wallet developer can specify SecureArea instances which are registered by their name, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas.  The wallet developer can specify Key create options per doc-type such as curve type, secure area name, key unlock policy, key access control and key unlock data.
+
+## v0.7.5
+
+## v0.7.4
+- Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
+
+## v0.7.3
+- Bug fix
+
 ## v0.7.2
 - Removed `@MainActor` annotation from class definitions
 
@@ -125,10 +157,10 @@ e.g. 	wallet.serviceName = "wallet_dev"
 
 The flow is supported by existing methods:
 
-1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel`
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> OfferedIssueModel`
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
 
-2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `issueDocumentsByOfferUrl` must include the transaction code (parameter `txCodeValue`). 
+2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`). 
 
 - Note: for the clientId value the `EudiWallet/openID4VciClientId` is used.
 
@@ -191,11 +223,11 @@ OpenID4VCI: Fixed issuing with https://dev.issuer.eudiw.dev
 ### Added functions:
 /// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
 
-` public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] `
+` public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> [OfferedDocModel] `
 
 /// Issue documents by offer URI.
 
-`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
+`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], docTypeKeyOptions: [String: KeyOptions]? = nil, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
 
 ### Breaking change: 
  `// PresentationSession

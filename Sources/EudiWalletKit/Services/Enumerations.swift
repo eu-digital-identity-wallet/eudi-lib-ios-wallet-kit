@@ -41,7 +41,6 @@ public extension DataFormat {
 		switch docDataType {
 		case .cbor:	self = .cbor
 		case .sjwt:	self = .sdjwt
-		default: return nil
 		}
 	}
 }

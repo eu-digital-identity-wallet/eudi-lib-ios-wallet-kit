@@ -35,6 +35,7 @@ struct PendingIssuanceModel: Codable {
 	let pendingReason: PendingReason
 	let identifier: CredentialConfigurationIdentifier
 	let displayName: String
+	let algValuesSupported: [String]
 	let metadataKey: String
 	let pckeCodeVerifier: String
 	let pckeCodeVerifierMethod: String
