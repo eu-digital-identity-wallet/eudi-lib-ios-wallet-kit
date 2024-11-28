@@ -1,3 +1,13 @@
+## v0.8.0
+### Secure area refactoring
+####  `EudiWallet` changes:
+- `init` added `secureAreas`: `[SecureArea]` optional parameter (default is `["SecureEnclave", "Software"]`)
+- `issueDocument`: added `keyOptions` optional parameter to specify the secure area name and other key options for the key creation
+- `issueDocumentsByOfferUrl`: added `docTypeKeyOptions` optional parameter to specify the secure area name and other key options for each doc type 
+
+## v0.7.8
+- `RequestItems` conforms to `Equatable` protocol
+
 ## v0.7.7
  - Fix issue [#118](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/118)
  ### Breaking changes

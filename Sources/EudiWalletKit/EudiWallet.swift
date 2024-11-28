@@ -192,6 +192,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///  - Parameters:
 	///   - docType: Document type
 	///   - format: Optional format type. Defaults to cbor
+	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional) 
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
 	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
@@ -277,6 +278,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - offerUri: url with offer
 	///   - docTypes: offered doc models available to be issued
+	///   - docTypeKeyOptions: Key options (secure are name and other options) for each docType (optional)
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - format: data format (defaults to cbor)
 	///   - promptMessage: prompt message for biometric authentication (optional)
