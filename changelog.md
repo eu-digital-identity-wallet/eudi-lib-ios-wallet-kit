@@ -19,11 +19,6 @@
 - ElementViewModel: `public var isMandatory: Bool` is removed
 - ElementViewModel: `public var isOptional: Bool` is added (opposite of `isMandatory`)
 
-## v0.7.6
-- Refactored security to use SecureArea for cryptographic operations. The wallet developer can specify SecureArea instances which are registered by their name, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas.  The wallet developer can specify Key create options per doc-type such as curve type, secure area name, key unlock policy, key access control and key unlock data.
-
-## v0.7.5
-
 ## v0.7.4
 - Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
 
