@@ -1,14 +1,14 @@
 # Custom key management
 
-Eudi Wallet Kit supports custom key management through the implementation of [SecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securearea) and [SecureKeyStorage](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securekeystorage) protocols. This document details the process of integrating custom key management with the library.
+Eudi Wallet Kit supports custom key management through the implementation of SecureArea and SecureKeyStorage protocols. This document details the process of integrating custom key management with the library.
 
 ### Secure areas
 
-The wallet developer can customize cryptographic key operations by passing SecureArea instances to the wallet. In the absence of custom instances, the wallet kit automatically generates [SecureEnclaveSecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-security/documentation/mdocsecurity18013/secureenclavesecurearea) (default) and [SecureEnclaveSecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-security/documentation/mdocsecurity18013/softwaresecurearea) secure areas. 
+The wallet developer can customize cryptographic key operations by passing [SecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securearea) instances to the wallet. In the absence of custom instances, the wallet kit automatically generates [SecureEnclaveSecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-security/documentation/mdocsecurity18013/secureenclavesecurearea) (default) and [SecureEnclaveSecureArea](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-security/documentation/mdocsecurity18013/softwaresecurearea) secure areas. 
 
 The secure area instance must be initialized with a secure key storage area implementing the [SecureKeyStorage](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securekeystorage) protocol. An iOS keychain-based storage is provided via the [KeyChainSecureKeyStorage](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-storage/documentation/walletstorage/keychainsecurekeystorage) actor. 
 
-Assuming that the application developer has implemented the SecureArea protocol and registered an instance with the wallet kit, it will be available for custom secure area for cryptographic operations. The following example demonstrates how to register a custom secure area with the wallet kit:
+Assuming that the application developer has implemented the SecureArea protocol and registered an instance with the wallet kit, it will be available for custom secure area cryptographic operations. The following example demonstrates how to register a custom secure area with the Wallet Kit:
 
 ```swift
 let keyChainStorage = KeyChainSecureKeyStorage(serviceName: self.serviceName, accessGroup: nil)
