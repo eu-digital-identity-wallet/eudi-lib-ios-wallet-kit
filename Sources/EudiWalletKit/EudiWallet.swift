@@ -103,8 +103,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		} else {
 			// register default secure areas
 			let kcSks = KeyChainSecureKeyStorage(serviceName: self.serviceName, accessGroup: accessGroup)
-			if SecureEnclave.isAvailable { SecureAreaRegistry.shared.register(secureArea: SecureEnclaveSecureArea(storage: kcSks)) }
-			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea(storage: kcSks))
+			if SecureEnclave.isAvailable { SecureAreaRegistry.shared.register(secureArea: SecureEnclaveSecureArea.create(storage: kcSks)) }
+			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea.create(storage: kcSks))
 		}
 	}
 	
