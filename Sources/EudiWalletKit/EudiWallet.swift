@@ -103,8 +103,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		} else {
 			// register default secure areas
 			let kcSks = KeyChainSecureKeyStorage(serviceName: self.serviceName, accessGroup: accessGroup)
-			if SecureEnclave.isAvailable { SecureAreaRegistry.shared.register(secureArea: SecureEnclaveSecureArea(storage: kcSks)) }
-			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea(storage: kcSks))
+			if SecureEnclave.isAvailable { SecureAreaRegistry.shared.register(secureArea: SecureEnclaveSecureArea.create(storage: kcSks)) }
+			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea.create(storage: kcSks))
 		}
 	}
 	
@@ -382,7 +382,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			.compactMap(SignUpResponse.decomposeCBORSignupResponse(data:)).flatMap {$0}
 		for dsd in docSamplesData {
 			guard let pkCose = await CoseKeyPrivate.from(base64: dsd.pkData.base64EncodedString()) else { continue }
-			let docSample = Document(id: pkCose.privateKeyId, docType: dsd.docType, docDataType: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType), status: .issued)
+			let id = UUID().uuidString
+			_ = try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
+			let docSample = Document(id: id, docType: dsd.docType, docDataType: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType), status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}
 		do {
