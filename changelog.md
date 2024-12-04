@@ -1,7 +1,7 @@
 ## v0.8.1
 ### Breaking changes
-- `SecureArea` protocol static factory method added: `nonisolated public static func create(storage: any KeyChainSecureKeyStorage) -> Self`
-- Removed `SecureArea` protocol initializer: `init(storage: any KeyChainSecureKeyStorage)` (use the static factory method instead)
+- `SecureArea` protocol static factory method added: `nonisolated public static func create(storage: any SecureKeyStorage) -> Self`
+- Removed `SecureArea` protocol initializer: `init(storage: any SecureKeyStorage)` (use the static factory method instead)
 - Removed property `storage` from `SecureArea` protocol
 
 ## v0.8.0
