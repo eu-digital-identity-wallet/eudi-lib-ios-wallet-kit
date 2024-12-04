@@ -383,7 +383,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		for dsd in docSamplesData {
 			guard let pkCose = await CoseKeyPrivate.from(base64: dsd.pkData.base64EncodedString()) else { continue }
 			let id = UUID().uuidString
-			try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
+			_ = try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
 			let docSample = Document(id: id, docType: dsd.docType, docDataType: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, modifiedAt: nil, displayName: dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType), status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}
