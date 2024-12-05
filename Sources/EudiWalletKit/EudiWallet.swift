@@ -29,9 +29,11 @@ import Logging
 import FileLogging
 import UIKit
 #endif
+import SwiftUI
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject, @unchecked Sendable {
+	@Environment(\.scenePhase) var scenePhase
 	/// Storage manager instance
 	public private(set) var storage: StorageManager!
 	public private(set) var serviceName: String 
@@ -195,7 +197,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional) 
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
-	@MainActor
 	@discardableResult public func issueDocument(docType: String, format: DataFormat = .cbor, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
 		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, disablePrompt: false, promptMessage: promptMessage)
 		let data = try await openId4VCIService.issueDocument(docType: docType, format: format, promptMessage: promptMessage)
@@ -285,7 +286,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - claimSet: claim set (optional)
 	/// - Returns: Array of issued and stored documents
-	@MainActor
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], docTypeKeyOptions: [String: KeyOptions]? = nil, txCodeValue: String? = nil, format: DataFormat = .cbor, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
 		if docTypes.isEmpty { return [] }
@@ -482,9 +482,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard !disabled else {
 			return try await action()
 		}
-		#if !os(iOS)
-			return try await action()
-		#else
 		let context = LAContext()
 		var error: NSError?
 		let policy: LAPolicy = .deviceOwnerAuthentication
@@ -493,9 +490,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success, let scene = await UIApplication.shared.connectedScenes.first {
 					let activateState = await scene.activationState
-					while activateState != .foregroundActive && activateState != .foregroundInactive {
-					  // Delay the task by 0.5 second if not foreground
-						try await Task.sleep(nanoseconds: 500_000_000)
+					if activateState != .foregroundActive {
+					  // Delay the task by 1 second if not foreground
+						try await Task.sleep(nanoseconds: 1_000_000_000)
 					}
 					return try await action()
 				}
@@ -512,6 +509,5 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			throw WalletError(description: error.localizedDescription)
 		}
 		return nil
-	#endif
 	}
 }
