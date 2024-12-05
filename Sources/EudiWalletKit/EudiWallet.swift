@@ -493,9 +493,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
 				if success, let scene = await UIApplication.shared.connectedScenes.first {
 					let activateState = await scene.activationState
-					while activateState != .foregroundActive && activateState != .foregroundInactive {
-					  // Delay the task by 0.5 second if not foreground
-						try await Task.sleep(nanoseconds: 500_000_000)
+					if activateState != .foregroundActive {
+					  // Delay the task by 1 second if not foreground
+						try await Task.sleep(nanoseconds: 1_000_000_000)
 					}
 					return try await action()
 				}
