@@ -29,11 +29,9 @@ import Logging
 import FileLogging
 import UIKit
 #endif
-import SwiftUI
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject, @unchecked Sendable {
-	@Environment(\.scenePhase) var scenePhase
 	/// Storage manager instance
 	public private(set) var storage: StorageManager!
 	public private(set) var serviceName: String 
