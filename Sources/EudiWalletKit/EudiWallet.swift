@@ -270,9 +270,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - uriOffer: url with offer
 	///   - format: data format
 	/// - Returns: Offered issue information model
-	public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> OfferedIssuanceModel {
+	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
 		let openId4VCIService = try await prepareIssuing(id: "-", docType: "", displayName: nil, keyOptions: nil, disablePrompt: true, promptMessage: nil)
-		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOffer, format: format)
+		return try await openId4VCIService.resolveOfferDocTypes(uriOffer: uriOffer)
 	}
 	
 	/// Issue documents by offer URI.
