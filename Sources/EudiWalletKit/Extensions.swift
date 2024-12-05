@@ -100,3 +100,7 @@ extension MdocDataModel18013.SignUpResponse {
 		}
 	}
 }
+
+/// Extension to make BindingKey conform to Sendable
+extension BindingKey: @unchecked @retroactive Sendable {
+}

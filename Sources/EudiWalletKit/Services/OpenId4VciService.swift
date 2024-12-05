@@ -231,11 +231,11 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		throw WalletError(description: "Failed to get push authorization code request")
 	}
 	
-	private func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest{
+	private func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest { 
 		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
 		switch unAuthorized {
 		case .success(let request):
-			let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
+			let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request)
 			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
 				let at = token.accessToken;	logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 				return authorized
@@ -251,7 +251,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier,	claimSet: claimSet)
 			let responseEncryptionSpecProvider =  { @Sendable in Issuer.createResponseEncryptionSpec($0) }
-			let requestOutcome = try await issuer.requestSingle(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
+			let requestOutcome = try await issuer.request(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 			switch requestOutcome {
 			case .success(let request):
 				switch request {
@@ -261,9 +261,8 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 						case .deferred(let transactionId):
 							let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 							return .deferred(deferredModel)
-						case .issued(let credential, _):
-							guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
-							return .issued(data, displayName)
+						case .issued(let format, let credential, _, _):
+							return try handleCredentialResponse(credential: credential, format: format, displayName: displayName)
 						}
 					} else {
 						throw WalletError(description: "No credential response results available")
@@ -279,13 +278,24 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		default: throw WalletError(description: "Illegal noProofRequiredState case")
 		}
 	}
+
+	private func handleCredentialResponse(credential: Credential, format: String?, displayName: String?) throws -> IssuanceOutcome {
+		logger.info("Credential issued with format \(format ?? "unknown")")
+		if case let .string(strBase64) = credential, let data = Data(base64URLEncoded: strBase64) {
+			return .issued(data, displayName)
+		} else if case let .json(json) = credential {
+			return .issued(try JSONEncoder().encode(json), displayName)
+		} else {
+			throw WalletError(description: "Invalid credential")
+		}
+	}
 	
 	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier?, displayName: String?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let credentialConfigurationIdentifier else { throw WalletError(description: "Credential configuration identifier not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: credentialConfigurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
-		let requestOutcome = try await issuer.requestSingle(proofRequest: authorized, bindingKey: bindingKey, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
+		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
 			switch request {
@@ -295,9 +305,8 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 					case .deferred(let transactionId):
 						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, displayName: displayName ?? "", timeStamp: timeStamp)
 						return .deferred(deferredModel)
-					case .issued(let credential, _):
-						guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
-						return .issued(data, displayName)
+					case .issued(let format, let credential, _, _):
+						return try handleCredentialResponse(credential: credential, format: format, displayName: displayName)
 					}
 				} else {
 					throw WalletError(description: "No credential response results available")
@@ -328,7 +337,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		let issuer = try getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.identifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorized = try await issuer.requestAccessToken(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.identifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier))).get()
+		let authorized = try await issuer.authorizeWithAuthorizationCode(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.identifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.identifier]))).get()
 		try await initSecurityKeys(algSupported: model.algValuesSupported)
 		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, credentialConfigurationIdentifier: model.identifier, displayName: model.displayName, claimSet: nil)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
@@ -342,8 +351,7 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		case .success(let response):
 			switch response {
 			case .issued(let credential):
-				guard let data = Data(base64URLEncoded: credential) else { throw WalletError(description: "Invalid credential")	}
-				return .issued(data, displayName)
+				return try handleCredentialResponse(credential: credential, format: nil, displayName: displayName)
 			case .issuancePending(let transactionId):
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
 				let deferredModel = switch authorized {
