@@ -1,3 +1,7 @@
+## v0.8.2
+- Update for OpenID4VCI Draft14 (eudi-lib-ios-openid4vci-swift updated to tag 0.9.0)
+- Use @MainActor for issuing methods due to authentication UI
+
 ## v0.8.1
 ### Breaking changes
 - `SecureArea` protocol static factory method added: `nonisolated public static func create(storage: any SecureKeyStorage) -> Self`
