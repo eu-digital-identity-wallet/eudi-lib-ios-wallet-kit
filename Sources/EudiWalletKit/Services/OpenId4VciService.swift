@@ -99,7 +99,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 	
 	func issueDocumentByOfferUrl(offerUri: String, docTypeModel: OfferedDocModel, txCodeValue: String?, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome? {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
-		defer { Self.metadataCache.removeValue(forKey: offerUri) }
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		guard let credentialInfo = try? getCredentialIdentifier(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, docType: docTypeModel.docType, format: format) else { return nil }
 		try await initSecurityKeys(algSupported: credentialInfo.algValuesSupported)
