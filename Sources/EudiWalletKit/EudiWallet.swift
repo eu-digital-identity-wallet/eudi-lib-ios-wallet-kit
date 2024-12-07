@@ -486,6 +486,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		if context.canEvaluatePolicy(policy, error: &error) {
 			do {
 				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
+				#if canImport(UIKIt)
 				if success, let scene = await UIApplication.shared.connectedScenes.first {
 					let activateState = await scene.activationState
 					if activateState != .foregroundActive {
@@ -494,7 +495,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 					}
 					return try await action()
 				}
-				else { dismiss()}
+				else { dismiss(); }
+				#else 
+				if success { return try await action() } 
+				#endif
 			} catch let laError as LAError {
 				if !isFallBack, laError.code == .userFallback {
 					return try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
