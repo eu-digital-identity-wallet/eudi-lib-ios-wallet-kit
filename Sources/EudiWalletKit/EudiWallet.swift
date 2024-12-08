@@ -295,6 +295,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offerUri: offerUri, docTypeModel: docTypeModel, txCodeValue: txCodeValue, format: format, promptMessage: promptMessage, claimSet: claimSet) else { continue }
 			documents.append(try await finalizeIssuing(data: docData, docType: docData.isDeferred ? docTypes[i].docType : nil, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
+		OpenId4VCIService.metadataCache.removeValue(forKey: offerUri)
 		return documents
 	}
 	
