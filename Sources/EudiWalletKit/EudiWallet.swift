@@ -294,12 +294,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, format: format)
 		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
-			openId4VCIServices[i].bindingKey = openId4VCIServices.first!.bindingKey
-			guard let offer = OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+			if i > 0 { await openId4VCIServices[i].setBindingKey(bindingKey: await openId4VCIServices.first!.bindingKey) }
+			guard let offer = await OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, credentialInfo: credentialInfos[i], promptMessage: promptMessage, claimSet: claimSet) else { continue }
 			documents.append(try await finalizeIssuing(data: docData, docType: docData.isDeferred ? docTypes[i].docType : nil, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
-		OpenId4VCIService.metadataCache.removeValue(forKey: offerUri)
+		await OpenId4VCIService.removeOfferFromMetadata(offerUri: offerUri)
 		return documents
 	}
 	

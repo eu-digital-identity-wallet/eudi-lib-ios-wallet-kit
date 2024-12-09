@@ -28,7 +28,7 @@ import JOSESwift
 
 extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
 
-public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
+public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	var bindingKey: BindingKey!
@@ -59,6 +59,14 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
 		bindingKey = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer) , issuer: config.clientId)
+	}
+
+	func setBindingKey(bindingKey: BindingKey) {
+		self.bindingKey = bindingKey
+	}
+
+	static func removeOfferFromMetadata(offerUri: String) {
+		Self.metadataCache.removeValue(forKey: offerUri)
 	}
 	
 	/// Issue a document with the given `docType` using OpenId4Vci protocol
