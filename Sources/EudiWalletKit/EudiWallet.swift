@@ -288,9 +288,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard format == .cbor else { fatalError("jwt format not implemented") }
 		if docTypes.isEmpty { return [] }
 		var documents = [WalletStorage.Document]()
+		var openId4VCIServices = [OpenId4VCIService]() 
 		for (i, docTypeModel) in docTypes.enumerated() {
-			let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypes.map(\.docType).joined(separator: ", "), displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: docTypeKeyOptions?[docTypeModel.docType], disablePrompt: i > 0, promptMessage: promptMessage)
-			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offerUri: offerUri, docTypeModel: docTypeModel, txCodeValue: txCodeValue, format: format, promptMessage: promptMessage, claimSet: claimSet) else { continue }
+			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypes.map(\.docType).joined(separator: ", "), displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: docTypeKeyOptions?[docTypeModel.docType], disablePrompt: i > 0, promptMessage: promptMessage))
+		}
+		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, format: format)
+		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
+			openId4VCIServices[i].bindingKey = openId4VCIServices.first!.bindingKey
+			guard let offer = OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, credentialInfo: credentialInfos[i], promptMessage: promptMessage, claimSet: claimSet) else { continue }
 			documents.append(try await finalizeIssuing(data: docData, docType: docData.isDeferred ? docTypes[i].docType : nil, format: format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
 		OpenId4VCIService.metadataCache.removeValue(forKey: offerUri)
