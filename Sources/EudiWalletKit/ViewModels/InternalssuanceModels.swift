@@ -18,6 +18,13 @@ import Foundation
 @preconcurrency import OpenID4VCI
 import WalletStorage
 
+struct CredentialConfiguration: Sendable {
+	let identifier: CredentialConfigurationIdentifier
+	let scope: String
+	let displayName: String?
+	let algValuesSupported: [String]
+}
+
 struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
 	let accessToken: IssuanceAccessToken
@@ -48,10 +55,24 @@ enum IssuanceOutcome {
 }
 
 extension IssuanceOutcome {
-	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
-	var isPending: Bool { switch self { case .pending(_): true; default: false } }
-	var pendingOrDeferredStatus: DocumentStatus? { switch self { case .deferred(_): .deferred; case .pending(_): .pending; default: nil } }
+	var isDeferred: Bool {
+		switch self {
+		case .deferred(_): true
+		default: false
+		}
+	}
+	var isPending: Bool {
+		switch self {
+		case .pending(_): true
+		default: false
+		}
+	}
+	var pendingOrDeferredStatus: DocumentStatus? {
+		switch self {
+		case .deferred(_): .deferred
+		case .pending(_): .pending
+		default: nil
+		}
+	}
 }
-
-	
 

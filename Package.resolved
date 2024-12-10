@@ -1,5 +1,5 @@
 {
-  "originHash" : "8fcf479635d61188a4fb8fcfce50e451e8721e48de01744dcb206e08824e8559",
+  "originHash" : "0cadf5d34094304873169a948165b2e0c9a9b38d371b26dabc88c7f9eb3c774a",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "176842b11ccd7cf5cc14cc12464ea431d12a2a5c",
-        "version" : "0.9.0"
+        "revision" : "a2d316ac7fd9b010ed528f41b3992be2eea98881",
+        "version" : "0.9.1"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-presentation-exchange-swift.git",
       "state" : {
-        "revision" : "4e1ac57b6772f7f6eac5ef24d977c42e94bc6565",
-        "version" : "0.2.0"
+        "revision" : "21e03b18e4ea349edd21c016b9e0b3a2063285bf",
+        "version" : "0.2.1"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "1049277d9b5818416b313f58a5eaf139de9881b3",
-        "version" : "0.6.1"
+        "revision" : "c72b0f972f765bd106b52c953de0827096398763",
+        "version" : "0.6.2"
       }
     },
     {
@@ -213,8 +213,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SwiftyJSON/SwiftyJSON.git",
       "state" : {
-        "revision" : "2b6054efa051565954e1d2b9da831680026cd768",
-        "version" : "4.3.0"
+        "revision" : "af76cf3ef710b6ca5f8c05f3a31307d44a3c5828",
+        "version" : "5.0.2"
       }
     },
     {
