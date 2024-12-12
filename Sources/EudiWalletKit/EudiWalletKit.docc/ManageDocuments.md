@@ -42,7 +42,7 @@ The storage model provides the following models for the supported well-known doc
 
 Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager/toClaimsModel(doc:modelFactory:)`` function to decode document raw CBOR data to strongly-typed models conforming to [MdocDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocdecodable) protocol. 
 
-The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``mdocModels`` property. The deferred and pending documents are available in the ``deferredDocuments`` and ``pendingDocuments`` properties respectively.
+The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``docModels`` property. The deferred and pending documents are available in the ``deferredDocuments`` and ``pendingDocuments`` properties respectively.
 
 For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
 

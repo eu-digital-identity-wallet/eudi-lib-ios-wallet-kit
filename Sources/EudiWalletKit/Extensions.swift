@@ -21,6 +21,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
+import SwiftyJSON
 
 extension String {
 	public func translated() -> String {
@@ -39,6 +40,18 @@ extension Bundle {
 		guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String:Any]], let schema = urlTypes.first, let urlSchemas = schema["CFBundleURLSchemes"] as? [String] else {return nil}
 		return urlSchemas
 	}
+}
+
+extension Data { 
+      public init?(base64urlEncoded input: String) {
+          var base64 = input
+          base64 = base64.replacingOccurrences(of: "-", with: "+")
+          base64 = base64.replacingOccurrences(of: "_", with: "/")
+          while base64.count % 4 != 0 {
+              base64 = base64.appending("=")
+          }
+          self.init(base64Encoded: base64)
+      }
 }
 
 extension FileManager {
@@ -125,7 +138,7 @@ extension CredentialConfiguration {
 		}
 		let flatClaims = flatClaims?.mapValues(\.metadata)
 		return DocMetadata(
-			docType: docType ?? identifier.value,
+			docType: docType,
 			displayName: display.getName(),
 			namespacedClaims: namespacedClaims,
 			flatClaims: flatClaims
@@ -134,23 +147,77 @@ extension CredentialConfiguration {
 }
 
 extension DocMetadata {
-	func getClaimMetadata() -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
+	func getCborClaimMetadata() -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
 		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil) }
 		let claimDisplayNames = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.displayName != nil }.mapValues { claim in
-				claim.displayName!
-			}
+			claims.filter { (k,v) in v.displayName != nil }.mapValues { $0.displayName!}
 		}
 		let mandatoryClaims = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { claim in
-				claim.isMandatory!
-			}
+			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
 		}
 		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.valueType != nil }.mapValues { claim in
-				claim.valueType!
-			}
+			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
 		}
 		return (displayName, claimDisplayNames, mandatoryClaims, claimValueTypes)
+	}
+
+	func getFlatClaimMetadata() -> (displayName: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
+		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil) }
+		let claimDisplayNames = flatClaims.filter { (k,v) in v.displayName != nil }.mapValues { $0.displayName!}	
+		let mandatoryClaims = flatClaims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
+		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
+		return (displayName, claimDisplayNames, mandatoryClaims, claimValueTypes)
+	}
+}
+
+extension JSON {
+	func getDataValue(name: String, valueType: String?) -> (DocDataValue, String)? {
+		switch type {
+		case .number:
+			if name == "sex", let isex = Int(stringValue), isex <= 2 { return (.string(NSLocalizedString(isex == 1 ? "male" : "female", comment: "")), stringValue) }
+			return (.integer(UInt64(intValue)), stringValue)
+		case .string:
+			if name == "portrait" || name == "signature_usual_mark", let d = Data(base64urlEncoded: stringValue) { return (.bytes(d.bytes), "\(d.count) bytes") }
+			return (.string(stringValue), stringValue)
+		case .bool: return (.boolean(boolValue), boolValue ? "Y" : "N")
+		case .array: return (.array, stringValue)
+		case .dictionary:	return (.dictionary, stringValue)
+		case .null:	return nil
+		case .unknown: return nil
+		}
+	}
+
+	func toDocClaim(_ key: String, order n: Int, _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?) -> DocClaim? {
+		if key == "cnf", type == .dictionary { return nil }
+		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
+		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes)
+		let isMandatory = mandatoryClaims?[key] ?? true
+		return DocClaim(name: key, displayName: claimDisplayNames?[key], docDataValue: pair.0, valueType: claimValueTypes?[key], stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: nil, children: ch?.0) 
+	}
+
+	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?) -> ([DocClaim], String)? {
+		switch type {
+		case .array, .dictionary:
+			var a = [DocClaim]()
+			for (n,(key,subJson)) in enumerated() {
+				if let di = subJson.toDocClaim(key, order: n, claimDisplayNames, mandatoryClaims, claimValueTypes) {	a.append(di) }
+			}
+			return (a, type == .array ? "[\(a.map(\.stringValue).joined(separator: ", "))]" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ", "))}")
+		default: return nil
+		}
+	}
+
+}
+
+extension DocClaimsDecodable {	/// Extracts display strings and images from the provided namespaces and populates the given arrays.
+	///
+	/// - Parameters:
+	///   - nameSpaces: A dictionary where the key is a `NameSpace` and the value is an array of `IssuerSignedItem`.
+	///   - docClaims: An inout parameter that will be populated with `DocClaim` items extracted from the namespaces.
+	///   - labels: A dictionary where the key is the elementIdentifier and the value is a string representing the label.
+	///   - nsFilter: An optional array of `NameSpace` to filter/sort the extraction. Defaults to `nil`.
+	public static func extractJSONClaims(_ json: JSON, _ docClaims: inout [DocClaim], _ claimDisplayNames: [String: String]? = nil, _ mandatoryClaims: [String: Bool]? = nil, _ claimValueTypes: [String: String]? = nil) {
+		let claims = json.toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes)?.0 ?? []
+		docClaims.append(contentsOf: claims)
 	}
 }

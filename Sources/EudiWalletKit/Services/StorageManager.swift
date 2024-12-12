@@ -20,6 +20,7 @@ import MdocDataModel18013
 import WalletStorage
 import Logging
 import CryptoKit
+import eudi_lib_sdjwt_swift
 
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject, @unchecked Sendable {
@@ -114,18 +115,16 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// - Returns: An optional `DocClaimsDecodable` model created from the given document.
 	public static func toClaimsModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		switch doc.docDataType {
-		case .cbor:
-			return toCborMdocModel(doc: doc, modelFactory: modelFactory)
-		case .sjwt: return nil
+		case .cbor:	toCborMdocModel(doc: doc, modelFactory: modelFactory)
+		case .sjwt: toSdJwtDocModel(doc: doc)
 		}
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		guard let (iss, _) = doc.getCborData() else { return nil }
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
-		let md = docMetadata?.getClaimMetadata()
+		let md = docMetadata?.getCborClaimMetadata()
 		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
-		// (id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, metadata: doc.metadata)
 		if retModel == nil {
 			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
 			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
@@ -136,7 +135,17 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 		return retModel
 	}
-	
+
+	public static func toSdJwtDocModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
+		var docClaims = [DocClaim]()
+		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
+		let md = docMetadata?.getFlatClaimMetadata()
+		let parser = CompactParser()
+		guard	let serString = String(data: doc.data, encoding: .utf8), let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString), let result = try? sdJwt.recreateClaims() else { return nil }
+		if let cs = result.recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: docMetadata?.displayName, docClaims: docClaims)
+	}
+
 	public func getDocIdsToTypes() -> [String: (String, String?)] {
 		Dictionary(uniqueKeysWithValues: docModels.filter { $0.docType != nil}.map { m in (m.id, (m.docType!, m.displayName) ) })
 	}

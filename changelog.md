@@ -1,3 +1,13 @@
+## v0.8.6
+### Supports issuing and display of documents with sd-jwt-vc format
+- `DocClaimDecodable` protocol is supported for both mso-mdoc (cbor) and sd-jwt-vc formats
+### Supports saving and retrieving issuer metadata to be used for display
+- `DocClaim` struct has `displayName`, `isOptional` and `valueType` properties provided by the issuer
+### Breaking changes
+- `MdocDecodable` protocol renamed to `DocClaimDecodable`
+- `NameValue` struct renamed to `DocClaim`
+- `NameImage` struct removed
+
 ## v0.8.2
 - Update for OpenID4VCI Draft14 (eudi-lib-ios-openid4vci-swift updated to tag 0.9.0)
 - Use @MainActor for issuing methods due to authentication UI
