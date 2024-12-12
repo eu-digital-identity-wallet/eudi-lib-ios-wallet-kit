@@ -61,11 +61,6 @@
 - Updated README.md with new methods and explanations
 - Added documentation using Swift-DocC (deployed [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/))
 
-## v0.6.6
-### Refactoring :
- - `WalletStorage.Document` implements `DocumentProtocol` protocol
- - `MdocDataModel18013.MdocDecodable` inherits `DocumentProtocol` protocol
-
 ## v0.6.5
 ### Fixes for dynamic issuance:
  - Support dynamic issuance in scoped mode 
@@ -127,7 +122,7 @@ e.g. 	wallet.serviceName = "wallet_dev"
 - Update eudi-lib-ios-openid4vci-swift to version [0.4.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.2)
 - New `EudiWallet` property `public var openID4VciConfig: OpenId4VCIConfig?` to pass OpenID4VCI issuer parameters
 - Removed `EudiWallet` properties `var openID4VciClientId` and `var openID4VciRedirectUri`
-- New `EudiWallet` property `public var modelFactory: (any MdocModelFactory.Type)?` if the UI app wants to pass a model factory type to create custom stronly-typed models. See [`MdocModelFactory`](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocmodelfactory) protocol for more details.
+
 
 ## v0.5.7
 ### StorageManager changes

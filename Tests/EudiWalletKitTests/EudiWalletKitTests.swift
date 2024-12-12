@@ -22,6 +22,7 @@ import PresentationExchange
 import MdocDataModel18013
 import SwiftCBOR
 @testable import JOSESwift
+import eudi_lib_sdjwt_swift
 
 final class EudiWalletKitTests: XCTestCase {
 	func testExample() throws {
@@ -69,5 +70,15 @@ final class EudiWalletKitTests: XCTestCase {
 	    XCTAssert(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 	
-	
-}
+	func testParseSdJwt() throws {
+		let data = Data(name: "sd-jwt", ext: "txt", from: Bundle.module)! 
+		let parser = CompactParser()
+    	let sdJwt = try! parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
+    
+    // When
+    //let json = try sdJwt.asJwsJsonObject( option: .general,  kbJwt: sdJwt.kbJwt?.compactSerialization, getParts: parser.extractJWTParts)
+		let result  = try sdJwt.recreateClaims()
+		print("result: \(result.recreatedClaims)")
+		
+		}
+	}

@@ -31,7 +31,7 @@ public enum FlowType: Codable, Hashable, Sendable {
 }
 
 /// Data format of the exchanged data
-public enum DataFormat: String, Sendable {
+public enum DataFormat: String, Sendable, Codable {
 	case cbor = "cbor"
 	case sdjwt = "sdjwt"
 }
@@ -41,6 +41,15 @@ public extension DataFormat {
 		switch docDataType {
 		case .cbor:	self = .cbor
 		case .sjwt:	self = .sdjwt
+		}
+	}
+}
+
+public extension DocDataType {
+	init?(_ format: DataFormat) {
+		switch format {
+		case .cbor:	self = .cbor
+		case .sdjwt:	self = .sjwt
 		}
 	}
 }

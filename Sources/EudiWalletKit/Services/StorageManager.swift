@@ -27,9 +27,9 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// This array includes document types from `EuPidModel` and `IsoMdlModel`.
 	/// - Note: The document types included are `euPidDocType` and `isoDocType`.
 	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
-	/// A published property that holds an array of CBOR decoded models conforming to the `MdocDecodable` protocol.
+	/// A published property that holds an array of CBOR decoded models conforming to the `DocClaimsDecodable` protocol.
 	/// - Note: The `@Published` property wrapper is used to allow SwiftUI views to automatically update when the value changes.
-	@Published public private(set) var mdocModels: [any MdocDecodable] = []
+	@Published public private(set) var docModels: [any DocClaimsDecodable] = []
 	/// A published property that holds an array of deferred documents.
 	/// - Note: This property is used to store documents that are deferred for later processing.
 	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
@@ -38,24 +38,21 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	var storageService: any DataStorageService
 	/// Whether wallet currently has loaded data
 	@Published public private(set) var hasData: Bool = false
-	/// Whether wallet currently has loaded a document with doc.type included in the ``knownDocTypes`` array
-	@Published public private(set) var hasWellKnownData: Bool = false
 	/// Count of documents loaded in the wallet
 	@Published public private(set) var docCount: Int = 0
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
-	var modelFactory: (any MdocModelFactory)?
+	var modelFactory: (any DocClaimsDecodableFactory)?
 	
-	public init(storageService: any DataStorageService, modelFactory: (any MdocModelFactory)? = nil) {
+	public init(storageService: any DataStorageService, modelFactory: (any DocClaimsDecodableFactory)? = nil) {
 		self.storageService = storageService
 		self.modelFactory = modelFactory
 	}
 	
 	func refreshPublishedVars() async {
 		await MainActor.run {
-			hasData = !mdocModels.isEmpty || !deferredDocuments.isEmpty
-			hasWellKnownData = hasData && !Set(mdocModels.map(\.docType)).isDisjoint(with: Self.knownDocTypes)
-			docCount = mdocModels.count
+			hasData = !docModels.isEmpty || !deferredDocuments.isEmpty
+			docCount = docModels.count
 		}
 	}
 	
@@ -67,8 +64,8 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	private func refreshDocModels(_ docs: [WalletStorage.Document], docStatus: WalletStorage.DocumentStatus) async {
 		switch docStatus {
 		case .issued:
-			let models = docs.compactMap { Self.toMdocModel(doc:$0, modelFactory: modelFactory) }
-			await MainActor.run { mdocModels = models }
+			let models = docs.compactMap { Self.toClaimsModel(doc:$0, modelFactory: modelFactory) }
+			await MainActor.run { docModels = models }
 		case .deferred:
 			await MainActor.run { deferredDocuments = docs }
 		case .pending:
@@ -77,18 +74,18 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 
 	private func refreshDocModel(_ doc: WalletStorage.Document, docStatus: WalletStorage.DocumentStatus) async {
-		if docStatus == .issued && mdocModels.first(where: { $0.id == doc.id}) == nil ||
+		if docStatus == .issued && docModels.first(where: { $0.id == doc.id}) == nil ||
 			docStatus == .deferred && deferredDocuments.first(where: { $0.id == doc.id}) == nil ||
 			docStatus == .pending && pendingDocuments.first(where: { $0.id == doc.id}) == nil {
 			_ = await appendDocModel(doc)
 		}
 	}
 	
-	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) async -> (any MdocDecodable)? {
+	@discardableResult func appendDocModel(_ doc: WalletStorage.Document) async -> (any DocClaimsDecodable)? {
 		switch doc.status {
 		case .issued:
-			let mdoc: (any MdocDecodable)? = Self.toMdocModel(doc: doc, modelFactory: modelFactory)
-			if let mdoc { await MainActor.run { mdocModels.append(mdoc) } }
+			let mdoc: (any DocClaimsDecodable)? = Self.toClaimsModel(doc: doc, modelFactory: modelFactory)
+			if let mdoc { await MainActor.run { docModels.append(mdoc) } }
 			return mdoc
 		case .deferred:
 			await MainActor.run { deferredDocuments.append(doc) }
@@ -108,34 +105,45 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	/// Converts a `WalletStorage.Document` to an `MdocDecodable` model using an optional `MdocModelFactory`.
+	/// Converts a `WalletStorage.Document` to an `DocClaimsDecodable` model using an optional `MdocModelFactory`.
 	///
 	/// - Parameters:
 	///   - doc: The `WalletStorage.Document` to be converted.
 	///   - modelFactory: An optional factory conforming to `MdocModelFactory` to create the model. Defaults to `nil`.
 	///
-	/// - Returns: An optional `MdocDecodable` model created from the given document.
-	public static func toMdocModel(doc: WalletStorage.Document, modelFactory: (any MdocModelFactory)? = nil) -> (any MdocDecodable)? {
-		guard let (iss, dpk) = doc.getCborData() else { return nil }
-		var retModel: (any MdocDecodable)? = modelFactory?.makeMdocDecodable(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName, statusDescription: doc.statusDescription)
+	/// - Returns: An optional `DocClaimsDecodable` model created from the given document.
+	public static func toClaimsModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
+		switch doc.docDataType {
+		case .cbor:
+			return toCborMdocModel(doc: doc, modelFactory: modelFactory)
+		case .sjwt: return nil
+		}
+	}
+
+	public static func toCborMdocModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
+		guard let (iss, _) = doc.getCborData() else { return nil }
+		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
+		let md = docMetadata?.getClaimMetadata()
+		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+		// (id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, metadata: doc.metadata)
 		if retModel == nil {
-			let defModel: (any MdocDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, displayName: doc.displayName, statusDescription: doc.statusDescription)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, displayName: doc.displayName, statusDescription: doc.statusDescription)
+			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
+			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, devicePrivateKey: dpk.1, docType: doc.docType, displayName: doc.displayName, statusDescription: doc.statusDescription)
+			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, docType: doc.docType ?? docMetadata?.docType ?? iss.0, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
 		}
 		return retModel
 	}
 	
 	public func getDocIdsToTypes() -> [String: (String, String?)] {
-		Dictionary(uniqueKeysWithValues: mdocModels.map { m in (m.id, (m.docType, m.displayName) ) })
+		Dictionary(uniqueKeysWithValues: docModels.filter { $0.docType != nil}.map { m in (m.id, (m.docType!, m.displayName) ) })
 	}
 	
 	/// Load documents from storage
 	///
-	/// Internally sets the ``mdocModels``,  ``mdlModel``, ``pidModel`` variables
+	/// Internally sets the ``docModels``,  ``mdlModel``, ``pidModel`` variables
 	/// - Returns: An array of ``WalletStorage.Document`` objects
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]?  {
 		do {
@@ -166,37 +174,37 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 	}
 	
-	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: MdocDecodable {
-		mdocModels.first(where: { type(of: $0) == of}) as? T
+	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: DocClaimsDecodable {
+		docModels.first(where: { type(of: $0) == of}) as? T
 	}
 	
-	func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: MdocDecodable {
-		mdocModels.filter({ type(of: $0) == of}).map { $0 as! T }
+	func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: DocClaimsDecodable {
+		docModels.filter({ type(of: $0) == of}).map { $0 as! T }
 	}
 	
 	/// Get document model by index
 	/// - Parameter index: Index in array of loaded models
-	/// - Returns: The ``MdocDecodable`` model
-	func getDocumentModel(index: Int) -> (any MdocDecodable)? {
-		guard index < mdocModels.count else { return nil }
-		return mdocModels[index]
+	/// - Returns: The ``DocClaimsDecodable`` model
+	func getDocumentModel(index: Int) -> (any DocClaimsDecodable)? {
+		guard index < docModels.count else { return nil }
+		return docModels[index]
 	}
 	
 	/// Get document model by id
 	/// - Parameter id: The id of the document model to retrieve
-	/// - Returns: The ``MdocDecodable`` model
-	public func getDocumentModel(id: String) ->  (any MdocDecodable)? {
-		guard let i = mdocModels.map(\.id).firstIndex(of: id)  else { return nil }
+	/// - Returns: The ``DocClaimsDecodable`` model
+	public func getDocumentModel(id: String) ->  (any DocClaimsDecodable)? {
+		guard let i = docModels.map(\.id).firstIndex(of: id)  else { return nil }
 		return getDocumentModel(index: i)
 	}
 	
 	/// Retrieves document models of a specified type.
 	///
 	/// - Parameter docType: A string representing the type of document to retrieve.
-	/// - Returns: An array of objects conforming to the `MdocDecodable` protocol.
-	public func getDocumentModels(docType: String) -> [any MdocDecodable] {
-		return (0..<mdocModels.count).compactMap { i in
-			guard mdocModels[i].docType == docType else { return nil }
+	/// - Returns: An array of objects conforming to the `DocClaimsDecodable` protocol.
+	public func getDocumentModels(docType: String) -> [any DocClaimsDecodable] {
+		return (0..<docModels.count).compactMap { i in
+			guard docModels[i].docType == docType else { return nil }
 			return getDocumentModel(index: i)
 		}
 	}
@@ -210,12 +218,12 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// 
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
-		let index = switch status { case .issued: mdocModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
+		let index = switch status { case .issued: docModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
 		guard let index else { throw WalletError(description: "Document not found") }
 		do {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
-				_ = await MainActor.run { mdocModels.remove(at: index) }
+				_ = await MainActor.run { docModels.remove(at: index) }
 				await refreshPublishedVars()
 			} else if status == .deferred {
 				_ = await MainActor.run { deferredDocuments.remove(at: index) }
@@ -232,7 +240,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		do {
 			try await storageService.deleteDocuments(status: status)
 			if status == .issued {
-				await MainActor.run { mdocModels = [] }
+				await MainActor.run { docModels = [] }
 				await refreshPublishedVars()
 			} else if status == .deferred {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }

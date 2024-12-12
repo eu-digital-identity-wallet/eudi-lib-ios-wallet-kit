@@ -34,10 +34,16 @@ public struct OfferedIssuanceModel: Sendable {
 /// Information about an offered document type
 public struct OfferedDocModel: Sendable {
 	/// Document type
-	public let docType: String
+	public let docType: String?
+	/// Scope of the offer
+	public let scope: String
 	/// Display name for document type
 	public let displayName: String
 	// Credential signing algorithm values supported
 	public let algValuesSupported: [String]
+
+	public var docTypeOrScope: String {
+		docType ?? scope
+	}
 }
 

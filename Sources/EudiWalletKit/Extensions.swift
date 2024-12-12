@@ -16,7 +16,7 @@ limitations under the License.
 Created on 09/11/2023
 */
 import Foundation
-import OpenID4VCI
+@preconcurrency import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage
@@ -106,4 +106,51 @@ extension BindingKey: @unchecked @retroactive Sendable {
 }
 
 extension AuthorizeRequestOutcome: @unchecked Sendable {
+}
+
+extension Claim {
+	var metadata: DocClaimMetadata {
+		DocClaimMetadata(
+			displayName: display?.getName(),
+			isMandatory: mandatory,
+			valueType: valueType
+		)
+	}
+}
+
+extension CredentialConfiguration {
+	func convertToDocMetadata() -> DocMetadata {
+		let namespacedClaims = msoClaims?.mapValues { (claims: [String: Claim]) in
+			claims.mapValues(\.metadata)
+		}
+		let flatClaims = flatClaims?.mapValues(\.metadata)
+		return DocMetadata(
+			docType: docType ?? identifier.value,
+			displayName: display.getName(),
+			namespacedClaims: namespacedClaims,
+			flatClaims: flatClaims
+		)
+	}
+}
+
+extension DocMetadata {
+	func getClaimMetadata() -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
+		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil) }
+		let claimDisplayNames = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
+			claims.filter { (k,v) in v.displayName != nil }.mapValues { claim in
+				claim.displayName!
+			}
+		}
+		let mandatoryClaims = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
+			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { claim in
+				claim.isMandatory!
+			}
+		}
+		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
+			claims.filter { (k,v) in v.valueType != nil }.mapValues { claim in
+				claim.valueType!
+			}
+		}
+		return (displayName, claimDisplayNames, mandatoryClaims, claimValueTypes)
+	}
 }
