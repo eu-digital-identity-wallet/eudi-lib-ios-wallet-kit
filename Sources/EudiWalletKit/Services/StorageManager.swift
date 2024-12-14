@@ -143,7 +143,8 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let parser = CompactParser()
 		guard	let serString = String(data: doc.data, encoding: .utf8), let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString), let result = try? sdJwt.recreateClaims() else { return nil }
 		if let cs = result.recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
-		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: docMetadata?.displayName, docClaims: docClaims)
+		let type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.displayName, docClaims: docClaims)
 	}
 
 	public func getDocIdsToTypes() -> [String: (String, String?)] {
