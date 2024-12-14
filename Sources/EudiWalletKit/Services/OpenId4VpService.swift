@@ -21,20 +21,23 @@ import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
+import WalletStorage
 @preconcurrency import SiopOpenID4VP
 import JOSESwift
 import Logging
 import X509
 /// Implements remote attestation presentation to online verifier
 
-/// Implementation is based on the OpenID4VP – Draft 18 specification
-
+/// Implementation is based on the OpenID4VP specification
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	// map of document id to data
-	var docs: [String: IssuerSigned]!
+	var formats: [String: String]!
+	var docs: [String: Data]!
+	var docsCbor: [String: IssuerSigned]!
 	var iaca: [SecCertificate]!
+	var format: DocDataFormat!
 	var dauthMethod: DeviceAuthMethod
 	var devicePrivateKeys: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
@@ -53,12 +56,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var unlockData: [String: Data]!
 	public var flow: FlowType
 
-	public init(parameters: [String: Any], qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
-		guard let (docs, devicePrivateKeys, iaca, dauthMethod) = MdocHelpers.initializeData(parameters: parameters) else {
-			throw PresentationSession.makeError(str: "MDOC_DATA_NOT_AVAILABLE")
-		}
-		self.docs = docs; self.devicePrivateKeys = devicePrivateKeys; self.iaca = iaca; self.dauthMethod = dauthMethod
+		let objs = parameters.toInitializeTransferInfo()
+		formats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects; iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
@@ -102,7 +103,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
-					let items = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
+					let (items, fmt) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
+					self.format = fmt
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result = UserRequestInfo(validItemsRequested: items)
 					logger.info("Verifer requested items: \(items)")
@@ -133,12 +135,18 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		logger.info("Openid4vp request items: \(itemsToSend)")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
-		guard let (deviceResponse, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docs, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
-		// Obtain consent
-		let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
-		try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
+		if format == .cbor {
+			docsCbor = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .cbor)} .mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+			guard let (deviceResponse, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+			// Obtain consent
+			let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
+			try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
+		} else {
+			throw PresentationSession.makeError(str: "Format not supported")
+		}
 	}
-	
+	static func filterFormat(_ s: String, fmt: DocDataFormat) -> Bool { s == fmt.rawValue }
+
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokenStr {
 			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: [.msoMdoc(vpTokenStr)]), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.filter { $0.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false }.map { DescriptorMap(id: $0.id, format: "mso_mdoc", path: "$")} ))

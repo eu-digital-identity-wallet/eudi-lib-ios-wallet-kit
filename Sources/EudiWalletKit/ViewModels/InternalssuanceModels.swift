@@ -27,7 +27,7 @@ struct CredentialConfiguration: Sendable, Codable {
 	let msoClaims: MsoMdocClaims?
 	let flatClaims: [String: Claim]?
 	let order: [String]?
-	let format: DataFormat
+	let format: DocDataFormat
 }
 
 struct DeferredIssuanceModel: Codable, Sendable {

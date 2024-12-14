@@ -114,24 +114,24 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	///
 	/// - Returns: An optional `DocClaimsDecodable` model created from the given document.
 	public static func toClaimsModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
-		switch doc.docDataType {
+		switch doc.docDataFormat {
 		case .cbor:	toCborMdocModel(doc: doc, modelFactory: modelFactory)
-		case .sjwt: toSdJwtDocModel(doc: doc)
+		case .sdjwt: toSdJwtDocModel(doc: doc)
 		}
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
-		guard let (iss, _) = doc.getCborData() else { return nil }
+		guard let (d, _, _) = doc.getDataForTransfer(), let iss = IssuerSigned(data: d.1.bytes) else { return nil }
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getCborClaimMetadata()
-		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
 		if retModel == nil {
 			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: iss.0, createdAt: doc.createdAt, issuerSigned: iss.1, docType: doc.docType ?? docMetadata?.docType ?? iss.0, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
 		}
 		return retModel
 	}
@@ -141,7 +141,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getFlatClaimMetadata()
 		let parser = CompactParser()
-		guard	let serString = String(data: doc.data, encoding: .utf8), let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString), let result = try? sdJwt.recreateClaims() else { return nil }
+		guard let serString = String(data: doc.data, encoding: .utf8), let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString), let result = try? sdJwt.recreateClaims() else { return nil }
 		if let cs = result.recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
 		let type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue
 		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.displayName, docClaims: docClaims)

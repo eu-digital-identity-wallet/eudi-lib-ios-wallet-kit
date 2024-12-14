@@ -74,8 +74,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	///   - docType: the docType of the document to be issued
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
-	func issueDocument(docType: String, format: DataFormat, promptMessage: String? = nil) async throws -> IssuanceOutcome {
-		let res = try await issueByDocType(docType, format: format, promptMessage: promptMessage)
+	func issueDocument(docType: String, promptMessage: String? = nil) async throws -> IssuanceOutcome {
+		let res = try await issueByDocType(docType, format: .cbor, promptMessage: promptMessage)
 		return res
 	}
 	
@@ -141,7 +141,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 	
-	func issueByDocType(_ docType: String, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+	func issueByDocType(_ docType: String, format: DocDataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {

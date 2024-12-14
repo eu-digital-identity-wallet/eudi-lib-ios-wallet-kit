@@ -22,6 +22,7 @@ import PresentationExchange
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
+import WalletStorage
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *
@@ -86,18 +87,18 @@ class Openid4VpUtils {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> RequestItems? {
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> (RequestItems?, DocDataFormat) {
 		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
 		var res = RequestItems()
+		var format: DocDataFormat = presentationDefinition.inputDescriptors.first?.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
 		for inputDescriptor in presentationDefinition.inputDescriptors {
 			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
-			guard fc.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
 			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
 			let kvs = inputDescriptor.constraints.fields.compactMap { Self.parseField($0, pathRx: pathRx) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
 			if !nsItems.isEmpty { res[docType] = nsItems }
 		}
-		return res
+		return (res, format)
 	}
 	
 	static func parseField(_ field: Field, pathRx: NSRegularExpression) -> (String, RequestItem)? {

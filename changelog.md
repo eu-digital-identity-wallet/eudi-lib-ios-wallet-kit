@@ -167,7 +167,7 @@ e.g. 	wallet.serviceName = "wallet_dev"
 
 The flow is supported by existing methods:
 
-1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> OfferedIssueModel`
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
 
 2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`). 
@@ -233,11 +233,11 @@ OpenID4VCI: Fixed issuing with https://dev.issuer.eudiw.dev
 ### Added functions:
 /// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
 
-` public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor) async throws -> [OfferedDocModel] `
+` public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> [OfferedDocModel] `
 
 /// Issue documents by offer URI.
 
-`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], docTypeKeyOptions: [String: KeyOptions]? = nil, format: DataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
+`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], docTypeKeyOptions: [String: KeyOptions]? = nil, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
 
 ### Breaking change: 
  `// PresentationSession
