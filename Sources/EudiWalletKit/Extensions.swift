@@ -187,17 +187,28 @@ extension JSON {
 		}
 	}
 
-	func toDocClaim(_ key: String, order n: Int, _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?) -> DocClaim? {
+	func toDocClaim(_ key: String, order n: Int, _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
 		if key == "cnf", type == .dictionary { return nil }
+		if key == "iat" || key == "exp", type == .number { return nil }
+		if key == "assurance_level" || key == "iss", type == .string { return nil }
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
-		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes)
+		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
-		return DocClaim(name: key, displayName: claimDisplayNames?[key], docDataValue: pair.0, valueType: claimValueTypes?[key], stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: nil, children: ch?.0) 
+		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, valueType: claimValueTypes?[key], stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0) 
 	}
 
-	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?) -> ([DocClaim], String)? {
+	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
 		switch type {
 		case .array, .dictionary:
+			if case let claims = self["verified_claims"]["claims"], claims.type == .dictionary {
+				let initialResult = self["verified_claims"]["verification"].toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes) ?? ([DocClaim](), "")
+				return claims.reduce(into: initialResult) { (partialResult, el: (String, JSON)) in
+					if let (claims1, str1) = el.1.toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, el.0) {
+						partialResult.0.append(contentsOf: claims1)
+						partialResult.1 += (partialResult.1.count == 0 ? "" : ", ") + str1
+					}
+				} 
+			}
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
 				if let di = subJson.toDocClaim(key, order: n, claimDisplayNames, mandatoryClaims, claimValueTypes) {	a.append(di) }
@@ -221,3 +232,5 @@ extension DocClaimsDecodable {	/// Extracts display strings and images from the 
 		docClaims.append(contentsOf: claims)
 	}
 }
+
+
