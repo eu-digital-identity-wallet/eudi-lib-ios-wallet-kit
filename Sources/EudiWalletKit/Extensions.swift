@@ -194,7 +194,7 @@ extension JSON {
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
 		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
-		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, valueType: claimValueTypes?[key], stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0) 
+		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0) 
 	}
 
 	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
