@@ -15,17 +15,24 @@ let package = Package(
     dependencies: [
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.3"),
 		.package(url: "https://github.com/crspybits/swift-log-file", from: "0.1.0"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",  exact: "0.4.1"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.4.1"),
-    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.3.2"),
+    .package(path: "../eudi-lib-ios-iso18013-data-model"),
+    .package(path: "../eudi-lib-ios-iso18013-security"),
+		.package(path: "../eudi-lib-ios-iso18013-data-transfer"),
+		.package(path: "../eudi-lib-ios-wallet-storage"),
+    .package(path: "../eudi-lib-sdjwt-swift"),
+		//.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",  exact: "0.4.1"),
+		//.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.4.1"),
+    // .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.3.2"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.6.2"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.9.1"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.9.3"),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "EudiWalletKit", dependencies: [
+        .product(name: "MdocDataModel18013", package: "eudi-lib-ios-iso18013-data-model"),
+        .product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security"),
 		    .product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "SiopOpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
