@@ -34,7 +34,7 @@ final class EudiWalletKitTests: XCTestCase {
 	}
 	
 	func testParsePresentationDefinition() throws {
-		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "TestPresentationDefinition", ext: "json", from: Bundle.module)! )
+		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "mdocPresDef", ext: "json", from: Bundle.module)! )
 		let items = try XCTUnwrap(Openid4VpUtils.parsePresentationDefinition(testPD))
 		XCTAssert(!items.keys.isEmpty)
 	}
