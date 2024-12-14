@@ -19,7 +19,7 @@ import MdocDataModel18013
 import JOSESwift
 import OpenID4VCI
 
-class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
+class SecureAreaSigner: AsyncSignerProtocol {
 	let id: String
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
@@ -44,18 +44,12 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 		}
 	}
 
-	/// Signs input data.
-	///
-	/// - Parameter signingInput: The input to sign.
-	/// - Returns: The signature.
-	/// - Throws: `JWSError` if any error occurs while signing.
-	func sign(_ signingInput: Data) throws -> Data {
-		return signature!
-	}
-	
-	func signAsync(_ signingInput: Data) async throws -> Data {
+	func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }
+      .joined(separator: ".").data(using: .ascii)
+      	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
 		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
 		return ecdsaSignature
 	}
-	
+		
 }
