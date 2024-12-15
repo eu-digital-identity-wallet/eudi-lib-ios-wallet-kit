@@ -103,7 +103,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
-					let (items, fmt) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
+					let (items, fmt, pathRx) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
 					self.format = fmt
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result = UserRequestInfo(validItemsRequested: items)
@@ -145,6 +145,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			throw PresentationSession.makeError(str: "Format not supported")
 		}
 	}
+	/// Filter document accordind to the raw format value
 	static func filterFormat(_ s: String, fmt: DocDataFormat) -> Bool { s == fmt.rawValue }
 
 	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {

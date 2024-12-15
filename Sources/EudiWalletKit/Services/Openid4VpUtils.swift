@@ -60,7 +60,11 @@ import WalletStorage
  */
 
 class Openid4VpUtils {
-	
+	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
+	static let pathNsItemRx = try! NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
+	// example path: $.given_name_national_character
+	static let pathItemRx: NSRegularExpression = try! NSRegularExpression(pattern: "\\$\\.([\\w]+)", options: .caseInsensitive)
+
 	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> SessionTranscript {
 		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 		return SessionTranscript(handOver: openID4VPHandover)
@@ -87,28 +91,27 @@ class Openid4VpUtils {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> (RequestItems?, DocDataFormat) {
-		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> (RequestItems?, DocDataFormat, NSRegularExpression) {
 		var res = RequestItems()
-		var format: DocDataFormat = presentationDefinition.inputDescriptors.first?.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
+		let format: DocDataFormat = presentationDefinition.inputDescriptors.first?.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
+		let pathRx = format == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
 		for inputDescriptor in presentationDefinition.inputDescriptors {
-			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
 			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
 			let kvs = inputDescriptor.constraints.fields.compactMap { Self.parseField($0, pathRx: pathRx) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
 			if !nsItems.isEmpty { res[docType] = nsItems }
 		}
-		return (res, format)
+		return (res, format, pathRx)
 	}
 	
 	static func parseField(_ field: Field, pathRx: NSRegularExpression) -> (String, RequestItem)? {
 		guard let path = field.paths.first else { return nil }
-		guard let nsItemPair = parsePath(path, pathRx: pathRx) else { return nil }
+		guard let nsItemPair = parsePath2(path, pathRx: pathRx) else { return nil }
 		return (nsItemPair.0, RequestItem(elementIdentifier: nsItemPair.1, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
 	}
 
-	/// parse path and return (namespace, itemIdentifier) pair e.g. example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
-	static func parsePath(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
+	/// parse path and return (namespace, itemIdentifier) pair
+	static func parsePath2(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
 		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
 		let r1 = match.range(at:1);
 		let r1l = path.index(path.startIndex, offsetBy: r1.location)
