@@ -240,7 +240,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		switch unAuthorized {
 		case .success(let request):
 			let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request)
-			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
+			if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _, _) = authorized {
 				let at = token.accessToken;	logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 				return authorized
 			}
@@ -252,7 +252,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	
 	private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, configuration: CredentialConfiguration, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
 		switch noProofRequiredState {
-		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
+		case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp, _):
 			let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.identifier,	claimSet: claimSet)
 			let responseEncryptionSpecProvider =  { @Sendable in Issuer.createResponseEncryptionSpec($0) }
 			let requestOutcome = try await issuer.request(noProofRequest: noProofRequiredState, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
@@ -296,7 +296,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 	
 	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
-		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
+		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, _) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let configuration else { throw WalletError(description: "Credential configuration not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.identifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
@@ -328,7 +328,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
-		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp)
+		let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil)
 		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId, configuration: model.configuration)
 	}
 	
@@ -351,7 +351,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	
 	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
-		let deferredRequestResponse = try await issuer.requestDeferredIssuance(proofRequest: authorized, transactionId: transactionId)
+		let deferredRequestResponse = try await issuer.requestDeferredIssuance(proofRequest: authorized, transactionId: transactionId, dPopNonce: nil)
 		switch deferredRequestResponse {
 		case .success(let response):
 			switch response {
@@ -360,9 +360,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			case .issuancePending(let transactionId):
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
 				let deferredModel = switch authorized {
-				case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp):
+				case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp, _):
 					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, configuration: configuration, timeStamp: timeStamp)
-				case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp):
+				case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, _):
 					await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: accessToken, refreshToken: refreshToken, transactionId: transactionId, configuration: configuration, timeStamp: timeStamp)
 				}
 				return .deferred(deferredModel)
