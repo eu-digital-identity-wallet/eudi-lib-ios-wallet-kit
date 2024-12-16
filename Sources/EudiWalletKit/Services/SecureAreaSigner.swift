@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import JOSESwift
+import JSONWebAlgorithms
 import OpenID4VCI
 
 class SecureAreaSigner: AsyncSignerProtocol {
@@ -31,11 +32,11 @@ class SecureAreaSigner: AsyncSignerProtocol {
 		self.id = id
 		self.secureArea = secureArea
 		self.ecAlgorithm = ecAlgorithm
-		self.algorithm = try Self.getSigningAlgorithm(ecAlgorithm)
+		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
 		self.unlockData = unlockData
 	}
 	
-	static func getSigningAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
+	static func getSignatureAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
 		switch sa {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
@@ -44,12 +45,25 @@ class SecureAreaSigner: AsyncSignerProtocol {
 		}
 	}
 
-	func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+	static func getSigningAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JSONWebAlgorithms.SigningAlgorithm {
+		switch sa {
+		case .ES256: return .ES256
+		case .ES384: return .ES384
+		case .ES512: return .ES512
+		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
+		}
+	}
+
+	func sign(_ signingInput: Data) async throws -> Data {
+		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+		return ecdsaSignature
+	}
+
+func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
 		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }
       .joined(separator: ".").data(using: .ascii)
       	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
-		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
-		return ecdsaSignature
+		return try await sign(signingInput)
 	}
 		
 }

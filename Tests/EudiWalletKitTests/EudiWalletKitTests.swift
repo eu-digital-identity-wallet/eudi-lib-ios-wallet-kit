@@ -20,18 +20,33 @@ import Foundation
 import CryptoKit
 import PresentationExchange
 import MdocDataModel18013
+import WalletStorage
 import SwiftCBOR
 @testable import JOSESwift
 import eudi_lib_sdjwt_swift
 
 struct EudiWalletKitTests {
 
-	@Test func testParsePresentationDefinition() throws {
-		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "mdocPresDef", ext: "json", from: Bundle.module)! )
+	@Test("Parse Presentation Definition", arguments: [DocDataFormat.cbor, .sdjwt])
+	func testParsePresentationDefinition(format: DocDataFormat) throws {
+		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "presDef-\(format.rawValue)", ext: "json", from: Bundle.module)! )
 		let (items, fmt) = try Openid4VpUtils.parsePresentationDefinition(testPD)
 		let items1 = try #require(items)
-		#expect(!items1.keys.isEmpty)
-		#expect(fmt == .cbor)
+		let docType = try #require(items1.first?.key)
+		let nsItems = try #require(items1.first?.value.first)
+		#expect(!nsItems.value.isEmpty); print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map(\.elementIdentifier))
+		#expect(fmt == format)
+	}
+
+	@Test("Get VCT from sd-jwt", arguments: ["mdl", "pid"])
+	func testParseJwt(dt: String) async throws {
+		let dataFileName = "sjwt-\(dt)"
+		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
+		let parser = CompactParser()
+		let visitor = Visitor()
+		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
+		let paths = try sdJwt.recreateClaims(visitor: visitor)
+		print(paths.recreatedClaims["vct"].stringValue, paths.recreatedClaims["type"].stringValue)
 	}
 	
 	let ANNEX_B_OPENID4VP_HANDOVER = "835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"
@@ -64,15 +79,5 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 	
-	@Test func testParseSdJwt() throws {
-		let data = Data(name: "sd-jwt", ext: "txt", from: Bundle.module)! 
-		let parser = CompactParser()
-    	let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
-    
-    // When
-    //let json = try sdJwt.asJwsJsonObject( option: .general,  kbJwt: sdJwt.kbJwt?.compactSerialization, getParts: parser.extractJWTParts)
-		let result  = try sdJwt.recreateClaims()
-		print("result: \(result.recreatedClaims)")
-		
-		}
+	
 	}

@@ -52,8 +52,12 @@ extension DocElementsViewModel {
 extension RequestItems {
 	func toDocElementViewModels(docId: String, docType: String, displayName: String?, valid: Bool) -> [DocElementsViewModel] {
 		compactMap { dType,nsItems in
-			if dType != docType { nil }
-			else { DocElementsViewModel(docId: docId, docType: docType, displayName: displayName, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType))) }
+			if !Openid4VpUtils.vctToDocType(vct: dType).hasPrefix(Openid4VpUtils.vctToDocType(vct: docType)) {
+				nil
+			}
+			else {
+				DocElementsViewModel(docId: docId, docType: docType, displayName: displayName, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType)))
+			}
 		}
 	}
 }

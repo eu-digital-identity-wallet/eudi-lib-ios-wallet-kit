@@ -1,6 +1,5 @@
-{
-    "type": "vp_token",
-    "presentation_definition": {
+
+    {
       "id": "2b3bc307-f686-4cc8-a527-9ec3af84a2da",
       "input_descriptors": [
         {
@@ -82,6 +81,4 @@
           }
         }
       ]
-    },
-    "nonce": "11f98a6b-dcf3-4037-8c7e-b56456575a84"
-  }
+    }

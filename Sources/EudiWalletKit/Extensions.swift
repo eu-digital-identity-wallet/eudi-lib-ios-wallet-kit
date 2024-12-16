@@ -22,6 +22,7 @@ import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
+import eudi_lib_sdjwt_swift
 
 extension String {
 	public func translated() -> String {
@@ -231,6 +232,13 @@ extension DocClaimsDecodable {	/// Extracts display strings and images from the 
 		let claims = json.toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes)?.0 ?? []
 		docClaims.append(contentsOf: claims)
 	}
+}
+
+extension SecureAreaSigner: eudi_lib_sdjwt_swift.AsyncSignerProtocol {
+    func signAsync(_ data: Data) async throws -> Data {
+        return try await sign(data)
+    }
+
 }
 
 

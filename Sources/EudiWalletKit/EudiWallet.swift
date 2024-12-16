@@ -237,7 +237,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let pds = data.pendingOrDeferredStatus
 		switch data {
 		case .issued(let data, let str, let cc):
-			dataToSave = if format == .cbor, let data { data } else if let str { str.data(using: .utf8)! } else { Data() }
+			dataToSave = if format == .cbor, let data { data } else if let str, let data = str.data(using: .utf8) { data } else { Data() }
 			docMetadata = cc.convertToDocMetadata()
 			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType } else { docType }
 		case .deferred(let deferredIssuanceModel):
