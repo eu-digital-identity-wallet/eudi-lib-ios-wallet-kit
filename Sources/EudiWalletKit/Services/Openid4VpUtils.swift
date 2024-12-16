@@ -136,12 +136,12 @@ class Openid4VpUtils {
 
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [String], nonce: String, aud: String) async throws -> SignedSDJWT? {
 		let query = Set(try sdJwt.disclosedPaths().filter { $0.tokenArray.first { t in requestItems.contains(t) } != nil })
-		let presentedSdJwt = try await sdJwt.present(query: query, visitor: Visitor())
+		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		 let sdHash = DigestCreator().hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised)!
     
     	let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), 
-			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Date().timeIntervalSince1970, Keys.sdHash.rawValue: sdHash])          )
+			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Date().timeIntervalSince1970, Keys.sdHash.rawValue: sdHash]))
 		let holderPresentation = try await SDJWTIssuer.presentation(
           holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
 		return holderPresentation
@@ -149,9 +149,8 @@ class Openid4VpUtils {
 
 	static func filterSignedJwtByDocType(_ sdJwt: SignedSDJWT, docType: String) -> Bool {
 		guard let paths = try? sdJwt.recreateClaims() else { return false }
-		var type = paths.recreatedClaims["vct"].stringValue
-		if type.isEmpty { type = paths.recreatedClaims["type"].stringValue }
-		if type.isEmpty { return false }
+		let type = paths.recreatedClaims["vct"].string ?? paths.recreatedClaims["type"].string
+		guard let type , !type.isEmpty else { return false }
 		return vctToDocType(vct: docType).contains(vctToDocType(vct: type))
 	}
 

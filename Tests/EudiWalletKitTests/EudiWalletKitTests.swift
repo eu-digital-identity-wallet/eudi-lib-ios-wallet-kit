@@ -46,7 +46,7 @@ struct EudiWalletKitTests {
 		let visitor = Visitor()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
 		let paths = try sdJwt.recreateClaims(visitor: visitor)
-		print(paths.recreatedClaims["vct"].stringValue, paths.recreatedClaims["type"].stringValue)
+		print(paths.recreatedClaims["vct"].string ?? "nil", paths.recreatedClaims["type"].string ?? "nil")
 	}
 	
 	let ANNEX_B_OPENID4VP_HANDOVER = "835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"
