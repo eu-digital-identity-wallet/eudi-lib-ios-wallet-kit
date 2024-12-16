@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 @preconcurrency import OpenID4VCI
 import WalletStorage
 

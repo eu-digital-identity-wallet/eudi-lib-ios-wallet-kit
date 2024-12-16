@@ -145,7 +145,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		if let cs = result.recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
 		var type = docClaims.first(where: { $0.name == "vct"})?.stringValue
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
-		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.displayName, docClaims: docClaims)
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.displayName, docClaims: docClaims, docDataFormat: .sdjwt)
 	}
 
 	public func getDocIdsToTypes() -> [String: (String, String?)] {
