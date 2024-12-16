@@ -43,9 +43,8 @@ struct EudiWalletKitTests {
 		let dataFileName = "sjwt-\(dt)"
 		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
 		let parser = CompactParser()
-		let visitor = Visitor()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
-		let paths = try sdJwt.recreateClaims(visitor: visitor)
+		let paths = try sdJwt.recreateClaims()
 		print(paths.recreatedClaims["vct"].string ?? "nil", paths.recreatedClaims["type"].string ?? "nil")
 	}
 	
