@@ -142,7 +142,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			guard let (deviceResponse, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 			// Obtain consent
 			let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
-			try await SendVpToken(vpTokenStr, pd, resolved, onSuccess)
+			try await SendVpToken([VpToken.VerifiablePresentation.msoMdoc(vpTokenStr)], pd, resolved, onSuccess)
 		} else {
 			let parser = CompactParser()
 			let docStrings = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) } 
@@ -156,7 +156,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: mdocGeneratedNonce, aud: openid4VPlink) else { continue }
-				try await SendVpToken(presented.serialisation, pd, resolved, onSuccess)
+				try await SendVpToken([VpToken.VerifiablePresentation.generic(presented.serialisation)] , pd, resolved, onSuccess)
 				break
 			}
 		}
@@ -164,9 +164,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ s: String, fmt: DocDataFormat) -> Bool { s == fmt.rawValue }
 
-	fileprivate func SendVpToken(_ vpTokenStr: String?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
-		let consent: ClientConsent = if let vpTokenStr {
-			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: [.generic(vpTokenStr)]), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.map {DescriptorMap(id: $0.id, format: $0.formatContainer?.formats.first?["designation"].string ?? "", path: "$")}))
+	fileprivate func SendVpToken(_ vpTokens: [VpToken.VerifiablePresentation]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
+		let consent: ClientConsent = if let vpTokens {
+			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.map {DescriptorMap(id: $0.id, format: $0.formatContainer?.formats.first?["designation"].string ?? "", path: "$")}))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
