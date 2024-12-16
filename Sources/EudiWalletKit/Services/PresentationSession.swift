@@ -128,19 +128,19 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		}
 	}
 	
-	/// Send response to verifier
-	/// - Parameters:
-	///   - userAccepted: Whether user confirmed to send the response
-	///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
-	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
-		do {
-			await MainActor.run {status = .userSelected }
-			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
-			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
-			await MainActor.run {status = .responseSent }
-		} catch { await setError(error) }
-	}
+    /// Send response to verifier
+    /// - Parameters:
+    ///   - userAccepted: Whether user confirmed to send the response
+    ///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
+    ///   - onCancel: Action to perform if the user cancels the biometric authentication
+    public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
+        do {
+            await MainActor.run {status = .userSelected }
+            let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
+            try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
+            await MainActor.run {status = .responseSent }
+        } catch { await setError(error) }
+    }
 	
 	
 

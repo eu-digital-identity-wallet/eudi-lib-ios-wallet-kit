@@ -20,7 +20,7 @@ import JOSESwift
 import OpenID4VCI
 
 class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
-	let id: String
+    let id: String
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
 	let algorithm: JOSESwift.SignatureAlgorithm
@@ -53,9 +53,9 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 		return signature!
 	}
 	
-	func signAsync(_ signingInput: Data) async throws -> Data {
-		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
-		return ecdsaSignature
-	}
+    func signAsync(_ signingInput: Data) async throws -> Data {
+            let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+            return ecdsaSignature
+    }
 	
 }
