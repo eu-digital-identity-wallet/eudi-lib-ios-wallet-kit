@@ -409,7 +409,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		if let format { docs = docs.filter { $0.docDataFormat == format } }
 		let cborsWithKeys = docs.compactMap { $0.getDataForTransfer() }
 		guard cborsWithKeys.count > 0 else { throw WalletError(description: "Documents decode error") }
-		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.fmt)), documentData: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.doc)), privateKeyData: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.sa)), trustedCertificates: trustedReaderCertificates ?? [], deviceAuthMethod: deviceAuthMethod.rawValue)
+		let docData = Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.doc))
+		let keyData = Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.sa))
+		let docTypesToΙds = Dictionary(uniqueKeysWithValues: docs.filter({$0.docType != nil}).map { ($0.docType!, $0.id) })
+		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: cborsWithKeys.map(\.fmt)), documentData: docData, privateKeyData: keyData, trustedCertificates: trustedReaderCertificates ?? [], deviceAuthMethod: deviceAuthMethod.rawValue, docTypesToΙds: docTypesToΙds)
 		return parameters
 	}
 	

@@ -29,13 +29,14 @@ struct EudiWalletKitTests {
 
 	@Test("Parse Presentation Definition", arguments: [DocDataFormat.cbor, .sdjwt])
 	func testParsePresentationDefinition(format: DocDataFormat) throws {
-		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "presDef-\(format.rawValue)", ext: "json", from: Bundle.module)! )
-		let (items, fmt) = try Openid4VpUtils.parsePresentationDefinition(testPD)
+		let testPDData = Data(name: "presDef-\(format.rawValue)", ext: "json", from: Bundle.module)!
+		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: testPDData)
+		let (items, fmtsRequested) = try Openid4VpUtils.parsePresentationDefinition(testPD)
 		let items1 = try #require(items)
 		let docType = try #require(items1.first?.key)
 		let nsItems = try #require(items1.first?.value.first)
 		#expect(!nsItems.value.isEmpty); print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map(\.elementIdentifier))
-		#expect(fmt == format)
+		#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
 	}
 
 	@Test("Get VCT from sd-jwt", arguments: ["mdl", "pid"])

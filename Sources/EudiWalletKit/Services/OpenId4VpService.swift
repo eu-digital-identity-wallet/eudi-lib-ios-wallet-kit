@@ -33,13 +33,18 @@ import X509
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
+	// map of document id to data format
+	var formats: [String: DocDataFormat]!
 	// map of document id to data
-	var formats: [String: String]!
 	var docs: [String: Data]!
+	// map of document id to IssuerSigned
 	var docsCbor: [String: IssuerSigned]!
+	var docTypesToΙds: [String: String]!
+	// map of document id to SignedSDJWT
 	var docsSdJwt: [String: SignedSDJWT]!
 	var iaca: [SecCertificate]!
-	var format: DocDataFormat!
+	// map of docType to data format (formats requested)
+	var formatsRequested: [String: DocDataFormat]!
 	var dauthMethod: DeviceAuthMethod
 	var devicePrivateKeys: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
@@ -62,7 +67,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = parameters.toInitializeTransferInfo()
-		formats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects; iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod
+		formats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects; iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod; docTypesToΙds = objs.docTypesToΙds	
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
@@ -107,8 +112,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
-					let (items, fmt) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
-					self.format = fmt
+					let (items, fmtsReq) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, logger: logger)
+					self.formatsRequested = fmtsReq
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result = UserRequestInfo(validItemsRequested: items)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
@@ -124,7 +129,18 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			}
 	}
 	
-	/// Send response via openid4vp
+	fileprivate func makeCborDocs() {
+		docsCbor = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .cbor)} .mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+	}
+
+	func generateCborVpToken(itemsToSend: RequestItems) async throws -> VpToken.VerifiablePresentation {
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) 
+		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
+		let vpTokenStr = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
+		return VpToken.VerifiablePresentation.msoMdoc(vpTokenStr)
+	}
+
+/// Send response via openid4vp
 	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
@@ -139,33 +155,41 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
-		if format == .cbor {
-			docsCbor = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .cbor)} .mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
-			guard let (deviceResponse, _, _) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData) else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
-			// Obtain consent
-			let vpTokenStr = Data(deviceResponse.toCBOR(options: CBOROptions()).encode()).base64URLEncodedString()
-			try await SendVpToken([VpToken.VerifiablePresentation.msoMdoc(vpTokenStr)], pd, resolved, onSuccess)
+		if formatsRequested.allSatisfy({ (key: String, value: DocDataFormat) in value == .cbor }) {
+			makeCborDocs()
+			let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend)
+			try await SendVpToken([vpToken], pd, resolved, onSuccess)
 		} else {
+			if formatsRequested.first(where: { (key: String, value: DocDataFormat) in value == .cbor }) != nil {
+				makeCborDocs()
+			}
 			let parser = CompactParser()
 			let docStrings = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) } 
-			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
+			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }		
 			var presentations = [VpToken.VerifiablePresentation]()
 			// support sd-jwt documents
 			for (docId, nsItems) in itemsToSend {
-				let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
-				guard let docSigned, let dpk, let items = nsItems.first?.value.map(\.elementIdentifier) else { continue }
-				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
-				let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
-				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
-				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: openid4VPlink) else { continue }
-				presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
+				if formats[docId] == .cbor {
+					if docsCbor == nil { makeCborDocs() }
+					let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
+					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
+					presentations.append(vpToken)
+				} else if formats[docId] == .sdjwt {
+					let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
+					guard let docSigned, let dpk, let items = nsItems.first?.value.map(\.elementIdentifier) else { continue }
+					let unlockData = try await dpk.secureArea.unlockKey(id: docId)
+					let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
+					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
+					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
+					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: openid4VPlink) else { continue }
+					presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
+				}
 			}
 			try await SendVpToken(presentations, pd, resolved, onSuccess)
 		}
 	}
 	/// Filter document accordind to the raw format value
-	static func filterFormat(_ s: String, fmt: DocDataFormat) -> Bool { s == fmt.rawValue }
+	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
 	fileprivate func SendVpToken(_ vpTokens: [VpToken.VerifiablePresentation]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens {

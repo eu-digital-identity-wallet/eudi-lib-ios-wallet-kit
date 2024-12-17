@@ -94,18 +94,20 @@ class Openid4VpUtils {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> (RequestItems?, DocDataFormat) {
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat]) {
 		var res = RequestItems()
-		let format: DocDataFormat = presentationDefinition.inputDescriptors.first?.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
-		let pathRx = format == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
+		var formats = [String: DocDataFormat]() 
 		for inputDescriptor in presentationDefinition.inputDescriptors {
+			let format: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
 			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
 			let docType = filterValue ?? inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
+			let pathRx = format == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
 			let kvs = inputDescriptor.constraints.fields.compactMap { Self.parseField($0, pathRx: pathRx, regexParts: format == .cbor ? 2 : 1) }
 			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
+			formats[docType] = format	
 			if !nsItems.isEmpty { res[docType] = nsItems }
 		}
-		return (res, format)
+		return (res, formats)
 	}
 	
 	static func parseField(_ field: Field, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
