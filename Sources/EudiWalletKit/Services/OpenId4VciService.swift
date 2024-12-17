@@ -301,15 +301,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
         return nil
 	}
     
-    private func issueOfferedCredentialWithProof(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, claimSet: ClaimSet? = nil) async throws -> Credential {
-        let issuerMetadata = offer.credentialIssuerMetadata
-        guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == credentialConfigurationIdentifier.value }) else {
-            throw WalletError(description: "Cannot find credential identifier \(credentialConfigurationIdentifier.value) in offer")
-        }
-        return try await issueOfferedCredentialInternal(authorized, issuer: issuer, credentialConfigurationIdentifier: credentialConfigurationIdentifier, displayName: nil, claimSet: claimSet).0
-        
-    }
-	
 	private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, displayName: String?, claimSet: ClaimSet?) async throws -> (Credential, CNonce?) {
 		
 		switch authorized {
@@ -412,24 +403,23 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 		throw WalletError(description: "Failed to get push authorization code request")
 	}
 	
-    private func handleAuthorizationCode(nonce: String? = "",issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
+    private func handleAuthorizationCode(nonce: String? = "", issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
 		let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
-		switch unAuthorized {
-		case .success(let request):
-           
-            let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request)
-            print("Response 2 -------> \(authorizedRequest)")
-            
-            switch authorizedRequest {
-            case .success(let authorized):
-                logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token (no proof required) : \(authorized.accessToken)")
-                return authorized
-            case .failure(let failure):
-                throw WalletError(description: "Failed to request access token: \(failure.localizedDescription)")
+        switch unAuthorized {
+        case .success(let request):
+            let nonceIncluded: AuthorizationDetailsInTokenRequest = .include { credentialConfigurationIdentifier in
+                credentialConfigurationIdentifier.value == nonce
             }
-    	case .failure(let error):
-			throw WalletError(description: error.localizedDescription)
-		}
+            let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request, authorizationDetailsInTokenRequest: nonceIncluded)
+//            let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request)
+            if case let .success(authorized) = authorizedRequest, case let .noProofRequired(token, _, _, _) = authorized {
+                let at = token.accessToken;    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
+                return authorized
+            }
+            throw WalletError(description: "Failed to get access token")
+        case .failure(let error):
+            throw WalletError(description: error.localizedDescription)
+        }
 	}
 	
     private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, credentialConfigurationIdentifier: CredentialConfigurationIdentifier, displayName: String?, claimSet: ClaimSet? = nil) async throws -> Credential {
@@ -531,12 +521,6 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
         }
     }
 	
-//	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> Credential {
-//		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
-//		let issuer = try getIssuerForDeferred(data: model)
-//        let authorized: AuthorizedRequest = .noProofRequired(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil)
-//		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId)
-//	}
     func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
         let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
         let issuer = try getIssuerForDeferred(data: model)
@@ -660,8 +644,10 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
             
             if let key = OpenId4VCIService.metadataCache.keys.first,
                 let credential = OpenId4VCIService.metadataCache[key],
-                let unauthorizedRequest = OpenId4VCIService.parReqCache {
-                let issuer = try getIssuer(offer: credential)
+                let unauthorizedRequest = OpenId4VCIService.parReqCache,
+                let dpopConstructor = try getDpopConstructor() {
+                let issuer = try getIssuer(offer: credential, dpopConstructor: dpopConstructor)
+                print("dpopNonce: \(dpopNonce), issuer: \(issuer), code: \(code)")
                     let authorized = try await handleAuthorizationCode(nonce: dpopNonce, issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
                     
                     if let credentialConfigurationIdentifiers = credential.credentialConfigurationIdentifiers.first {
@@ -690,12 +676,24 @@ public class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticati
 //                                                                                          claimSet: nil)
 //                            }
                         }*/ catch {
-                            throw WalletError(description: "Invalid issuer metadata")
+                            throw WalletError(description: "Invalid credentialConfigurationIdentifiers")
                         }
                     }
             }
         } catch  {
             throw WalletError(description: "Invalid issuer metadata")
+        }
+        return nil
+    }
+    
+    private func getDpopConstructor() throws -> DPoPConstructor? {
+        let privateKey = try? KeyController.generateECDHPrivateKey()
+        
+        if let privateKey,
+           let publicKey = try? KeyController.generateECDHPublicKey(from: privateKey) {
+            let publicKeyJWK = try ECPublicKey(publicKey: publicKey,additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
+            let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: publicKeyJWK, privateKey: .secKey(privateKey))
+            return dpopConstructor
         }
         return nil
     }
