@@ -137,7 +137,8 @@ class Openid4VpUtils {
 	}
 
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [String], nonce: String, aud: String) async throws -> SignedSDJWT? {
-		let query = Set(try sdJwt.disclosedPaths().filter { $0.tokenArray.first { t in requestItems.contains(t) } != nil })
+		let allPaths = try sdJwt.disclosedPaths()
+		let query = Set(allPaths.filter { $0.tokenArray.first { t in requestItems.contains(t) } != nil })
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		 let sdHash = DigestCreator().hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised)!
