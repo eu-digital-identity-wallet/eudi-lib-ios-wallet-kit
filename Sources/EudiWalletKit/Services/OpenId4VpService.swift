@@ -51,6 +51,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
+	var vpNonce: String!
 	var mdocGeneratedNonce: String!
 	var sessionTranscript: SessionTranscript!
 	var eReaderPub: CoseKey?
@@ -100,6 +101,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 					}
 					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
+					vpNonce = vp.nonce
 					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
 					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id,
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
@@ -147,7 +149,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let parser = CompactParser()
 			let docStrings = docs.filter { k,v in Self.filterFormat(formats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) } 
 			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
-			// support first document
+			var presentations = [VpToken.VerifiablePresentation]()
+			// support sd-jwt documents
 			for (docId, nsItems) in itemsToSend {
 				let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
 				guard let docSigned, let dpk, let items = nsItems.first?.value.map(\.elementIdentifier) else { continue }
@@ -155,10 +158,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
 				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: mdocGeneratedNonce, aud: openid4VPlink) else { continue }
-				try await SendVpToken([VpToken.VerifiablePresentation.generic(presented.serialisation)] , pd, resolved, onSuccess)
-				break
+				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: openid4VPlink) else { continue }
+				presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
 			}
+			try await SendVpToken(presentations, pd, resolved, onSuccess)
 		}
 	}
 	/// Filter document accordind to the raw format value
