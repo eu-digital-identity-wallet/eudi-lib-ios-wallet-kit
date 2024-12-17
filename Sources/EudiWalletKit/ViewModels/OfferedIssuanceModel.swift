@@ -33,6 +33,7 @@ public struct OfferedIssuanceModel: Sendable {
 
 /// Information about an offered document type
 public struct OfferedDocModel: Sendable {
+	public let credentialConfigurationIdentifier: String
 	/// Document type
 	public let docType: String?
 	/// Scope of the offer
