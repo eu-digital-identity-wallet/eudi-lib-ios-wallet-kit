@@ -191,7 +191,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
 	///  - Parameters:
 	///   - docType: Document type
-	///   - format: Optional format type. Defaults to cbor
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional) 
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
@@ -261,7 +260,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
 	/// - Parameters:
 	///   - uriOffer: url with offer
-	///   - format: data format
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
 		let openId4VCIService = try await prepareIssuing(id: "-", docType: "", displayName: nil, keyOptions: nil, disablePrompt: true, promptMessage: nil)
@@ -274,7 +272,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - docTypes: offered doc models available to be issued
 	///   - docTypeKeyOptions: Key options (secure are name and other options) for each docType (optional)
 	///   - txCodeValue: Transaction code given to user (if available)
-	///   - format: data format (defaults to cbor)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - claimSet: claim set (optional)
 	/// - Returns: Array of issued and stored documents
@@ -400,7 +397,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Prepare Service Data Parameters
 	/// - Parameters:
 	///   - docType: docType of documents to present (optional)
-	/// - Returns: A data dictionary that can be used to initialize a presentation service
+	/// - Returns: An ``InitializeTransferData`` instance that can be used to initialize a presentation service
 	public func prepareServiceDataParameters(docType: String? = nil, format: DocDataFormat? = nil) async throws -> InitializeTransferData {
 		var parameters: InitializeTransferData
 		guard var docs = try await storage.storageService.loadDocuments(status: .issued), docs.count > 0 else { throw WalletError(description: "No documents found") }
