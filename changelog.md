@@ -1,8 +1,11 @@
-## v0.8.6
+## v0.9.0
 ### Supports issuing and display of documents with sd-jwt-vc format
 - `DocClaimDecodable` protocol is supported for both mso-mdoc (cbor) and sd-jwt-vc formats
 ### Supports saving and retrieving issuer metadata to be used for display
+- `DocClaim` struct has `docDataValue` property to store the typed value (enum with associated values) of the claim and `stringValue` property to store the string value of the claim
 - `DocClaim` struct has `displayName`, `isOptional` and `valueType` properties provided by the issuer
+### Updated eudi-lib-ios-openid4vci-swift to version 0.10.0
+- Feature/dpop nonce
 ### Breaking changes
 - `MdocDecodable` protocol renamed to `DocClaimDecodable`
 - `NameValue` struct renamed to `DocClaim`
