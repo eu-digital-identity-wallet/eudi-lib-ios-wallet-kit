@@ -7,6 +7,7 @@
 ### Updated eudi-lib-ios-openid4vci-swift to version 0.10.0
 - Feature/dpop nonce
 ### Breaking changes
+- `StorageManager` property `mdocModels` renamed to `docModels`
 - `MdocDecodable` protocol renamed to `DocClaimDecodable`
 - `NameValue` struct renamed to `DocClaim`
 - `NameImage` struct removed
@@ -144,7 +145,7 @@ e.g. 	wallet.serviceName = "wallet_dev"
 - new variable `@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []` (documents that are not yet issued)
 ### Deferred issuance
 -	Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
-   The caller does not need to reload documents, storage manager `deferredDocuments` and `mdocModels` properties are updated.
+   The caller does not need to reload documents, storage manager `deferredDocuments` and `docModels` properties are updated.
 - New function to request deferred issuance: `@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document`
 ### Other changes
 - Removed `otherModels`, `docTypes`, `documentIds` properties
@@ -207,8 +208,8 @@ The flow is supported by existing methods:
 ### Update eudi-lib-ios-openid4vci-swift to version 0.0.9
 
 ## v0.4.4
-### Breaking change - mdocModels contains not-nil items (SwiftUI breaks with nil items)
-@Published public var mdocModels: [any MdocDecodable] = []
+### Breaking change - docModels contains not-nil items (SwiftUI breaks with nil items)
+@Published public var docModels: [any MdocDecodable] = []
 
 ## v0.4.3
 Openid4vp, BLE: Support sending multiple documents with same doc-type

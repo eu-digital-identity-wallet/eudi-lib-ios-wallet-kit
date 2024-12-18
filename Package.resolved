@@ -1,5 +1,5 @@
 {
-  "originHash" : "2a8e64ab840e41581d7f0a76348846ec93e6145abac07f283ae0816f90d780b8",
+  "originHash" : "a9142e2795058e2200d66c4fe9538f5dcf6a4f18b39fbd4af10e73268e2294d3",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "29b10284e8e0573161f65fea281f79c81f81669d",
-        "version" : "0.6.3"
+        "revision" : "8a0f93c2163b5c7210b86fe0fd43ccb2725fe30c",
+        "version" : "0.6.4"
       }
     },
     {
