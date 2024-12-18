@@ -170,11 +170,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			// support sd-jwt documents
 			for (docId, nsItems) in itemsToSend {
 				if formats[docId] == .cbor {
-					continue // cannot put mixed formats for now
-					//if docsCbor == nil { makeCborDocs() }
-					//let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
-					//let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
-					// presentations.append(vpToken)
+					//continue // cannot put mixed formats for now
+					if docsCbor == nil { makeCborDocs() }
+					let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
+					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
+					 presentations.append(vpToken)
 				} else if formats[docId] == .sdjwt {
 					let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
 					guard let docSigned, let dpk, let items = nsItems.first?.value.map(\.elementIdentifier) else { continue }
