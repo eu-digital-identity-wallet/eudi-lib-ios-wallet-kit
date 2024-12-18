@@ -245,6 +245,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docTypeToSave = docType ?? "DEFERRED"
 		case .pending(let pendingAuthModel):
 			dataToSave = try JSONEncoder().encode(pendingAuthModel)
+			docMetadata = pendingAuthModel.configuration.convertToDocMetadata()
 			docTypeToSave = docType ?? "PENDING"
 		}
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : (data.isPending ? .pending : .issued)
@@ -382,7 +383,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let id = UUID().uuidString
 			_ = try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
 			let displayName = dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType)
-			let docMetadata = DocMetadata(docType: dsd.docType, displayName: displayName)
+			let docMetadata = DocMetadata(docType: dsd.docType, display: [Display(name: displayName, locale: "en")])
 			let docSample = Document(id: id, docType: dsd.docType, docDataFormat: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, metadata: docMetadata.toData(), status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}

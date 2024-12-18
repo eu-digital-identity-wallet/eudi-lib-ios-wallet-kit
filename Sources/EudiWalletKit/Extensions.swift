@@ -70,6 +70,11 @@ extension WalletStorage.Document {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
 		return urlString
 	}
+	
+	public var displayName: String?  {
+		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
+		return docMetadata?.displayName
+	}
 }
 
 extension ClaimSet: @retroactive @unchecked Sendable {}
@@ -123,13 +128,7 @@ extension AuthorizeRequestOutcome: @unchecked Sendable {
 }
 
 extension Claim {
-	var metadata: DocClaimMetadata {
-		DocClaimMetadata(
-			displayName: display?.getName(),
-			isMandatory: mandatory,
-			valueType: valueType
-		)
-	}
+	var metadata: DocClaimMetadata { DocClaimMetadata(display: display, isMandatory: mandatory, valueType: valueType) }
 }
 
 extension CredentialConfiguration {
@@ -138,12 +137,7 @@ extension CredentialConfiguration {
 			claims.mapValues(\.metadata)
 		}
 		let flatClaims = flatClaims?.mapValues(\.metadata)
-		return DocMetadata(
-			docType: docType,
-			displayName: display.getName(),
-			namespacedClaims: namespacedClaims,
-			flatClaims: flatClaims
-		)
+		return DocMetadata(docType: docType, display: display, namespacedClaims: namespacedClaims, flatClaims: flatClaims)
 	}
 }
 
@@ -218,7 +212,6 @@ extension JSON {
 		default: return nil
 		}
 	}
-
 }
 
 extension DocClaimsDecodable {	/// Extracts display strings and images from the provided namespaces and populates the given arrays.
