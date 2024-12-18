@@ -59,7 +59,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Decodes a presentation request
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
-	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
+	/// - Parameter request: Request information
 	func decodeRequest(_ request: UserRequestInfo) throws {
 		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
@@ -116,7 +116,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
-	/// - Returns: A request dictionary keyed by ``MdocDataTransfer.UserRequestKeys``
+	/// - Returns: A request object
 	public func receiveRequest() async -> UserRequestInfo? {
 		do {
 			let request = try await presentationService.receiveRequest()

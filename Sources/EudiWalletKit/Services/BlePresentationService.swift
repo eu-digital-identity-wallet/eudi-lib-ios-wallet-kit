@@ -31,7 +31,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var request: UserRequestInfo?
 	public var flow: FlowType { .ble }
 
-	public init(parameters: [String: Any]) throws {
+	public init(parameters: InitializeTransferData) throws {
 		bleServerTransfer = try MdocGattServer(parameters: parameters)
 		bleServerTransfer.delegate = self
 	}
@@ -101,7 +101,7 @@ extension BlePresentationService: MdocOfflineDelegate {
 	
 	/// Received request handler
 	/// - Parameters:
-	///   - request: Request items keyed by §UserRequestKeys§
+	///   - request: Request information
 	///   - handleSelected: Callback function to call after user selection of items to send
 	public func didReceiveRequest(_ request: UserRequestInfo, handleSelected: @escaping (Bool, MdocDataTransfer18013.RequestItems?) async -> Void) {
 		self.handleSelected = handleSelected

@@ -15,14 +15,20 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 @preconcurrency import OpenID4VCI
 import WalletStorage
 
-struct CredentialConfiguration: Sendable {
+struct CredentialConfiguration: Sendable, Codable {
 	let identifier: CredentialConfigurationIdentifier
+	let docType: String?
 	let scope: String
-	let displayName: String?
+	let display: [Display]
 	let algValuesSupported: [String]
+	let msoClaims: MsoMdocClaims?
+	let flatClaims: [String: Claim]?
+	let order: [String]?
+	let format: DocDataFormat
 }
 
 struct DeferredIssuanceModel: Codable, Sendable {
@@ -30,7 +36,7 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
-	let displayName: String
+	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }
 
@@ -40,16 +46,14 @@ struct PendingIssuanceModel: Codable {
 		case presentation_request_url(String)
 	}
 	let pendingReason: PendingReason
-	let identifier: CredentialConfigurationIdentifier
-	let displayName: String
-	let algValuesSupported: [String]
+	let configuration: CredentialConfiguration
 	let metadataKey: String
 	let pckeCodeVerifier: String
 	let pckeCodeVerifierMethod: String
 }
 
 enum IssuanceOutcome {
-	case issued(Data, String?)
+	case issued(Data?, String?, CredentialConfiguration)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }
