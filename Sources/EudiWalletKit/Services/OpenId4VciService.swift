@@ -31,6 +31,7 @@ extension CredentialIssuerSource: @retroactive @unchecked Sendable {}
 public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
+	let uiCulture: String?
 	var bindingKey: BindingKey!
 	let logger: Logger
 	let config: OpenId4VCIConfig
@@ -38,9 +39,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	var urlSession: URLSession
 	var parRequested: ParRequested?
 	
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, config: OpenId4VCIConfig, urlSession: URLSession) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
+		self.uiCulture = uiCulture
 		self.urlSession = urlSession
 		logger = Logger(label: "OpenId4VCI")
 		self.config = config
@@ -69,13 +71,16 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		Self.metadataCache.removeValue(forKey: offerUri)
 	}
 	
-	/// Issue a document with the given `docType` using OpenId4Vci protocol
+	/// Issue a document with the given `docType` or `scope` or `identifier` using OpenId4Vci protocol
 	/// - Parameters:
 	///   - docType: the docType of the document to be issued
-	///   - format: format of the exchanged data
+	///   - scope: the scope of the document to be issued
+	///   - identifier: the credential configuration identifier of the document to be issued
 	/// - Returns: The data of the document
-	func issueDocument(docType: String, promptMessage: String? = nil) async throws -> IssuanceOutcome {
-		let res = try await issueByDocType(docType, format: .cbor, promptMessage: promptMessage)
+	func issueDocument(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
+		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope must be provided") }
+		logger.log(level: .info, "Issuing document with docType or scope or identifier: \(docTypeOrScopeOrIdentifier)")
+		let res = try await issueByDocType(docType, scope: scope, identifier: identifier, promptMessage: promptMessage)
 		return res
 	}
 	
@@ -128,7 +133,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
 		do {
-			let id = configuration.identifier.value; let sc = configuration.scope; let dn = configuration.display.getName() ?? ""
+			let id = configuration.identifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
 			logger.info("Starting issuing with identifer \(id), scope \(sc), displayName: \(dn)")
 			let issuer = try getIssuer(offer: offer)
 			let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: configuration, claimSet: claimSet)
@@ -141,14 +146,14 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 	
-	func issueByDocType(_ docType: String, format: DocDataFormat, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+	func issueByDocType(_ docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
 		switch issuerMetadata {
 		case .success(let metaData):
 			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
-				let configuration = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, identifier: nil, docType: docType, scope: docType)
+				let configuration = try getCredentialIdentifier(credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope)
 				try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.identifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
@@ -158,10 +163,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 					logger.info("Dynamic issuance request with url: \(url)")
 					let uuid = UUID().uuidString
 					Self.metadataCache[uuid] = offer
-					return	.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
+					let outcome = IssuanceOutcome.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: parRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: parRequested.pkceVerifier.codeVerifierMethod ))
+					return (outcome, configuration.format)
 				}
 				guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-				return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
+				let outcome = try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
+				return (outcome, configuration.format)
 			} else {
 				throw WalletError(description: "Invalid authorization server")
 			}
@@ -187,22 +194,22 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
 	}
 	
-	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String) throws -> CredentialConfiguration {
-			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
+	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
+			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
 			logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
 			return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: msoMdocConf.display, algValuesSupported: msoMdocConf.credentialSigningAlgValuesSupported, msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
-		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, scope == scope, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
+		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
 			logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
 			return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: sdJwtVc.display, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
 		}
-		logger.error("No credential for docType \(docType ?? scope). Currently supported credentials: \(credentialsSupported.values)")
-		throw WalletError(description: "Issuer does not support doc type\(docType ?? scope)")
+		logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.values)")
+		throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? scope ?? identifier ?? "")")
 	}
 
 	func getCredentialIdentifiers(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported]) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
 			let credentialInfos = credentialsSupported.compactMap {
-				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, scope: scope, displayName: msoMdocCred.display.getName() ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
-				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, scope: scope, displayName: sdJwtVc.display.getName() ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
+				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, scope: scope, displayName: msoMdocCred.display.getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
+				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, scope: scope, displayName: sdJwtVc.display.getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
 				else { nil } }
 			return credentialInfos
 	}

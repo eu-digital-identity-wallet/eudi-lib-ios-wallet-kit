@@ -31,7 +31,7 @@ struct EudiWalletKitTests {
 	func testParsePresentationDefinition(format: DocDataFormat) throws {
 		let testPDData = Data(name: "presDef-\(format.rawValue)", ext: "json", from: Bundle.module)!
 		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: testPDData)
-		let (items, fmtsRequested) = try Openid4VpUtils.parsePresentationDefinition(testPD)
+		let (items, fmtsRequested) = try Openid4VpUtils.parsePresentationDefinition(testPD,  idsToDocTypes: [:], dataFormats: [:], docDisplayNames: [:])
 		let items1 = try #require(items)
 		let docType = try #require(items1.first?.key)
 		let nsItems = try #require(items1.first?.value.first)
