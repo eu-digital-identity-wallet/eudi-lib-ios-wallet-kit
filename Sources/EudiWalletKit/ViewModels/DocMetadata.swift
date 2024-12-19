@@ -5,7 +5,7 @@ import MdocDataModel18013
 
 public struct DocMetadata: Sendable, Codable {
 	public let docType: String?
-	public var displayName: String? { display?.getName() }
+	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
 	public let display: [Display]?
 	public let namespacedClaims: [NameSpace: [String: DocClaimMetadata]]?
 	public let flatClaims: [String: DocClaimMetadata]?
@@ -32,7 +32,7 @@ public struct DocMetadata: Sendable, Codable {
 extension Display: @retroactive @unchecked Sendable { }
 
 public struct DocClaimMetadata: Sendable, Codable {
-	public var displayName: String? { display?.getName() }
+	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
 	public let display: [Display]?
 	public let isMandatory: Bool?
 	public let valueType: String?

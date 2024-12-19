@@ -1,3 +1,12 @@
+## v0.9.1
+- `EudiWallet`: added `uiCulture` string property for UI localization. It must be a 2-letter language code (optional)
+- `EudiWallet`: added `getIssuerMetadata()` function to retrieve selected issuer's metadata
+- `EudiWallet`: Issue document using either doc-type, scope or configuration identifier:  `func issueDocument(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil)`
+- `WalletStorage.Document`: added `displayName` property with localized string value
+- `ElementViewModel`: added `displayName` property with localized string value
+- `DocMetadata`: stores all localized metadata in `display` property
+- `DocClaimMetadata`: stores all localized metadata in `display` property
+- Fix bug with VP presentation
 ## v0.9.0
 ### Supports issuing and display of documents with sd-jwt-vc format
 - `DocClaimDecodable` protocol is supported for both mso-mdoc (cbor) and sd-jwt-vc formats
