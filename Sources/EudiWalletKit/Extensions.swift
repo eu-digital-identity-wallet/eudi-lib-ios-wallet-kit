@@ -31,8 +31,12 @@ extension String {
 }
 
 extension Array where Element == Display {
-	func getName() -> String? {
-		(first(where: { $0.locale == Locale.current }) ?? first)?.name
+	func getName(_ uiCulture: String?) -> String? {
+		(first(where: { if #available(iOS 16, *) {
+			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
+		} else {
+				$0.locale?.languageCode == uiCulture
+		} }) ?? first)?.name
 	}
 }
 
@@ -70,9 +74,24 @@ extension WalletStorage.Document {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
 		return urlString
 	}
+	
+	public func getDisplayName(_ uiCulture: String?) -> String?  {
+		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
+		return docMetadata?.getDisplayName(uiCulture)
+	}
+
+	public func getDisplayNames(_ uiCulture: String?) -> [String: [String: String]]? {
+		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
+		if docDataFormat == .cbor, let ncs1 = docMetadata?.namespacedClaims?.mapValues({ nc in nc.filter({ $1.getDisplayName(uiCulture) != nil})}), 
+		 case let ncs = ncs1.mapValues({n1 in n1.mapValues({ $0.getDisplayName(uiCulture)! })}) { return ncs }
+		if docDataFormat == .sdjwt, let ncs = docMetadata?.flatClaims?.filter({ $1.getDisplayName(uiCulture) != nil}).mapValues({ $0.getDisplayName(uiCulture)! }) { return ["": ncs] }
+		return nil
+	}
 }
 
 extension ClaimSet: @retroactive @unchecked Sendable {}
+
+extension CredentialIssuerMetadata: @retroactive @unchecked Sendable {}
 
 extension MdocDataModel18013.CoseKeyPrivate {
   // decode private key data cbor string and save private key in key chain
@@ -123,13 +142,7 @@ extension AuthorizeRequestOutcome: @unchecked Sendable {
 }
 
 extension Claim {
-	var metadata: DocClaimMetadata {
-		DocClaimMetadata(
-			displayName: display?.getName(),
-			isMandatory: mandatory,
-			valueType: valueType
-		)
-	}
+	var metadata: DocClaimMetadata { DocClaimMetadata(display: display, isMandatory: mandatory, valueType: valueType) }
 }
 
 extension CredentialConfiguration {
@@ -138,20 +151,15 @@ extension CredentialConfiguration {
 			claims.mapValues(\.metadata)
 		}
 		let flatClaims = flatClaims?.mapValues(\.metadata)
-		return DocMetadata(
-			docType: docType,
-			displayName: display.getName(),
-			namespacedClaims: namespacedClaims,
-			flatClaims: flatClaims
-		)
+		return DocMetadata(docType: docType, display: display, namespacedClaims: namespacedClaims, flatClaims: flatClaims)
 	}
 }
 
 extension DocMetadata {
-	func getCborClaimMetadata() -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
+	func getCborClaimMetadata(uiCulture: String?) -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
 		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil) }
 		let claimDisplayNames = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.displayName != nil }.mapValues { $0.displayName!}
+			claims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}
 		}
 		let mandatoryClaims = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
 			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
@@ -159,15 +167,15 @@ extension DocMetadata {
 		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
 			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
 		}
-		return (displayName, claimDisplayNames, mandatoryClaims, claimValueTypes)
+		return (getDisplayName(uiCulture), claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 
-	func getFlatClaimMetadata() -> (displayName: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
+	func getFlatClaimMetadata(uiCulture: String?) -> (displayName: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
 		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil) }
-		let claimDisplayNames = flatClaims.filter { (k,v) in v.displayName != nil }.mapValues { $0.displayName!}	
+		let claimDisplayNames = flatClaims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}	
 		let mandatoryClaims = flatClaims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
 		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
-		return (displayName, claimDisplayNames, mandatoryClaims, claimValueTypes)
+		return (getDisplayName(uiCulture), claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 }
 
@@ -218,7 +226,6 @@ extension JSON {
 		default: return nil
 		}
 	}
-
 }
 
 extension DocClaimsDecodable {	/// Extracts display strings and images from the provided namespaces and populates the given arrays.
