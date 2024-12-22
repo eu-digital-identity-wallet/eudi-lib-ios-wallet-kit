@@ -89,7 +89,7 @@ extension Array where Element == ElementViewModel {
 	var nsDictionary: [String: [RequestItem]] {
 		Dictionary(grouping: self, by: \.nameSpace)
 			.mapValues {
-				evm in evm.map { RequestItem(elementIdentifier: $0.elementIdentifier, intentToRetain: $0.intentToRetain, isOptional: $0.isOptional) }
+                evm in evm.map { RequestItem(elementIdentifier: $0.elementIdentifier, displayName: $0.nameSpace, intentToRetain: $0.intentToRetain, isOptional: $0.isOptional) }
 			}
 	}
 }

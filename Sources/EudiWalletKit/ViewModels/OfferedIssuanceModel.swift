@@ -21,23 +21,31 @@ import Foundation
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:)``
 public struct OfferedIssuanceModel: Sendable {
-	/// Issuer name (currently the URL)
-	public let issuerName: String
-	/// Document types included in the offer
-	public let docModels: [OfferedDocModel]
-	/// Transaction code specification (in case of preauthorized flow)
-	public let txCodeSpec: TxCode?
-	/// Helper var for transaction code requirement
-	public var isTxCodeRequired: Bool { txCodeSpec != nil }
+    /// Issuer name (currently the URL)
+    public let issuerName: String
+    /// Document types included in the offer
+    public let docModels: [OfferedDocModel]
+    /// Transaction code specification (in case of preauthorized flow)
+    public let txCodeSpec: TxCode?
+    /// Helper var for transaction code requirement
+    public var isTxCodeRequired: Bool { txCodeSpec != nil }
 }
 
-/// Information about an offered document type
+/// Information about an offered document to issue
 public struct OfferedDocModel: Sendable {
-	/// Document type
-	public let docType: String
-	/// Display name for document type
-	public let displayName: String
-	// Credential signing algorithm values supported
-	public let algValuesSupported: [String]
+    /// Credential configuration identifier from VCI issuer
+    public let credentialConfigurationIdentifier: String
+    /// Document type
+    public let docType: String?
+    /// Scope of the offer
+    public let scope: String
+    /// Display name for document type
+    public let displayName: String
+    /// Credential signing algorithm values supported
+    public let algValuesSupported: [String]
+    /// Doc type or scope
+    public var docTypeOrScope: String {
+        docType ?? scope
+    }
 }
 
