@@ -35,7 +35,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
     var bindingKey: BindingKey!
     let logger: Logger
     let config: OpenId4VCIConfig
+    let alg = JWSAlgorithm(.ES256)
     static var metadataCache = [String: CredentialOffer]()
+    //TODO: remove following, use it in better way
+    static var parReqCache: UnauthorizedRequest?
     var urlSession: URLSession
     var parRequested: ParRequested?
     
@@ -177,7 +180,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
         }
     }
     
-    private func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet?) async throws -> IssuanceOutcome {
+    func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet?) async throws -> IssuanceOutcome {
         switch authorized {
         case .noProofRequired:
             return try await noProofRequiredSubmissionUseCase(issuer: issuer, noProofRequiredState: authorized, configuration: configuration, claimSet: claimSet)
@@ -195,10 +198,18 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
     }
     
     func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
-            if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
+            if let credential = credentialsSupported.first(where: {
+                if case .msoMdoc(let msoMdocCred) = $0.value,
+                    msoMdocCred.docType == docType || docType == nil,
+                    $0.key.value == identifier || identifier == nil { true } else { false } }),
+                case let .msoMdoc(msoMdocConf) = credential.value,
+                let scope = msoMdocConf.scope {
             logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
             return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: msoMdocConf.display, algValuesSupported: msoMdocConf.credentialSigningAlgValuesSupported, msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
-        } else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
+        } else if let credential =  credentialsSupported.first(where: {
+            if case .sdJwtVc(let sdJwtVc) = $0.value,
+                sdJwtVc.scope == scope || scope == nil,
+                $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
             logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
             return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: sdJwtVc.display, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
         }
@@ -242,7 +253,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
         throw WalletError(description: "Failed to get push authorization code request")
     }
     
-    private func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
+    func handleAuthorizationCode(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
         let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
         switch unAuthorized {
         case .success(let request):
@@ -257,7 +268,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
         }
     }
     
-    private func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, configuration: CredentialConfiguration, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+    func noProofRequiredSubmissionUseCase(issuer: Issuer, noProofRequiredState: AuthorizedRequest, configuration: CredentialConfiguration, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
         switch noProofRequiredState {
         case .noProofRequired(let accessToken, let refreshToken, _, let timeStamp, _):
             let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.identifier,    claimSet: claimSet)
@@ -302,8 +313,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
         }
     }
     
-    private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
-        guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, _) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
+    func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+        guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, let dpopNonce) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
         guard let configuration else { throw WalletError(description: "Credential configuration not found") }
         let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.identifier, claimSet: claimSet)
         let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
