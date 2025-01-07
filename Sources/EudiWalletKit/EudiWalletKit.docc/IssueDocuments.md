@@ -10,13 +10,13 @@ If ``EudiWallet/userAuthenticationRequired`` is true, user authentication is req
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the ``EudiWallet/issueDocument(docType:format:promptMessage:)`` method.
+When the document docType to be issued use the ``EudiWallet/issueDocument(docType:format:keyOptions:promptMessage:)`` method.
 
 __Important Notes__:
 
 - Currently, only mso_mdoc format is supported
-- Currently, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
-	publicKey.
+- For the 'SecureEnclave' secure area, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
+public/private key pair.
 
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
@@ -25,7 +25,7 @@ wallet.openID4VciIssuerUrl = "https://issuer.eudiw.dev"
 wallet.openID4VciClientId = "wallet-dev"
 wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
 do {
-	let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor)
+	let doc = try await userWallet.: EuPidModel.euPidDocType, format: .cbor)
 	// document has been added to wallet storage, you can display it
 }
 catch {
@@ -34,7 +34,7 @@ catch {
 ```
 ### Resolving Credential offer
 
-The library provides the ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:useSecureEnclave:)``   method that resolves the credential offer URI.
+The library provides the ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:format:)`` method that resolves the credential offer URI.
 The method returns the resolved ``OfferedIssuanceModel`` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
 user.
 
@@ -46,7 +46,7 @@ The following example shows how to resolve a credential offer:
 	}
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:promptMessage:useSecureEnclave:claimSet:)`` method.
+After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:promptMessage:claimSet:)`` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
 
 The following example shows how to issue documents by offer URL:
@@ -76,7 +76,7 @@ When the transaction code is provided, the issuance process can be resumed by ca
 ### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling ``EudiWallet/issueDocument(docType:format:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:format:promptMessage:useSecureEnclave:claimSet:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:)`` method should be called with the authorization URL provided by the server.
+After calling ``EudiWallet/issueDocument(docType:format:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:promptMessage:claimSet:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:)`` method should be called with the authorization URL provided by the server.
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 

@@ -1,21 +1,17 @@
 name: Swift Build
-
 on:
+  pull_request:
+    types: [opened, reopened]
   push:
-    branches-ignore:
-      - 'dependabot/*'
-  pull_request_target:
-  workflow_dispatch:
-
+    branches: ['main']
+    tags: [ v* ]
 jobs:
   build:
-    runs-on: macos-latest-xlarge
-
+    runs-on: macos-latest
     steps:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
-      - uses: swift-actions/setup-swift@v2
+          xcode-version: '16.1'
       - name: Get swift version
         run: swift --version
       - uses: actions/checkout@v4
