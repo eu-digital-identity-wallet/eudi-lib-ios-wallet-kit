@@ -12,11 +12,11 @@ import LocalAuthentication
 import OpenID4VCI
 
 extension EudiWallet {
-    @discardableResult public func issuePAR(docType: String, scope: String? = "", identifier: String? = "", keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+    @discardableResult public func issuePAR(docType: String, scope: String? = "", identifier: String? = "", wia: String, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
         
         let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
         
-        let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, promptMessage: promptMessage)
+        let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, wia: wia, promptMessage: promptMessage)
         
         return try await finalizeIssuing(data: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
