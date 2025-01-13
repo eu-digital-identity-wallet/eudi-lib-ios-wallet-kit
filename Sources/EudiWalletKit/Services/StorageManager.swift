@@ -21,6 +21,7 @@ import WalletStorage
 import Logging
 import CryptoKit
 import eudi_lib_sdjwt_swift
+import SwiftyJSON
 
 /// Storage manager. Provides services and view models
 public class StorageManager: ObservableObject, @unchecked Sendable {
@@ -141,8 +142,12 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getFlatClaimMetadata(uiCulture: uiCulture)
 		let parser = CompactParser()
-		guard let serString = String(data: doc.data, encoding: .utf8), let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString), let result = try? sdJwt.recreateClaims() else { return nil }
-		if let cs = result.recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
+		guard let serString = String(data: doc.data, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
+		guard let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString) else { logger.error("Failed to parse serialized SDJWT"); return nil }
+		var recreatedClaims: JSON?
+		do { let result = try sdJwt.recreateClaims(); recreatedClaims = result.recreatedClaims } catch { logger.error("Failed to recreate claims from SDJWT: \(error)") }
+		guard let recreatedClaims else { return nil }
+		if let cs = recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
 		var type = docClaims.first(where: { $0.name == "vct"})?.stringValue
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
 		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), docClaims: docClaims, docDataFormat: .sdjwt)
