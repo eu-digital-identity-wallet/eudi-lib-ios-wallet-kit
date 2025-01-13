@@ -242,26 +242,28 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 	
 	func finalizeIssuing(data: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
-		var dataToSave: Data
-		var docTypeToSave: String?
-		var docMetadata: DocMetadata?
+		var dataToSave: Data;	var docTypeToSave: String?
+		var docMetadata: DocMetadata?; var displayName: String?
 		let pds = data.pendingOrDeferredStatus
 		switch data {
 		case .issued(let data, let str, let cc):
 			dataToSave = if format == .cbor, let data { data } else if let str, let data = str.data(using: .utf8) { data } else { Data() }
 			docMetadata = cc.convertToDocMetadata()
-			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType } else { docType }
+			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType ?? cc.docType ?? cc.scope } else { docType ?? cc.docType ?? cc.scope }
+			displayName = cc.display.getName(uiCulture)
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata()
 			docTypeToSave = docType ?? "DEFERRED"
+			displayName = deferredIssuanceModel.configuration.display.getName(uiCulture)
 		case .pending(let pendingAuthModel):
 			dataToSave = try JSONEncoder().encode(pendingAuthModel)
 			docMetadata = pendingAuthModel.configuration.convertToDocMetadata()
 			docTypeToSave = docType ?? "PENDING"
+			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 		}
 		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : (data.isPending ? .pending : .issued)
-		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: nil, status: newDocStatus)
+		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
 		try await endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
