@@ -78,8 +78,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	///   - identifier: the credential configuration identifier of the document to be issued
 	/// - Returns: The data of the document
 	func issueDocument(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
-		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope must be provided") }
-		logger.log(level: .info, "Issuing document with docType or scope or identifier: \(docTypeOrScopeOrIdentifier)")
+		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope or identifier must be provided") }
+		logger.log(level: .info, "Issuing document with \(docType != nil ? "docType" : scope != nil ? "scope" : "identifier"): \(docTypeOrScopeOrIdentifier)")
 		let res = try await issueByDocType(docType, scope: scope, identifier: identifier, promptMessage: promptMessage)
 		return res
 	}
@@ -197,12 +197,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	func getCredentialIdentifier(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
 			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
 			logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-			return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: msoMdocConf.display, algValuesSupported: msoMdocConf.credentialSigningAlgValuesSupported, msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
+				return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: msoMdocConf.display, algValuesSupported: msoMdocConf.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
 		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
 			logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
-			return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: sdJwtVc.display, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
+			return CredentialConfiguration(identifier: credential.key, docType: docType, scope: scope, display: sdJwtVc.display, algValuesSupported: sdJwtVc.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
 		}
-		logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.values)")
+		logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.keys)")
 		throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? scope ?? identifier ?? "")")
 	}
 
