@@ -32,6 +32,16 @@ catch {
 	// display error
 }
 ```
+
+You can also issue a document by passing configuration `identifier` parameter the `identifier`. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
+
+```swift
+  // get current issuer metadata
+  let configuration = try await wallet.getIssuerMetadata()
+  ...
+  let doc = try await userWallet.issueDocument(identifier: "eu.europa.ec.eudi.pid_vc_sd_jwt")
+```
+
 ### Resolving Credential offer
 
 The library provides the ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)`` method that resolves the credential offer URI.
