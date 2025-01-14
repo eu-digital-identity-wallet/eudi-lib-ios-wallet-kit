@@ -1,0 +1,53 @@
+{
+      "id": "ea0b07ce-ff30-4d22-9c50-43ed7a80217a",
+      "input_descriptors": [
+        {
+          "id": "52d8e33b-408a-4e30-b1ad-d03416cf43c2",
+          "name": "Mobile Driving Licence (MDL)",
+          "purpose": "",
+          "format": {
+            "vc+sd-jwt": {
+              "sd-jwt_alg_values": [
+                "ES256",
+                "ES384"
+              ],
+              "kb-jwt_alg_values": [
+                "ES256",
+                "ES384"
+              ]
+            }
+          },
+          "constraints": {
+            "fields": [
+              {
+                "path": [
+                  "$.vct"
+                ],
+                "filter": {
+                  "type": "string",
+                  "const": "urn:org.iso.18013.5.1:mDL:1"
+                }
+              },
+              {
+                "path": [
+                  "$.given_name_national_character"
+                ],
+                "intent_to_retain": false
+              },
+              {
+                "path": [
+                  "$.family_name_national_character"
+                ],
+                "intent_to_retain": false
+              },
+              {
+                "path": [
+                  "$.document_number"
+                ],
+                "intent_to_retain": false
+              }
+            ]
+          }
+        }
+      ]
+    }

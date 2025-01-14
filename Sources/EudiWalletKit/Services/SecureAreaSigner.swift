@@ -17,9 +17,10 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import JOSESwift
+import JSONWebAlgorithms
 import OpenID4VCI
 
-class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
+class SecureAreaSigner: AsyncSignerProtocol {
 	let id: String
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
@@ -31,11 +32,11 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 		self.id = id
 		self.secureArea = secureArea
 		self.ecAlgorithm = ecAlgorithm
-		self.algorithm = try Self.getSigningAlgorithm(ecAlgorithm)
+		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
 		self.unlockData = unlockData
 	}
 	
-	static func getSigningAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
+	static func getSignatureAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
 		switch sa {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
@@ -44,18 +45,25 @@ class SecureAreaSigner: JOSESwift.SignerProtocol, AsyncSignerProtocol {
 		}
 	}
 
-	/// Signs input data.
-	///
-	/// - Parameter signingInput: The input to sign.
-	/// - Returns: The signature.
-	/// - Throws: `JWSError` if any error occurs while signing.
-	func sign(_ signingInput: Data) throws -> Data {
-		return signature!
+	static func getSigningAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JSONWebAlgorithms.SigningAlgorithm {
+		switch sa {
+		case .ES256: return .ES256
+		case .ES384: return .ES384
+		case .ES512: return .ES512
+		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
+		}
 	}
-	
-	func signAsync(_ signingInput: Data) async throws -> Data {
+
+	func sign(_ signingInput: Data) async throws -> Data {
 		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
 		return ecdsaSignature
 	}
-	
+
+func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }
+      .joined(separator: ".").data(using: .ascii)
+      	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
+		return try await sign(signingInput)
+	}
+		
 }

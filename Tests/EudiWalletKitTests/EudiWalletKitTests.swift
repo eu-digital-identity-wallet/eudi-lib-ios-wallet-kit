@@ -14,28 +14,39 @@
  * limitations under the License.
  */
 
-import XCTest
+import Testing
 @testable import EudiWalletKit
 import Foundation
 import CryptoKit
 import PresentationExchange
 import MdocDataModel18013
+import WalletStorage
 import SwiftCBOR
 @testable import JOSESwift
+import eudi_lib_sdjwt_swift
 
-final class EudiWalletKitTests: XCTestCase {
-	func testExample() throws {
-		// XCTest Documentation
-		// https://developer.apple.com/documentation/xctest
-		
-		// Defining Test Cases and Test Methods
-		// https://developer.apple.com/documentation/xctest/defining_test_cases_and_test_methods
+struct EudiWalletKitTests {
+
+	@Test("Parse Presentation Definition", arguments: [DocDataFormat.cbor, .sdjwt])
+	func testParsePresentationDefinition(format: DocDataFormat) throws {
+		let testPDData = Data(name: "presDef-\(format.rawValue)", ext: "json", from: Bundle.module)!
+		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: testPDData)
+		let (items, fmtsRequested) = try Openid4VpUtils.parsePresentationDefinition(testPD,  idsToDocTypes: [:], dataFormats: [:], docDisplayNames: [:])
+		let items1 = try #require(items)
+		let docType = try #require(items1.first?.key)
+		let nsItems = try #require(items1.first?.value.first)
+		#expect(!nsItems.value.isEmpty); print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map(\.elementIdentifier))
+		#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
 	}
-	
-	func testParsePresentationDefinition() throws {
-		let testPD = try JSONDecoder().decode(PresentationDefinition.self, from: Data(name: "TestPresentationDefinition", ext: "json", from: Bundle.module)! )
-		let items = try XCTUnwrap(Openid4VpUtils.parsePresentationDefinition(testPD))
-		XCTAssert(!items.keys.isEmpty)
+
+	@Test("Get VCT from sd-jwt", arguments: ["mdl", "pid"])
+	func testParseJwt(dt: String) async throws {
+		let dataFileName = "sjwt-\(dt)"
+		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
+		let parser = CompactParser()
+		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
+		let paths = try sdJwt.recreateClaims()
+		print(paths.recreatedClaims["vct"].string ?? "nil", paths.recreatedClaims["type"].string ?? "nil")
 	}
 	
 	let ANNEX_B_OPENID4VP_HANDOVER = "835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"
@@ -47,27 +58,26 @@ final class EudiWalletKitTests: XCTestCase {
 	let mdocGeneratedNonce = "1234567890abcdefgh"
 	
 	
-	func testGenerateOpenId4VpHandover() {
+	@Test func testGenerateOpenId4VpHandover() {
 		let openid4VpHandover = Openid4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
-		XCTAssertEqual(ANNEX_B_OPENID4VP_HANDOVER, openid4VpHandover.encode().toHexString().uppercased())
+		#expect(ANNEX_B_OPENID4VP_HANDOVER == openid4VpHandover.encode().toHexString().uppercased())
 	}
 	
-	func testGenerateSessionTranscript() {
+	@Test func testGenerateSessionTranscript() {
 		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce).encode(options: CBOROptions())
-		XCTAssertEqual(ANNEX_B_SESSION_TRANSCRIPT, sessionTranscript.toHexString().uppercased())
+		#expect(ANNEX_B_SESSION_TRANSCRIPT == sessionTranscript.toHexString().uppercased())
 	}
 	
-	func testJOSESigner() throws {
+	@Test func testJOSESigner() throws {
 		let keyAgreement = P256.KeyAgreement.PrivateKey()
 		let secKey = try keyAgreement.toSecKey()
 		let signingInput = "Hello, World!".data(using: .utf8)!
 		// jose swift uses the following code to sign the data
-		guard let signatureDataDer = SecKeyCreateSignature(secKey, .ecdsaSignatureMessageX962SHA256, signingInput as CFData, nil) as Data? else { 
-			XCTFail("Failed to create signature"); return }
+		let signatureDataDer = try #require(SecKeyCreateSignature(secKey, .ecdsaSignatureMessageX962SHA256, signingInput as CFData, nil) as Data?)
 		let ecdsaSignature = try P256.Signing.ECDSASignature(derRepresentation: signatureDataDer)
 		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
-	    XCTAssert(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
+	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 	
 	
-}
+	}

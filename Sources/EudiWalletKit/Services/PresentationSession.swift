@@ -17,7 +17,8 @@ limitations under the License.
 import Foundation
 import SwiftUI
 import Logging
-@_exported import MdocDataTransfer18013
+import MdocDataModel18013
+import MdocDataTransfer18013
 import LocalAuthentication
 
 /// Presentation session
@@ -44,12 +45,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
-	// map of document id to (doc type, display name) pairs
-	public var docIdAndTypes: [String: (String, String?)]
+	// map of document id to (doc type, format, display name) pairs
+	public var docIdAndTypes: [String: (String, DocDataFormat, String?)]
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	
-	public init(presentationService: any PresentationService, docIdAndTypes: [String: (String, String?)], userAuthenticationRequired: Bool) {
+	public init(presentationService: any PresentationService, docIdAndTypes: [String: (String, DocDataFormat, String?)], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
 		self.docIdAndTypes = docIdAndTypes
 		self.userAuthenticationRequired = userAuthenticationRequired
@@ -59,12 +60,14 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Decodes a presentation request
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
-	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
+	/// - Parameter request: Request information
 	func decodeRequest(_ request: UserRequestInfo) throws {
 		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
 		disclosedDocuments = [DocElementsViewModel]()
-		for (docId, (docType, displayName)) in docIdAndTypes {
+		for (docId, (docType, docDataFormat, displayName)) in docIdAndTypes {
+			let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { Openid4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
+			if requestFormat != docDataFormat  { continue }
 			var tmp = request.validItemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
 			if let errorRequestItems = request.errorItemsRequested, errorRequestItems.count > 0 {
 				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
@@ -85,7 +88,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
 	}
 	
-	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+	public static func makeError(code: MdocDataTransfer18013.ErrorCode, str: String? = nil) -> NSError {
 		let message = str ?? code.description
 		logger.error(Logger.Message(unicodeScalarLiteral: message))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
@@ -116,7 +119,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
-	/// - Returns: A request dictionary keyed by ``MdocDataTransfer.UserRequestKeys``
+	/// - Returns: A request object
 	public func receiveRequest() async -> UserRequestInfo? {
 		do {
 			let request = try await presentationService.receiveRequest()
