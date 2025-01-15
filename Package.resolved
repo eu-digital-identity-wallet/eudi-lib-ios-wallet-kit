@@ -1,5 +1,5 @@
 {
-  "originHash" : "b7f3ea1e15f2adb0ee4350749f60dab058802620dc55729771e591c8f579c1c1",
+  "originHash" : "875c7cd93f7aa4142564869648fde83f1649215ab8c2fd1d5f5d59cbef58e94e",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
       "state" : {
-        "revision" : "678d442c6f7828def400a70ae15968aef67ef52d",
-        "version" : "1.8.3"
+        "revision" : "729e01bc9b9dab466ac85f21fb9ee2bc1c61b258",
+        "version" : "1.8.4"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "3921713715d3ff32dea391bdfd4ec8a080db3921",
-        "version" : "0.4.0"
+        "revision" : "d5aa5c3debc538570208b956dbbb92e05c696c04",
+        "version" : "0.5.0"
       }
     },
     {
