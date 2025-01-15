@@ -40,6 +40,19 @@ extension Array where Element == Display {
 	}
 }
 
+extension Array where Element == MdocDataModel18013.DisplayMetadata {
+	func getName(_ uiCulture: String?) -> String? {
+		(first(where: { $0.localeIdentifier == uiCulture }) ?? first)?.name
+	}
+}
+
+extension Display {
+	public var displayMetadata: MdocDataModel18013.DisplayMetadata {
+		let logoMetadata = LogoMetadata(urlString: logo?.uri?.absoluteString, alternativeText: logo?.alternativeText)
+		return MdocDataModel18013.DisplayMetadata(name: name, localeIdentifier: locale?.identifier, logo: logoMetadata, description: description, backgroundColor: backgroundColor, textColor: textColor)
+	}
+}
+
 extension Bundle {
 	func getURLSchemas() -> [String]? {
 		guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String:Any]], let schema = urlTypes.first, let urlSchemas = schema["CFBundleURLSchemes"] as? [String] else {return nil}
@@ -142,7 +155,7 @@ extension AuthorizeRequestOutcome: @unchecked Sendable {
 }
 
 extension Claim {
-	var metadata: DocClaimMetadata { DocClaimMetadata(display: display, isMandatory: mandatory, valueType: valueType) }
+	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, valueType: valueType) }
 }
 
 extension CredentialConfiguration {
@@ -156,8 +169,8 @@ extension CredentialConfiguration {
 }
 
 extension DocMetadata {
-	func getCborClaimMetadata(uiCulture: String?) -> (displayName: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
-		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil) }
+	func getCborClaimMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
+		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil, nil, nil, nil, nil) }
 		let claimDisplayNames = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
 			claims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}
 		}
@@ -167,15 +180,15 @@ extension DocMetadata {
 		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
 			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
 		}
-		return (getDisplayName(uiCulture), claimDisplayNames, mandatoryClaims, claimValueTypes)
+		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 
-	func getFlatClaimMetadata(uiCulture: String?) -> (displayName: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
-		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil) }
+	func getFlatClaimMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
+		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil, nil, nil, nil, nil) }
 		let claimDisplayNames = flatClaims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}	
 		let mandatoryClaims = flatClaims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
 		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
-		return (getDisplayName(uiCulture), claimDisplayNames, mandatoryClaims, claimValueTypes)
+		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier,  claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 }
 
@@ -247,5 +260,22 @@ extension SecureAreaSigner: eudi_lib_sdjwt_swift.AsyncSignerProtocol {
     }
 
 }
+
+extension JSON {
+	func extractDigestAlgorithm() throws -> String {
+		if self[Keys.sdAlg.rawValue].exists() {
+			let stringValue = self[Keys.sdAlg.rawValue].stringValue
+			let algorithIdentifier = HashingAlgorithmIdentifier.allCases.first(where: {$0.rawValue == stringValue})
+			guard let algorithIdentifier else {
+				throw SDJWTVerifierError.missingOrUnknownHashingAlgorithm
+			}
+			return algorithIdentifier.rawValue
+		} else {
+			throw SDJWTVerifierError.missingOrUnknownHashingAlgorithm
+		}
+	}
+}
+
+
 
 

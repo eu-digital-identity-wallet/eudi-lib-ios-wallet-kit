@@ -24,8 +24,8 @@ struct CredentialConfiguration: Sendable, Codable {
 	let credentialIssuerIdentifier: String
 	let docType: String?
 	let scope: String
-	let display: [Display]
-	let issuerDisplay: [Display]
+	let display: [MdocDataModel18013.DisplayMetadata]
+	let issuerDisplay: [MdocDataModel18013.DisplayMetadata]
 	let algValuesSupported: [String]
 	let msoClaims: MsoMdocClaims?
 	let flatClaims: [String: Claim]?

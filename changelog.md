@@ -1,3 +1,6 @@
+## v0.9.2
+- Fixed bugs for OpenID4VP presentation
+- Added properties to `DocClaimMetadata` protocol: `issuerDisplay`,`credentialIssuerIdentifier`, `configurationIdentifier`
 ## v0.9.1
 - `EudiWallet`: added `uiCulture` string property for UI localization. It must be a 2-letter language code (optional)
 - `EudiWallet`: added `getIssuerMetadata()` function to retrieve selected issuer's metadata

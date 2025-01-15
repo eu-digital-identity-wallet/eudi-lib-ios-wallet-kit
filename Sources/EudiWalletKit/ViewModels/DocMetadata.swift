@@ -13,15 +13,18 @@ public struct DocMetadata: Sendable, Codable {
 	/// get display name of the document for the given culture
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
 	/// display properties for the document
-	public let display: [Display]?
+	public let display: [MdocDataModel18013.DisplayMetadata]?
 	/// display properties of the issuer that issued the document
-	public let issuerDisplay: [Display]?
+	public let issuerDisplay: [MdocDataModel18013.DisplayMetadata]?
+		/// get display name of the issuer for the given culture
+	 public func getIssuerDisplayName(_ uiCulture: String?) -> String? { issuerDisplay?.getName(uiCulture) }
+
 	/// namespaced claims (for sd-jwt documents)
 	public let namespacedClaims: [NameSpace: [String: DocClaimMetadata]]?
 	/// flat claims (for mso-mdoc documents)
 	public let flatClaims: [String: DocClaimMetadata]?
 	
-	public init(credentialIssuerIdentifier: String, configurationIdentifier: String, docType: String?, display: [Display]?, issuerDisplay: [Display]?,  namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
+	public init(credentialIssuerIdentifier: String, configurationIdentifier: String, docType: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?,  namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
 		self.credentialIssuerIdentifier = credentialIssuerIdentifier
 		self.configurationIdentifier = configurationIdentifier
 		self.docType = docType
@@ -43,11 +46,9 @@ public struct DocMetadata: Sendable, Codable {
 	}
 }
 
-extension Display: @retroactive @unchecked Sendable { }
-
 public struct DocClaimMetadata: Sendable, Codable {
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
-	public let display: [Display]?
+	public let display: [DisplayMetadata]?
 	public let isMandatory: Bool?
 	public let valueType: String?
 }

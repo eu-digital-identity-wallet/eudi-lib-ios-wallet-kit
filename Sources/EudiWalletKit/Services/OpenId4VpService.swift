@@ -33,17 +33,20 @@ import X509
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
-	// map of document id to data format
+	// map of document-id to data format
 	var dataFormats: [String: DocDataFormat]!
-	// map of document id to data
+	// map of document-id to data
 	var docs: [String: Data]!
 	var docDisplayNames: [String: [String: [String: String]]?]!
-	// map of document id to IssuerSigned
+	// map of document-id to IssuerSigned
 	var docsCbor: [String: IssuerSigned]!
 	/// map of document id to document type
 	var idsToDocTypes: [String: String]!
-	// map of document id to SignedSDJWT
+	// map of document-id to SignedSDJWT
 	var docsSdJwt: [String: SignedSDJWT]!
+	// map of document-id to hashing algorithm
+	var docsHashingAlgs: [String: String]!
+	/// IACA root certificates
 	var iaca: [SecCertificate]!
 	// map of docType to data format (formats requested)
 	var formatsRequested: [String: DocDataFormat]!
@@ -72,7 +75,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let objs = parameters.toInitializeTransferInfo()
 		dataFormats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects
 		iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod
-		idsToDocTypes = objs.idsToDocTypes; docDisplayNames = objs.docDisplayNames
+		idsToDocTypes = objs.idsToDocTypes
+		docDisplayNames = objs.docDisplayNames
+		docsHashingAlgs = objs.hashingAlgs
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
@@ -186,7 +191,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
 					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
 					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId) else { continue }
+					let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
+					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId) else {
+						continue
+					}
 					presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
 				}
 			}
@@ -198,7 +206,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 
 	fileprivate func SendVpToken(_ vpTokens: [VpToken.VerifiablePresentation]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens {
-			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.map {DescriptorMap(id: $0.id, format: $0.formatContainer?.formats.first?["designation"].string ?? "", path: "$")}))
+			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.enumerated().map { i,d in DescriptorMap(id: d.id, format: d.formatContainer?.formats.first?["designation"].string ?? "", path: "$[\(i)]")}))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))

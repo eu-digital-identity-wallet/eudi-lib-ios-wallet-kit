@@ -125,14 +125,14 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		guard let (d, _, _) = doc.getDataForTransfer(), let iss = IssuerSigned(data: d.1.bytes) else { return nil }
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getCborClaimMetadata(uiCulture: uiCulture)
-		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
 		if retModel == nil {
 			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier,  claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.0, claimDisplayNames: md?.1, mandatoryClaims: md?.2, claimValueTypes: md?.3)
+			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
 		}
 		return retModel
 	}
@@ -142,24 +142,42 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getFlatClaimMetadata(uiCulture: uiCulture)
 		guard let recreatedClaims = recreateSdJwtClaims(docData: doc.data) else { return nil }
-		if let cs = recreatedClaims.toClaimsArray(md?.1, md?.2, md?.3)?.0 { docClaims.append(contentsOf: cs) }
+		if let cs = recreatedClaims.json.toClaimsArray(md?.claimDisplayNames, md?.mandatoryClaims, md?.claimValueTypes)?.0 { docClaims.append(contentsOf: cs) }
 		var type = docClaims.first(where: { $0.name == "vct"})?.stringValue
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
-		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), docClaims: docClaims, docDataFormat: .sdjwt)
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
+	}
+	
+	public static func getHashingAlgorithm(doc: WalletStorage.Document) -> String? {
+		guard doc.docDataFormat == .sdjwt else { return nil }
+		guard let recreatedClaims = recreateSdJwtClaims(docData: doc.data) else { return nil }
+		return recreatedClaims.hashingAlg
 	}
 	
 	public static func getVctFromSdJwt(docData: Data) -> String? {
 		guard let recreatedClaims = recreateSdJwtClaims(docData: docData) else { return nil }
-		return recreatedClaims["vct"].stringValue
+		return recreatedClaims.json["vct"].stringValue
 	}
 	
-	static func recreateSdJwtClaims(docData: Data) -> JSON? {
+	static func recreateSdJwtClaims(docData: Data) -> (json: JSON, hashingAlg: String)? {
 		let parser = CompactParser()
 		guard let serString = String(data: docData, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
 		guard let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString) else { logger.error("Failed to parse serialized SDJWT"); return nil }
-		var recreatedClaims: JSON?
-		do { let result = try sdJwt.recreateClaims(); recreatedClaims = result.recreatedClaims } catch { logger.error("Failed to recreate claims from SDJWT: \(error)") }
-		return recreatedClaims
+		var recreatedClaims: JSON?; var hashingAlg: String?
+		do {
+			let result = try sdJwt.recreateClaims()
+			let (_, payload, _) = extractJWTParts(sdJwt.jwt.compactSerialization)
+			guard let paylodData = Data(base64URLEncoded: payload), let payload = try? JSON(data: paylodData) else { logger.error("Failed to base64url decode payload"); return nil }
+			hashingAlg = try payload.extractDigestAlgorithm()
+			recreatedClaims = result.recreatedClaims
+		} catch { logger.error("Failed to recreate claims from SDJWT: \(error)") }
+		guard let recreatedClaims, let hashingAlg else { return nil }
+		return (recreatedClaims, hashingAlg)
+	}
+	
+	static func extractJWTParts(_ jwt: String) -> (String, String, String) {
+		let parts = jwt.components(separatedBy: ".")
+		return (parts.count > 0 ? parts[0] : "", parts.count > 1 ? parts[1] : "" , parts.count > 2 ? parts[2] : "")
 	}
 
 	public func getDocIdsToTypes() -> [String: (String, DocDataFormat, String?)] {

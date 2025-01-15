@@ -145,16 +145,19 @@ class Openid4VpUtils {
 		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
 	}
 
-	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [String], nonce: String, aud: String) async throws -> SignedSDJWT? {
+	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [String], nonce: String, aud: String) async throws -> SignedSDJWT? {
 		let allPaths = try sdJwt.disclosedPaths()
 		let query = Set(allPaths.filter { $0.tokenArray.first { t in requestItems.contains(t) } != nil })
 		if query.isEmpty { throw WalletError(description: "No items to present found") }
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
-		 let sdHash = DigestCreator().hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised)!
+		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
+		let sdHash = digestCreator.hashAndBase64Encode(
+			input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised
+		)!
     
     	let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), 
-			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Date().timeIntervalSince1970, Keys.sdHash.rawValue: sdHash]))
+			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Int(Date().timeIntervalSince1970.rounded()), Keys.sdHash.rawValue: sdHash]))
 		let holderPresentation = try await SDJWTIssuer.presentation(
           holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
 		return holderPresentation
