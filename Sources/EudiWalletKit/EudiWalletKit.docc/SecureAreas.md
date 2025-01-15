@@ -24,9 +24,9 @@ For each document type, the wallet developer has the flexibility to define speci
 
 Specifically:
 
-- The ``EudiWallet/issueDocument(docType:format:keyOptions:promptMessage:)`` has been extended to support an
+- The ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` has been extended to support an
 additional [keyOptions](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/keyoptions) optional parameter to specify the secure area name and other key options for the key creation. 
-- The ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:promptMessage:claimSet:)`` has been extended to support a `docTypeKeyOptions` to specify the secure area name and other key options for each doc type.
+- The ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` has been extended to support a `docTypeKeyOptions` to specify the secure area name and other key options for each doc type.
 
 ```swift
 // For keychain saved keys, the iOS will automatically present a biometric or user PIN screen to authorize key usage for PID documents
