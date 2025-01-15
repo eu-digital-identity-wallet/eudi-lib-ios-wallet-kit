@@ -59,6 +59,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
 	var vpNonce: String!
+	var vpClientId: String!
 	var mdocGeneratedNonce: String!
 	var sessionTranscript: SessionTranscript!
 	var eReaderPub: CoseKey?
@@ -110,7 +111,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 					}
 					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
-					vpNonce = vp.nonce
+					vpNonce = vp.nonce; vpClientId = vp.client.id
 					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
 					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id,
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
@@ -185,7 +186,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
 					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
 					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: openid4VPlink) else { continue }
+					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId) else { continue }
 					presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
 				}
 			}
