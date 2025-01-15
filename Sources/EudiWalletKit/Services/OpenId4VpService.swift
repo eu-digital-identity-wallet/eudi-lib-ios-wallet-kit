@@ -174,7 +174,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			// support sd-jwt documents
 			for (docId, nsItems) in itemsToSend {
 				if dataFormats[docId] == .cbor {
-					//continue // cannot put mixed dataFormats for now
 					if docsCbor == nil { makeCborDocs() }
 					let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
 					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)

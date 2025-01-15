@@ -20,10 +20,12 @@ import MdocDataModel18013
 import WalletStorage
 
 struct CredentialConfiguration: Sendable, Codable {
-	let identifier: CredentialConfigurationIdentifier
+	let configurationIdentifier: CredentialConfigurationIdentifier
+	let credentialIssuerIdentifier: String
 	let docType: String?
 	let scope: String
 	let display: [Display]
+	let issuerDisplay: [Display]
 	let algValuesSupported: [String]
 	let msoClaims: MsoMdocClaims?
 	let flatClaims: [String: Claim]?

@@ -209,7 +209,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	@discardableResult public func issueDocument(docType: String?, scope: String?, identifier: String?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
 		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, disablePrompt: false, promptMessage: promptMessage)
 		let data = try await openId4VCIService.issueDocument(docType: docType, scope: scope, identifier: identifier, promptMessage: promptMessage)
-		return try await finalizeIssuing(data: data.0, docType: docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: data.0, docType: docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 	}
 
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
@@ -223,7 +223,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig ?? Self.defaultOpenId4VCIConfig, urlSession: urlSession)
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_, _, _) = data else { return deferredDoc }
-		return try await finalizeIssuing(data: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
 	}
 	
 	/// Resume pending issuance. Supports dynamic isuuance scenario
@@ -237,19 +237,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
-		let res = try await finalizeIssuing(data: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 		return res
 	}
 	
-	func finalizeIssuing(data: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
 		var dataToSave: Data;	var docTypeToSave: String?
 		var docMetadata: DocMetadata?; var displayName: String?
-		let pds = data.pendingOrDeferredStatus
-		switch data {
+		let pds = issueOutcome.pendingOrDeferredStatus
+		switch issueOutcome {
 		case .issued(let data, let str, let cc):
 			dataToSave = if format == .cbor, let data { data } else if let str, let data = str.data(using: .utf8) { data } else { Data() }
 			docMetadata = cc.convertToDocMetadata()
-			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docType ?? cc.docType ?? cc.scope } else { docType ?? cc.docType ?? cc.scope }
+			let docTypeOrScope = docType ?? cc.docType ?? cc.scope
+			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docTypeOrScope } else if format == .sdjwt, let str, let ds = str.data(using: .utf8) {  StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope } else { docTypeOrScope }
 			displayName = cc.display.getName(uiCulture)
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
@@ -262,7 +263,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docTypeToSave = docType ?? "PENDING"
 			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 		}
-		let newDocStatus: WalletStorage.DocumentStatus = data.isDeferred ? .deferred : (data.isPending ? .pending : .issued)
+		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
 		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
 		try await endIssueDocument(newDocument)
@@ -302,7 +303,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			if i > 0 { await openId4VCIServices[i].setBindingKey(bindingKey: await openId4VCIServices.first!.bindingKey) }
 			guard let offer = await OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], promptMessage: promptMessage, claimSet: claimSet) else { continue }
-			documents.append(try await finalizeIssuing(data: docData, docType: docTypes[i].docTypeOrScope, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
+			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrScope, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
 		await OpenId4VCIService.removeOfferFromMetadata(offerUri: offerUri)
 		return documents
@@ -397,7 +398,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let id = UUID().uuidString
 			_ = try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
 			let displayName = dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType)
-			let docMetadata = DocMetadata(docType: dsd.docType, display: [Display(name: displayName, locale: "en")])
+			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [Display(name: displayName, locale: "en")], issuerDisplay: [])
 			let docSample = Document(id: id, docType: dsd.docType, docDataFormat: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, metadata: docMetadata.toData(), displayName: displayName, status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}

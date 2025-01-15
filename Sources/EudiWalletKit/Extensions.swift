@@ -151,7 +151,7 @@ extension CredentialConfiguration {
 			claims.mapValues(\.metadata)
 		}
 		let flatClaims = flatClaims?.mapValues(\.metadata)
-		return DocMetadata(docType: docType, display: display, namespacedClaims: namespacedClaims, flatClaims: flatClaims)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType, display: display, issuerDisplay: issuerDisplay, namespacedClaims: namespacedClaims, flatClaims: flatClaims)
 	}
 }
 

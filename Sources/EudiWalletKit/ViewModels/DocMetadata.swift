@@ -4,15 +4,29 @@ import WalletStorage
 import MdocDataModel18013
 
 public struct DocMetadata: Sendable, Codable {
+	/// the credential issuer identifier (issuer URL)
+	public let credentialIssuerIdentifier: String
+	/// the document configuration identifier
+	public let configurationIdentifier: String
+	/// the document type
 	public let docType: String?
+	/// get display name of the document for the given culture
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
+	/// display properties for the document
 	public let display: [Display]?
+	/// display properties of the issuer that issued the document
+	public let issuerDisplay: [Display]?
+	/// namespaced claims (for sd-jwt documents)
 	public let namespacedClaims: [NameSpace: [String: DocClaimMetadata]]?
+	/// flat claims (for mso-mdoc documents)
 	public let flatClaims: [String: DocClaimMetadata]?
 	
-	public init(docType: String?, display: [Display]?, namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
+	public init(credentialIssuerIdentifier: String, configurationIdentifier: String, docType: String?, display: [Display]?, issuerDisplay: [Display]?,  namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
+		self.credentialIssuerIdentifier = credentialIssuerIdentifier
+		self.configurationIdentifier = configurationIdentifier
 		self.docType = docType
 		self.display = display
+		self.issuerDisplay = issuerDisplay
 		self.namespacedClaims = namespacedClaims
 		self.flatClaims = flatClaims
 	}
