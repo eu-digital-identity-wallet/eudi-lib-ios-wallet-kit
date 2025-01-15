@@ -10,7 +10,7 @@ If ``EudiWallet/userAuthenticationRequired`` is true, user authentication is req
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the ``EudiWallet/issueDocument(docType:keyOptions:promptMessage:)`` method.
+When the document docType to be issued use the ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` method.
 
 __Important Notes__:
 
@@ -32,6 +32,16 @@ catch {
 	// display error
 }
 ```
+
+You can also issue a document by passing configuration `identifier` parameter the `identifier`. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
+
+```swift
+  // get current issuer metadata
+  let configuration = try await wallet.getIssuerMetadata()
+  ...
+  let doc = try await userWallet.issueDocument(identifier: "eu.europa.ec.eudi.pid_vc_sd_jwt")
+```
+
 ### Resolving Credential offer
 
 The library provides the ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)`` method that resolves the credential offer URI.
@@ -76,7 +86,7 @@ When the transaction code is provided, the issuance process can be resumed by ca
 ### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling ``EudiWallet/issueDocument(docType:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:)`` method should be called with the authorization URL provided by the server.
+After calling ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:)`` method should be called with the authorization URL provided by the server.
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 

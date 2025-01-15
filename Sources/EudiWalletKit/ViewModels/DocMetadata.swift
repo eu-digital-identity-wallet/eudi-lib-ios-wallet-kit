@@ -4,15 +4,32 @@ import WalletStorage
 import MdocDataModel18013
 
 public struct DocMetadata: Sendable, Codable {
+	/// the credential issuer identifier (issuer URL)
+	public let credentialIssuerIdentifier: String
+	/// the document configuration identifier
+	public let configurationIdentifier: String
+	/// the document type
 	public let docType: String?
+	/// get display name of the document for the given culture
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
-	public let display: [Display]?
+	/// display properties for the document
+	public let display: [MdocDataModel18013.DisplayMetadata]?
+	/// display properties of the issuer that issued the document
+	public let issuerDisplay: [MdocDataModel18013.DisplayMetadata]?
+		/// get display name of the issuer for the given culture
+	 public func getIssuerDisplayName(_ uiCulture: String?) -> String? { issuerDisplay?.getName(uiCulture) }
+
+	/// namespaced claims (for sd-jwt documents)
 	public let namespacedClaims: [NameSpace: [String: DocClaimMetadata]]?
+	/// flat claims (for mso-mdoc documents)
 	public let flatClaims: [String: DocClaimMetadata]?
 	
-	public init(docType: String?, display: [Display]?, namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
+	public init(credentialIssuerIdentifier: String, configurationIdentifier: String, docType: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?,  namespacedClaims: [NameSpace: [String: DocClaimMetadata]]? = nil, flatClaims: [String: DocClaimMetadata]? = nil) {
+		self.credentialIssuerIdentifier = credentialIssuerIdentifier
+		self.configurationIdentifier = configurationIdentifier
 		self.docType = docType
 		self.display = display
+		self.issuerDisplay = issuerDisplay
 		self.namespacedClaims = namespacedClaims
 		self.flatClaims = flatClaims
 	}
@@ -29,11 +46,9 @@ public struct DocMetadata: Sendable, Codable {
 	}
 }
 
-extension Display: @retroactive @unchecked Sendable { }
-
 public struct DocClaimMetadata: Sendable, Codable {
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
-	public let display: [Display]?
+	public let display: [DisplayMetadata]?
 	public let isMandatory: Bool?
 	public let valueType: String?
 }
