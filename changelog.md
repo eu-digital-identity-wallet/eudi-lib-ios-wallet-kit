@@ -1,3 +1,5 @@
+## v0.9.3
+- Fixed bug for OpenID4VP presentation for more than 2 documents
 ## v0.9.2
 - Fixed bugs for OpenID4VP presentation
 - Added properties to `DocClaimMetadata` protocol: `issuerDisplay`,`credentialIssuerIdentifier`, `configurationIdentifier`
