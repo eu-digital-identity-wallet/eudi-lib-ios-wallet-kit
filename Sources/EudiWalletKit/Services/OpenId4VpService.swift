@@ -50,6 +50,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var iaca: [SecCertificate]!
 	// map of docType to data format (formats requested)
 	var formatsRequested: [String: DocDataFormat]!
+	/// map of inputDescriptor-id to docType
+	var inputDescriptorMap: [String: String]!
 	var dauthMethod: DeviceAuthMethod
 	var devicePrivateKeys: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
@@ -122,8 +124,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
-					let (items, fmtsReq) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
-					self.formatsRequested = fmtsReq
+					let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
+					self.formatsRequested = fmtsReq; self.inputDescriptorMap = imap
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result = UserRequestInfo(docDataFormats: fmtsReq, validItemsRequested: items)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
@@ -165,10 +167,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
-		if formatsRequested.allSatisfy({ (key: String, value: DocDataFormat) in value == .cbor }) {
+		if formatsRequested.count == 1, formatsRequested.allSatisfy({ (key: String, value: DocDataFormat) in value == .cbor }) {
 			makeCborDocs()
 			let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend)
-			try await SendVpToken([vpToken], pd, resolved, onSuccess)
+			try await SendVpToken([(pd.inputDescriptors.first!.id, vpToken)], pd, resolved, onSuccess)
 		} else {
 			if formatsRequested.first(where: { (key: String, value: DocDataFormat) in value == .cbor }) != nil {
 				makeCborDocs()
@@ -176,14 +178,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let parser = CompactParser()
 			let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
 			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
-			var presentations = [VpToken.VerifiablePresentation]()
+			var inputToPresentations = [(String, VpToken.VerifiablePresentation)]()
 			// support sd-jwt documents
 			for (docId, nsItems) in itemsToSend {
+				guard let docType = idsToDocTypes[docId], let inputDescrId = inputDescriptorMap[docType] else { continue }
 				if dataFormats[docId] == .cbor {
 					if docsCbor == nil { makeCborDocs() }
 					let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
 					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
-					 presentations.append(vpToken)
+					 inputToPresentations.append((inputDescrId, vpToken))
 				} else if dataFormats[docId] == .sdjwt {
 					let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
 					guard let docSigned, let dpk, let items = nsItems.first?.value.map(\.elementIdentifier) else { continue }
@@ -195,18 +198,21 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId) else {
 						continue
 					}
-					presentations.append(VpToken.VerifiablePresentation.generic(presented.serialisation))
+					inputToPresentations.append((inputDescrId, VpToken.VerifiablePresentation.generic(presented.serialisation)))
 				}
 			}
-			try await SendVpToken(presentations, pd, resolved, onSuccess)
+			try await SendVpToken(inputToPresentations, pd, resolved, onSuccess)
 		}
 	}
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
-	fileprivate func SendVpToken(_ vpTokens: [VpToken.VerifiablePresentation]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
+	fileprivate func SendVpToken(_ vpTokens: [(String, VpToken.VerifiablePresentation)]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens {
-			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: pd.inputDescriptors.enumerated().map { i,d in DescriptorMap(id: d.id, format: d.formatContainer?.formats.first?["designation"].string ?? "", path: "$[\(i)]")}))
+			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens.map(\.1)), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: vpTokens.enumerated().map { i,v in 
+			 let descr = pd.inputDescriptors.first(where: { $0.id == v.0 })!
+			 return DescriptorMap(id: descr.id, format: descr.formatContainer?.formats.first?["designation"].string ?? "", path: vpTokens.count == 1 ? "$" : "$[\(i)]")
+			}))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))

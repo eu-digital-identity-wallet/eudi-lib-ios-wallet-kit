@@ -94,9 +94,10 @@ class Openid4VpUtils {
 	}
 	
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat]) {
-		var res = RequestItems()
-		var formats = [String: DocDataFormat]() 
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
+		var inputDescriptorMap = [String: String]()
+		var requestItems = RequestItems()
+		var formatsRequested = [String: DocDataFormat]() 
 		for inputDescriptor in presentationDefinition.inputDescriptors {
 			let formatRequested: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
 			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
@@ -109,10 +110,9 @@ class Openid4VpUtils {
 				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
 				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
 			}
-			formats[docType] = formatRequested	
-			if !nsItems.isEmpty { res[docType] = nsItems }
+			if !nsItems.isEmpty { inputDescriptorMap[docType] = inputDescriptor.id; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested }
 		}
-		return (res, formats)
+		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
 	
 	/// parse field and return (namespace, RequestItem) pair
@@ -152,10 +152,7 @@ class Openid4VpUtils {
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
-		let sdHash = digestCreator.hashAndBase64Encode(
-			input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised
-		)!
-    
+		guard let sdHash = digestCreator.hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised) else { return nil }
     	let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), 
 			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Int(Date().timeIntervalSince1970.rounded()), Keys.sdHash.rawValue: sdHash]))
 		let holderPresentation = try await SDJWTIssuer.presentation(
