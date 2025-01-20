@@ -1,10 +1,3 @@
-//
-//  DocClaimMetadata.swift
-//  EudiWalletKit
-//
-//  Created by Pankaj Sachdeva on 19.12.24.
-//
-
 import Foundation
 import OpenID4VCI
 import WalletStorage

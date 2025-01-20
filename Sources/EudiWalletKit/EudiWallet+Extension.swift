@@ -12,11 +12,11 @@ import LocalAuthentication
 import OpenID4VCI
 
 extension EudiWallet {
-    @discardableResult public func issuePAR(docType: String, scope: String? = "", identifier: String? = "", keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+    @discardableResult public func issuePAR(docType: String?, scope: String? = "", identifier: String? = "", keyOptions: KeyOptions? = nil, promptMessage: String? = nil, wia: WalletInstanceAttestationPAR) async throws -> WalletStorage.Document {
         
         let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
         
-        let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, promptMessage: promptMessage)
+        let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, promptMessage: promptMessage, wia: wia)
         
         return try await finalizeIssuing(data: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
@@ -36,7 +36,6 @@ extension EudiWallet {
         }
         
         return try await finalizeIssuing(data: issuanceOutcome, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
-        
     }
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {
