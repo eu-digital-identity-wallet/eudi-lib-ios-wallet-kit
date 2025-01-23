@@ -45,11 +45,11 @@ The library provides the following functionality:
         - [x] Authorization Code Flow
         - [x] Pre-authorization Code Flow
         - [x] Support for mso_mdoc format
-        - [ ] Support for sd-jwt-vc format
+        - [x] Support for sd-jwt-vc format
         - [x] Support credential offer
         - [x] Support for DPoP JWT in authorization
         - [x] Support for JWT and CWT proof types
-        - [ ] Support for deferred issuing
+        - [x] Support for deferred issuing
 - Proximity document presentation
     - [x] Support for ISO-18013-5 device retrieval
         - [x] QR device engagement
