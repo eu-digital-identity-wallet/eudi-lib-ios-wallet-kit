@@ -197,6 +197,11 @@ extension JSON {
 		switch type {
 		case .number:
 			if name == "sex", let isex = Int(stringValue), isex <= 2 { return (.string(NSLocalizedString(isex == 1 ? "male" : "female", comment: "")), stringValue) }
+			if name == JWTClaimNames.issuedAt || name == JWTClaimNames.expirationTime {
+				let date = Date(timeIntervalSince1970: TimeInterval(intValue))
+				let isoDateStr = ISO8601DateFormatter().string(from: date)
+				return (.date(isoDateStr), date.formatted(date: .complete, time: .omitted))
+			}
 			return (.integer(UInt64(intValue)), stringValue)
 		case .string:
 			if name == "portrait" || name == "signature_usual_mark", let d = Data(base64urlEncoded: stringValue) { return (.bytes(d.bytes), "\(d.count) bytes") }
@@ -210,9 +215,10 @@ extension JSON {
 	}
 
 	func toDocClaim(_ key: String, order n: Int, _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
-		if key == "cnf", type == .dictionary { return nil }
-		if key == "iat" || key == "exp", type == .number { return nil }
-		if key == "assurance_level" || key == "iss", type == .string { return nil }
+		let bDebug = false // UserDefaults.standard.bool(forKey: "DebugDisplay")
+		if key == "cnf", type == .dictionary, !bDebug { return nil } // members used to identify the proof-of-possession key.
+		if key == "status", type == .dictionary, self["status_list"].type == .dictionary, !bDebug { return nil } // status list.
+		if key == "assurance_level" || key == JWTClaimNames.issuer, type == .string { if !bDebug { return nil } }
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
 		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
