@@ -50,7 +50,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var iaca: [SecCertificate]!
 	// map of docType to data format (formats requested)
 	var formatsRequested: [String: DocDataFormat]!
-	/// map of inputDescriptor-id to docType
+	/// map of docType to inputDescriptor-id 
 	var inputDescriptorMap: [String: String]!
 	var dauthMethod: DeviceAuthMethod
 	var devicePrivateKeys: [String: CoseKeyPrivate]!
