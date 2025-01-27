@@ -1,3 +1,5 @@
+## v0.9.4
+- Added properties to `DocClaimsDecodable` protocol: `validFrom`, `validUntil`
 ## v0.9.3
 - Fixed bug for OpenID4VP presentation for more than 2 documents
 ## v0.9.2
