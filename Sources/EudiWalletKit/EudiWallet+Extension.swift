@@ -18,7 +18,7 @@ extension EudiWallet {
         
         let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, promptMessage: promptMessage, wia: wia)
         
-        return try await finalizeIssuing(data: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+        return try await finalizeIssuing(issueOutcome: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
     
     public func getCredentials(docType: String, scope: String?, dpopNonce: String, code: String, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
@@ -35,7 +35,7 @@ extension EudiWallet {
             throw  WalletError(description: "Error in getting access token")
         }
         
-        return try await finalizeIssuing(data: issuanceOutcome, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
+        return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {

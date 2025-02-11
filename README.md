@@ -45,11 +45,11 @@ The library provides the following functionality:
         - [x] Authorization Code Flow
         - [x] Pre-authorization Code Flow
         - [x] Support for mso_mdoc format
-        - [ ] Support for sd-jwt-vc format
+        - [x] Support for sd-jwt-vc format
         - [x] Support credential offer
         - [x] Support for DPoP JWT in authorization
         - [x] Support for JWT and CWT proof types
-        - [ ] Support for deferred issuing
+        - [x] Support for deferred issuing
 - Proximity document presentation
     - [x] Support for ISO-18013-5 device retrieval
         - [x] QR device engagement
@@ -149,9 +149,9 @@ The storage model provides the following models for the supported well-known doc
 |eu.europa.ec.eudiw.pid.1|[EuPidModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/eupidmodel)|
 |org.iso.18013.5.1.mDL|[IsoMdlModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/isomdlmodel)|
 
-Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager\toMdocModel`` function to decode document raw CBOR data to strongly-typed models conforming to [MdocDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocdecodable) protocol. 
+Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager\toClaimsModel`` function to decode document raw CBOR data to strongly-typed models conforming to [DocClaimsDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/DocClaimsDecodable) protocol. 
 
-The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``mdocModels`` property. The deferred and pending documents are available in the ``StorageManager\deferredDocuments`` and ``StorageManager\pendingDocuments`` properties respectively.
+The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``docModels`` property. The deferred and pending documents are available in the ``StorageManager\deferredDocuments`` and ``StorageManager\pendingDocuments`` properties respectively.
 
 For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
 
@@ -176,20 +176,28 @@ If ``userAuthenticationRequired`` is true, user authentication is required. The 
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the `issueDocument(docType:format:keyOptions:)` method.
+When the document docType to be issued use the `issueDocument(docType:keyOptions:)` method.
 
-* Currently, only mso_mdoc format is supported
+* Currently, only mso_mdoc and sd_jwt formats are supported
 
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
 ```swift
 do {
-  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, format: .cbor, keyOptions: KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])])
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, keyOptions: KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])])
   // document has been added to wallet storage, you can display it
 }
 catch {
   // display error
 }
+```
+You can also issue a document by passing configuration `identifier` parameter the `identifier`. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
+
+```swift
+  // get current issuer metadata
+  let configuration = try await wallet.getIssuerMetadata()
+  ...
+  let doc = try await userWallet.issueDocument(identifier: "eu.europa.ec.eudi.pid_vc_sd_jwt")
 ```
 ### Resolving Credential offer
 
@@ -205,12 +213,12 @@ The following example shows how to resolve a credential offer:
   }
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
 The following example shows how to issue documents by offer URL:
 ```swift
  let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers,
-   docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])], format: .cbor, txCodeValue: txCodeValue )
+   docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "SecureEnclave", accessControl: [.requireUserPresence])], txCodeValue: txCodeValue )
 ```
 
 ### Authorization code flow
@@ -229,13 +237,13 @@ information. Specifically, the `txCodeSpec` field in the `OfferedIssuanceModel` 
 
 From the user's perspective, the application must provide a way to input the transaction code.
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` method.
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
 
 ### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling `issueDocument(docType:format:keyOptions: KeyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:format:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.
+After calling `issueDocument(docType:keyOptions: KeyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 
