@@ -81,7 +81,9 @@ extension Array where Element == DocElementsViewModel {
 public struct ElementViewModel: Identifiable, Sendable {
 	public var id: String { "\(nameSpace)_\(elementPath.joined(separator: "."))" }
 	public let nameSpace: String
+	/// path to locate the element
 	public let elementPath: [String]
+	// display names of the component paths
 	public let displayNames: [String?]
 	public let isOptional: Bool
 	public let intentToRetain: Bool
