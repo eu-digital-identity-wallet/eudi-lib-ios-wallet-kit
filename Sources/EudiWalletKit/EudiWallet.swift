@@ -61,7 +61,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var logFileName: String? { didSet { try? initializeLogging() } }
 	public static let defaultClientId = "wallet-dev"
 	public static let defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
-	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(clientId: defaultClientId, authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
+	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(client: .public(id: defaultClientId), authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
 	public static let defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
 	/// - Parameters:
@@ -178,13 +178,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: (Issue request key pair, vci service, unique id)
 	func prepareIssuing(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, disablePrompt: Bool, promptMessage: String?) async throws -> OpenId4VCIService {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-		guard openID4VciConfig?.clientId != nil else { throw WalletError(description: "clientId not defined")}
+		guard openID4VciConfig?.client != nil else { throw WalletError(description: "clientId not defined")}
 		guard openID4VciConfig?.authFlowRedirectionURI != nil else { throw WalletError(description: "Auth flow Redirect URI not defined")}
 		let issueReq = try await Self.authorizedAction(action: {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(clientId: Self.defaultClientId, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: .public(id: Self.defaultClientId), authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		return openId4VCIService
 	}
 
