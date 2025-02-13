@@ -35,7 +35,8 @@ struct EudiWalletKitTests {
 		let items1 = try #require(items)
 		let docType = try #require(items1.first?.key)
 		let nsItems = try #require(items1.first?.value.first)
-		#expect(!nsItems.value.isEmpty); print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map(\.elementIdentifier))
+		#expect(!nsItems.value.isEmpty && nsItems.value.count > 1)
+		print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map(\.elementIdentifier))
 		#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
 	}
 
@@ -46,7 +47,11 @@ struct EudiWalletKitTests {
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
 		let paths = try sdJwt.recreateClaims()
-		print(paths.recreatedClaims["vct"].string ?? "nil", paths.recreatedClaims["type"].string ?? "nil")
+		if dt == "pid" {
+			let family_name = try #require(paths.recreatedClaims["family_name"].string)
+			let given_name = try #require(paths.recreatedClaims["given_name"].string)
+			print(family_name, given_name)
+		}
 	}
 	
 	let ANNEX_B_OPENID4VP_HANDOVER = "835820DA25C527E5FB75BC2DD31267C02237C4462BA0C1BF37071F692E7DD93B10AD0B5820F6ED8E3220D3C59A5F17EB45F48AB70AEECF9EE21744B1014982350BD96AC0C572616263646566676831323334353637383930"

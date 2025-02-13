@@ -1,53 +1,203 @@
 {
-      "id": "ea0b07ce-ff30-4d22-9c50-43ed7a80217a",
-      "input_descriptors": [
-        {
-          "id": "52d8e33b-408a-4e30-b1ad-d03416cf43c2",
-          "name": "Mobile Driving Licence (MDL)",
-          "purpose": "",
-          "format": {
-            "vc+sd-jwt": {
-              "sd-jwt_alg_values": [
-                "ES256",
-                "ES384"
-              ],
-              "kb-jwt_alg_values": [
-                "ES256",
-                "ES384"
-              ]
-            }
-          },
-          "constraints": {
-            "fields": [
-              {
-                "path": [
-                  "$.vct"
-                ],
-                "filter": {
-                  "type": "string",
-                  "const": "urn:org.iso.18013.5.1:mDL:1"
-                }
-              },
-              {
-                "path": [
-                  "$.given_name_national_character"
-                ],
-                "intent_to_retain": false
-              },
-              {
-                "path": [
-                  "$.family_name_national_character"
-                ],
-                "intent_to_retain": false
-              },
-              {
-                "path": [
-                  "$.document_number"
-                ],
-                "intent_to_retain": false
-              }
+    "id": "d1c32718-81a5-489f-904b-97ae7d2f7fca",
+    "input_descriptors": [
+      {
+        "id": "a0eb2e54-d780-4815-bd80-f684b4137425",
+        "name": "Person Identification Data (PID)",
+        "purpose": "",
+        "format": {
+          "vc+sd-jwt": {
+            "sd-jwt_alg_values": [
+              "ES256",
+              "ES384"
+            ],
+            "kb-jwt_alg_values": [
+              "ES256",
+              "ES384"
             ]
           }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": [
+                "$.vct"
+              ],
+              "filter": {
+                "type": "string",
+                "const": "urn:eu.europa.ec.eudi:pid:1"
+              }
+            },
+            {
+              "path": [
+                "'$.'family_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'given_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'birthdate"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'age_equal_or_over.18"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'age_in_years"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'age_birth_year"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'birth_family_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'birth_given_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'place_of_birth.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'place_of_birth.country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'place_of_birth.region"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'place_of_birth.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.formatted"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.region"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.postal_code"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.street_address"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'address.house_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'gender"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'nationalities"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'iat"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'exp"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'issuing_authority"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'document_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'administrative_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'issuing_country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "'$.'issuing_jurisdiction"
+              ],
+              "intent_to_retain": false
+            }
+          ]
         }
-      ]
-    }
+      }
+    ]
+  }

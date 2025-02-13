@@ -34,7 +34,7 @@ extension DocElementsViewModel {
 	
 	static func nsItemsToViewModels(_ ns: String, _ items: [RequestItem], _ isEnabled: Bool, _ mandatoryElementKeys: [String]) -> [ElementViewModel] {
 		// default for intent-to-retain is false, default for isOptional is true
-		items.map { ElementViewModel(nameSpace: ns, elementIdentifier: $0.elementIdentifier, displayName: $0.displayName, isOptional: $0.isOptional ?? !mandatoryElementKeys.contains($0.elementIdentifier), intentToRetain: $0.intentToRetain ?? false, isEnabled: isEnabled) }
+		items.map { ElementViewModel(nameSpace: ns, elementPath: $0.elementPath, displayNames: $0.displayNames, isOptional: $0.isOptional ?? !mandatoryElementKeys.contains($0.elementIdentifier), intentToRetain: $0.intentToRetain ?? false, isEnabled: isEnabled) }
 	}
 	
 	static func getMandatoryElementKeys(docType: String) -> [String] {
@@ -79,10 +79,12 @@ extension Array where Element == DocElementsViewModel {
 }
 
 public struct ElementViewModel: Identifiable, Sendable {
-	public var id: String { "\(nameSpace)_\(elementIdentifier)" }
+	public var id: String { "\(nameSpace)_\(elementPath.joined(separator: "."))" }
 	public let nameSpace: String
-	public let elementIdentifier: String
-	public let displayName: String?
+	/// path to locate the element
+	public let elementPath: [String]
+	// display names of the component paths
+	public let displayNames: [String?]
 	public let isOptional: Bool
 	public let intentToRetain: Bool
 	public var isEnabled: Bool
@@ -94,7 +96,7 @@ extension Array where Element == ElementViewModel {
 	var nsDictionary: [String: [RequestItem]] {
 		Dictionary(grouping: self, by: \.nameSpace)
 			.mapValues {
-				evm in evm.map { RequestItem(elementIdentifier: $0.elementIdentifier, displayName: $0.displayName, intentToRetain: $0.intentToRetain, isOptional: $0.isOptional) }
+				evm in evm.map { RequestItem(elementPath: $0.elementPath, displayNames: $0.displayNames, intentToRetain: $0.intentToRetain, isOptional: $0.isOptional) }
 			}
 	}
 }
