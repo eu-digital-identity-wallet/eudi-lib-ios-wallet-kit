@@ -66,7 +66,7 @@ class Openid4VpUtils {
 	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
 	static let pathNsItemRx = try! NSRegularExpression(pattern: #"\$\['([^']+)'\]\['([^']+)'\]"#, options: .caseInsensitive)
 	// example path: $.given_name_national_character
-	static let pathItemRx: NSRegularExpression = try! NSRegularExpression(pattern: #"'\$\.'(.+)"#, options: .caseInsensitive)
+	static let pathItemRx: NSRegularExpression = try! NSRegularExpression(pattern: #"\$\.(.+)"#, options: .caseInsensitive)
 
 	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> SessionTranscript {
 		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
