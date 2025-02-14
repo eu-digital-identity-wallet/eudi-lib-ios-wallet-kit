@@ -38,6 +38,14 @@ extension Array where Element == Display {
 				$0.locale?.languageCode == uiCulture
 		} }) ?? first)?.name
 	}
+
+	func getLogo(_ uiCulture: String?) -> Display.Logo? {
+		(first(where: { if #available(iOS 16, *) {
+			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
+		} else {
+				$0.locale?.languageCode == uiCulture
+		} }) ?? first)?.logo
+	}
 }
 
 extension Array where Element == MdocDataModel18013.DisplayMetadata {
@@ -60,7 +68,7 @@ extension Bundle {
 	}
 }
 
-extension Data { 
+extension Data {
       public init?(base64urlEncoded input: String) {
           var base64 = input
           base64 = base64.replacingOccurrences(of: "-", with: "+")
@@ -87,7 +95,7 @@ extension WalletStorage.Document {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
 		return urlString
 	}
-	
+
 	public func getDisplayName(_ uiCulture: String?) -> String?  {
 		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
 		return docMetadata?.getDisplayName(uiCulture)
@@ -95,7 +103,7 @@ extension WalletStorage.Document {
 
 	public func getDisplayNames(_ uiCulture: String?) -> [String: [String: String]]? {
 		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
-		if docDataFormat == .cbor, let ncs1 = docMetadata?.namespacedClaims?.mapValues({ nc in nc.filter({ $1.getDisplayName(uiCulture) != nil})}), 
+		if docDataFormat == .cbor, let ncs1 = docMetadata?.namespacedClaims?.mapValues({ nc in nc.filter({ $1.getDisplayName(uiCulture) != nil})}),
 		 case let ncs = ncs1.mapValues({n1 in n1.mapValues({ $0.getDisplayName(uiCulture)! })}) { return ncs }
 		if docDataFormat == .sdjwt, let ncs = docMetadata?.flatClaims?.filter({ $1.getDisplayName(uiCulture) != nil}).mapValues({ $0.getDisplayName(uiCulture)! }) { return ["": ncs] }
 		return nil
@@ -137,7 +145,7 @@ extension MdocDataModel18013.SignUpResponse {
 			return (docType: sr0.docType, jsonData: jsonData, drData: drData, issData: issData, pkData: pkData)
 		}
 	}
-	
+
 	/// Device private key decoded from base64-encoded string
 	public var devicePrivateKey: CoseKeyPrivate? {
 		get async {
@@ -178,16 +186,16 @@ extension DocMetadata {
 			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
 		}
 		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
+			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }
 		}
 		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 
 	func getFlatClaimMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
 		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil, nil, nil, nil, nil) }
-		let claimDisplayNames = flatClaims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}	
+		let claimDisplayNames = flatClaims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}
 		let mandatoryClaims = flatClaims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
-		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }	
+		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }
 		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier,  claimDisplayNames, mandatoryClaims, claimValueTypes)
 	}
 }
@@ -222,7 +230,7 @@ extension JSON {
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
 		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
-		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0) 
+		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0)
 	}
 
 	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
@@ -235,7 +243,7 @@ extension JSON {
 						partialResult.0.append(contentsOf: claims1)
 						partialResult.1 += (partialResult.1.count == 0 ? "" : ", ") + str1
 					}
-				} 
+				}
 			}
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
