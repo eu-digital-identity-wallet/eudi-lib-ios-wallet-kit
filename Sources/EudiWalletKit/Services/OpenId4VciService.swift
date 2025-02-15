@@ -106,6 +106,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 	
 	func getIssuer(offer: CredentialOffer) throws -> Issuer {
+//        if let batchCredential = offer.credentialIssuerMetadata.batchCredentialIssuance {
+//            
+//        }
 		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
 	}
 	
