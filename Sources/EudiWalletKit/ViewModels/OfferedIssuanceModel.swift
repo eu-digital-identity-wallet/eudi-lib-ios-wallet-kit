@@ -21,8 +21,10 @@ import Foundation
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)``
 public struct OfferedIssuanceModel: Sendable {
-	/// Issuer name (currently the URL)
+	/// Issuer name
 	public let issuerName: String
+	/// Issuer logo URL
+	public let issuerLogoUrl: String?
 	/// Document types included in the offer
 	public let docModels: [OfferedDocModel]
 	/// Transaction code specification (in case of preauthorized flow)

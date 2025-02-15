@@ -56,7 +56,6 @@ extension OpenId4VCIService {
     
     func getIssuer(offer: CredentialOffer, with dPopConstructor: DPoPConstructorType) throws -> Issuer {
         try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
-//        try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession), dpopConstructor: dPopConstructor)
     }
     
     private func authorizePARWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer, wia: WalletInstanceAttestationPAR) async throws -> (AuthorizedRequest?, AuthorizeRequestOutcome?) {
