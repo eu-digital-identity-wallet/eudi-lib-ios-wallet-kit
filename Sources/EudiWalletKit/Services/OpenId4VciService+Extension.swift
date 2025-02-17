@@ -33,7 +33,7 @@ extension OpenId4VCIService {
                     
                     let dPopConstructor = DPoPConstructor(algorithm: JWSAlgorithm(.ES256), jwk: wia.jwk, privateKey: .secKey(wia.privateKey))
                     // Authorize with auth code flow
-                    let issuer = try getIssuer(offer: offer, with: dPopConstructor)
+					let issuer = try await getIssuer(offer: offer, with: dPopConstructor)
                     
                     let authorizedOutcome = (try await authorizePARWithAuthCodeUseCase(issuer: issuer, offer: offer, wia: wia)).1
                     if case .presentation_request(let url) = authorizedOutcome, let parRequested {
@@ -54,8 +54,10 @@ extension OpenId4VCIService {
             }
         }
     
-    func getIssuer(offer: CredentialOffer, with dPopConstructor: DPoPConstructorType) throws -> Issuer {
-        try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
+	func getIssuer(offer: CredentialOffer, with dPopConstructor: DPoPConstructorType) async throws -> Issuer {
+		try await MainActor.run {
+			try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession), dpopConstructor: dPopConstructor)
+		}
     }
     
     private func authorizePARWithAuthCodeUseCase(issuer: Issuer, offer: CredentialOffer, wia: WalletInstanceAttestationPAR) async throws -> (AuthorizedRequest?, AuthorizeRequestOutcome?) {
@@ -93,7 +95,6 @@ extension OpenId4VCIService {
     
     func getCredentials(dpopNonce: String, code: String, scope: String?, claimSet: ClaimSet? = nil, identifier: String?, docType: String?) async throws -> (IssuanceOutcome?, DocDataFormat?) {
         do {
-            try addNonceToUnauthorizedRequest(dpopNonce: dpopNonce)
             if let key = OpenId4VCIService.metadataCache.keys.first,
                 let offer = OpenId4VCIService.metadataCache[key],
                 let unauthorizedRequest = OpenId4VCIService.parReqCache {
@@ -102,18 +103,17 @@ extension OpenId4VCIService {
                    let publicKey = try? KeyController.generateECDHPublicKey(from: privateKey) {
                     let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
                     let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: publicKeyJWK, privateKey: .secKey(privateKey))
-                    let issuer = try getIssuer(offer: offer, with: dpopConstructor)
+					let issuer = try await getIssuer(offer: offer, with: dpopConstructor)
                     
-                    let unAuthorized = try await handleAuthorizationCode(nonce: Nonce(value: dpopNonce), issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
-                 
+					let authReq = try await handleAuthorizationCodeBothCases(issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
+					
                     if offer.credentialConfigurationIdentifiers.first != nil {
                         do {
                             let configuration = try  getCredentialIdentifier(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: nil, docType: docType, scope: scope)
-//                            let configuration = try await getCredentialIdentifier(credentialsSupported: issuer.issuerMetadata.credentialsSupported, identifier: nil, docType: docType, scope: scope)
-//                            
+                            
                             try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
                             
-                            let issuanceOutcome = try await issueOfferedCredentialInternal(unAuthorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
+                            let issuanceOutcome = try await issueOfferedCredentialInternal(authReq, issuer: issuer, configuration: configuration, claimSet: claimSet)
 
                             return (issuanceOutcome, DocDataFormat.cbor)
                             
@@ -121,7 +121,6 @@ extension OpenId4VCIService {
                             throw WalletError(description: "Invalid issuer metadata")
                         }
                     }
-                    
                 }
             }
         } catch  {
@@ -163,15 +162,14 @@ extension OpenId4VCIService {
         OpenId4VCIService.parReqCache = request
     }
     
-    func handleAuthorizationCode(nonce: Nonce, issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
+    func handleAuthorizationCodeBothCases(issuer: Issuer, request: UnauthorizedRequest, authorizationCode: String) async throws -> AuthorizedRequest {
         let unAuthorized = await issuer.handleAuthorizationCode(parRequested: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
         switch unAuthorized {
         case .success(let request):
-//            let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request, nonce: nonce)
             let authorizedRequest = await issuer.authorizeWithAuthorizationCode(authorizationCode: request)
             
             if case let .success(authorized) = authorizedRequest {
-               if case let .proofRequired(token,_, _, _, _, nonce) = authorized {
+               if case let .proofRequired(token,_, _, _, _, _) = authorized {
                    let at = token.accessToken;    logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
                    return authorized
                } else if case let .success(authorized) = authorizedRequest,
