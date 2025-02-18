@@ -36,7 +36,7 @@ extension EudiWallet {
             throw  WalletError(description: "Error in getting access token")
         }
         
-        return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: .cbor, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: .sdjwt, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {

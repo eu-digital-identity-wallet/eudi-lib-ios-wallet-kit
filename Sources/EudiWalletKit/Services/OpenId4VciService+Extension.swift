@@ -1,5 +1,5 @@
 //
-//  Untitled.swift
+//  OpenId4VCIService.swift
 //  EudiWalletKit
 //
 //  Created by Pankaj Sachdeva on 20.12.24.
@@ -73,12 +73,7 @@ extension OpenId4VCIService {
             logger.info("--> [AUTHORIZATION] Placing PAR to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
         
         let parPlaced = try await issuer.pushAuthorizationCodeRequest(credentialOffer: offer)
-//        let jwtSpec = ClientAttestationPoPJWTSpec(duration: wia.expirationDuration, typ: "", issuer: wia.clientID, audience: wia.aud, nonce: nil)
-//        
-//        let clientAttestation = ClientAttestation(clientAttestationPoPJWTType: jwtSpec, clientAttestationJWT: wia.wia)
-//        
-//        let parPlaced = try await issuer.pushAuthorizationCodeRequest(credentialOffer: offer, clientAttestation: clientAttestation)
-            
+
             if case let .success(request) = parPlaced,
                 case let .par(parRequested) = request {
                 OpenId4VCIService.parReqCache = request
