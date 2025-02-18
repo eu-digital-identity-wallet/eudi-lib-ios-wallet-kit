@@ -20,15 +20,17 @@ import MdocDataModel18013
 import WalletStorage
 
 struct CredentialConfiguration: Sendable, Codable {
-    let identifier: CredentialConfigurationIdentifier
-    let docType: String?
-    let scope: String
-    let display: [Display]
-    let algValuesSupported: [String]
-    let msoClaims: MsoMdocClaims?
-    let flatClaims: [String: Claim]?
-    let order: [String]?
-    let format: DocDataFormat
+	let configurationIdentifier: CredentialConfigurationIdentifier
+	let credentialIssuerIdentifier: String
+	let docType: String?
+	let scope: String
+	let display: [MdocDataModel18013.DisplayMetadata]
+	let issuerDisplay: [MdocDataModel18013.DisplayMetadata]
+	let algValuesSupported: [String]
+	let msoClaims: MsoMdocClaims?
+	let flatClaims: [String: Claim]?
+	let order: [String]?
+	let format: DocDataFormat
 }
 
 struct DeferredIssuanceModel: Codable, Sendable {
@@ -36,20 +38,20 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
-    let configuration: CredentialConfiguration
+	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }
 
 struct PendingIssuanceModel: Codable {
-    // pending reason
-    enum PendingReason: Codable {
-        case presentation_request_url(String)
-    }
-    let pendingReason: PendingReason
-    let configuration: CredentialConfiguration
-    let metadataKey: String
-    let pckeCodeVerifier: String
-    let pckeCodeVerifierMethod: String
+	// pending reason
+	enum PendingReason: Codable {
+		case presentation_request_url(String)
+	}
+	let pendingReason: PendingReason
+	let configuration: CredentialConfiguration
+	let metadataKey: String
+	let pckeCodeVerifier: String
+	let pckeCodeVerifierMethod: String
 }
 
 enum IssuanceOutcome {
