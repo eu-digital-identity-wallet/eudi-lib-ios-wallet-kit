@@ -110,7 +110,7 @@ extension OpenId4VCIService {
                             
                             let issuanceOutcome = try await issueOfferedCredentialInternal(authReq, issuer: issuer, configuration: configuration, claimSet: claimSet)
 
-                            return (issuanceOutcome, DocDataFormat.cbor)
+							return (issuanceOutcome, configuration.format)
                             
                         } catch {
                             throw WalletError(description: "Invalid issuer metadata")

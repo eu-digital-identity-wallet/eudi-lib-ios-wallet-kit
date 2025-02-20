@@ -32,11 +32,11 @@ extension EudiWallet {
             identifier: id,
             docType: docType
         )
-        guard let issuanceOutcome = credentialsOutcome.0, let _ = credentialsOutcome.1 else {
+        guard let issuanceOutcome = credentialsOutcome.0, let format = credentialsOutcome.1 else {
             throw  WalletError(description: "Error in getting access token")
         }
         
-		return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: .sdjwt, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {
