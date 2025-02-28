@@ -311,7 +311,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			// logger.info("Issued credential data:\n\(strBase64)")
 			return .issued(Data(base64URLEncoded: str), str, configuration)
 		} else if case let .json(json) = credential {
-			return .issued(try JSONEncoder().encode(json), nil, configuration)
+			let credentialsString = json.arrayValue.map { $0.stringValue }.joined(separator: ",")
+			return .issued(credentialsString.data(using: .utf8), credentialsString, configuration)
+//			return .issued(try JSONEncoder().encode(json), nil, configuration)
 		} else {
 			throw WalletError(description: "Invalid credential")
 		}
@@ -322,7 +324,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		guard let configuration else { throw WalletError(description: "Credential configuration not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
-		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
+		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey, bindingKey, bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
 			switch request {
@@ -478,5 +480,13 @@ public enum OpenId4VCIError: LocalizedError {
 		case .dataNotValid:
 			return "Issued data not valid"
 		}
+	}
+}
+extension String {
+	public func toHashedStringWithSha256() -> String {
+		let digest = SHA256.hash(data: self.data(using: .utf8)!)
+		return Data(digest).base64EncodedString()
+			.replacingOccurrences(of: "+", with: "-")
+			.replacingOccurrences(of: "/", with: "_")
 	}
 }

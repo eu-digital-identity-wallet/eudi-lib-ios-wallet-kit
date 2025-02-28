@@ -109,9 +109,8 @@ extension OpenId4VCIService {
                             try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
                             
                             let issuanceOutcome = try await issueOfferedCredentialInternal(authReq, issuer: issuer, configuration: configuration, claimSet: claimSet)
-
+							
 							return (issuanceOutcome, configuration.format)
-                            
                         } catch {
                             throw WalletError(description: "Invalid issuer metadata")
                         }

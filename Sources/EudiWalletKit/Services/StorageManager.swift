@@ -164,7 +164,11 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	
 	static func recreateSdJwtClaims(docData: Data) -> (json: JSON, hashingAlg: String)? {
 		let parser = CompactParser()
-		guard let serString = String(data: docData, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
+		guard var serString = String(data: docData, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
+		let serStrings = serString.components(separatedBy: ",")
+		if serStrings.count > 1 {
+			serString = serStrings[0].replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "[", with: "")
+		}
 		guard let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString) else { logger.error("Failed to parse serialized SDJWT"); return nil }
 		var recreatedClaims: JSON?; var hashingAlg: String?
 		do {

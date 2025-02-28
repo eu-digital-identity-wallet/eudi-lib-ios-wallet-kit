@@ -22,7 +22,7 @@ extension EudiWallet {
         return try await finalizeIssuing(issueOutcome: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
     
-    public func getCredentials(docType: String, scope: String?, dpopNonce: String, code: String, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+	public func getCredentials(docType: String, scope: String?, dpopNonce: String, code: String, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, docDataFormat: DocDataFormat) async throws -> WalletStorage.Document? {
         let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
         
         let credentialsOutcome = try await openId4VCIService.getCredentials(
@@ -32,11 +32,23 @@ extension EudiWallet {
             identifier: id,
             docType: docType
         )
-        guard let issuanceOutcome = credentialsOutcome.0, let format = credentialsOutcome.1 else {
+		guard let issuanceOutcome = credentialsOutcome.0, let _ = credentialsOutcome.1 else {
             throw  WalletError(description: "Error in getting access token")
         }
-        
-		return try await finalizeIssuing(issueOutcome: issuanceOutcome, docType: docType, format: format, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		var document: WalletStorage.Document?
+		switch issuanceOutcome {
+		case .issued(_, let str, let cc):
+			guard let str else { return document! }
+			let arr = str.split(separator: ",")
+			for item in arr {
+				document = try await finalizeIssuing(issueOutcome: .issued(String(item).data(using: .utf8), String(item), cc), docType: docType, format: docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+				//document = try await finalizeIssuing(issueOutcome: .issued( String(item).data(using: .utf8), String(item), cc), docType: docType, format: docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+				
+			}
+		default:
+			print(#function, "Unhandled issuance outcome")
+		}
+		return document
     }
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {

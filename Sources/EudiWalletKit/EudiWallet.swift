@@ -254,11 +254,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docTypeToSave = if format == .cbor, let data {
 				IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docTypeOrScope
 			} else if format == .sdjwt, let str, let ds = str.data(using: .utf8) {
-				StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope
+				StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope//sdjwt single
+			} else if format == .sdjwt, let data {
+				StorageManager.getVctFromSdJwt(docData: data) ?? docTypeOrScope
 			} else {
 				docTypeOrScope
 			}
-			displayName = cc.display.getName(uiCulture)
+			displayName = cc.issuerDisplay.first?.name
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata()
@@ -270,13 +272,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docTypeToSave = docType ?? "PENDING"
 			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 		}
+		let id = UUID().uuidString
 		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
-		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
+		let newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: format.rawValue, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
 		try await endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
-		if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
+		if pds == nil { try await storage.removePendingOrDeferredDoc(id: id) }
 		return newDocument
 	}
 	
