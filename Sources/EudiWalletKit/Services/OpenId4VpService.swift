@@ -127,7 +127,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 					self.formatsRequested = fmtsReq; self.inputDescriptorMap = imap
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result = UserRequestInfo(docDataFormats: fmtsReq, validItemsRequested: items)
+					var result = UserRequestInfo(docDataFormats: fmtsReq, itemsRequested: items)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {
