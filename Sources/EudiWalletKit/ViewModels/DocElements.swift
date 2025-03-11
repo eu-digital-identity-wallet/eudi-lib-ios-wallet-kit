@@ -20,11 +20,11 @@ import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
 
 public struct DocPresentInfo: Sendable {
-	let docType: String
-	let docDataFormat: DocDataFormat
-	let displayName: String?
-	let docClaims: [DocClaim]
-	let typedData: DocTypedData
+	public let docType: String
+	public let docDataFormat: DocDataFormat
+	public let displayName: String?
+	public let docClaims: [DocClaim]
+	public let typedData: DocTypedData
 }
 
 public enum DocElements: Identifiable, Sendable {
@@ -171,7 +171,7 @@ extension RequestItem {
 		let query = allPaths.first { elementPath == $0.tokenArray }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
-		let docClaim: DocClaim? = if elementPath.count == 1 || !bRootOnly { findDocClaimByPath(docClaims: docClaims, requestPath: requestPath) } else { nil } 
+		let docClaim: DocClaim? = if elementPath.count == 1 || !bRootOnly { findDocClaimByPath(docClaims: docClaims, requestPath: requestPath) } else { nil }
 		let stringValue: String? = if elementPath.count == 1 || !bRootOnly { docClaim?.stringValue } else { nil }
 		return SdJwtElement(elementPath: requestPath, displayNames: displayNames, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nil)
 	}
