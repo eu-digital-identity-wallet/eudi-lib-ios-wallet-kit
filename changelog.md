@@ -1,3 +1,7 @@
+## v0.9.8
+ - sdJwt nested elements presentation
+ - `DocElementsViewModel` replaced with `enum DocElements`
+
 ## v0.9.6
 - OfferedIssuanceModel: Change the issuerName property to represent a friendly name instead of a URL and add a new issuerLogoUrl property
 
