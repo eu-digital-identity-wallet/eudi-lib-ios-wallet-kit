@@ -177,7 +177,8 @@ extension RequestItem {
 	}
 
 	public func findDocClaimByPath(docClaims: [DocClaim], requestPath: [String]) -> DocClaim? {
-		var res: DocClaim? = nil
+		var res: DocClaim? = docClaims.first { $0.path == requestPath }
+		if res != nil { return res }
 		var docClaimsArray: [DocClaim]? = docClaims
 		for i in requestPath.indices {
 			guard docClaimsArray != nil else { return nil }

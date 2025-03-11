@@ -1,3 +1,7 @@
+## v0.9.9
+- `DocPresentInfo` struct members public
+- `DocClaim`: added property `path: [String]` to store the path of the claim in the document
+
 ## v0.9.8
  - sdJwt nested elements presentation
  - `DocElementsViewModel` replaced with `enum DocElements`
