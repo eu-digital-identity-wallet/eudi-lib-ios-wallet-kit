@@ -146,7 +146,9 @@ extension SignedSDJWT {
 		guard let allPaths = try? disclosedPaths() else { return nil }
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		guard let itemsReq = itemsRequested[""] else { return nil }
-		let sdJwtArray = Array(Set(itemsReq.map { reqItem in reqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(reqItem), bRootOnly: true) }))
+		var sdJwtArray = [SdJwtElement]()
+		let tmp = itemsReq.map { reqItem in reqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(reqItem), bRootOnly: true) }
+		for d in tmp { if !sdJwtArray.contains(d) { sdJwtArray.append(d) } }
 		for nestedReqItem in itemsReq.filter({ $0.elementPath.count > 1 }) {
 			let parentSd = sdJwtArray.first(where: { $0.elementPath == [nestedReqItem.rootIdentifier] })!
 			let nestedSd = nestedReqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(nestedReqItem), bRootOnly: false)
@@ -169,7 +171,7 @@ extension RequestItem {
 		let query = allPaths.first { elementPath == $0.tokenArray }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
-		let docClaim: DocClaim? = if elementPath.count == 1 || !bRootOnly { findDocClaimByPath(docClaims: docClaims, requestPath: requestPath) } else { nil }  //docClaims.first { $0.name == rootIdentifier }
+		let docClaim: DocClaim? = if elementPath.count == 1 || !bRootOnly { findDocClaimByPath(docClaims: docClaims, requestPath: requestPath) } else { nil } 
 		let stringValue: String? = if elementPath.count == 1 || !bRootOnly { docClaim?.stringValue } else { nil }
 		return SdJwtElement(elementPath: requestPath, displayNames: displayNames, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nil)
 	}
