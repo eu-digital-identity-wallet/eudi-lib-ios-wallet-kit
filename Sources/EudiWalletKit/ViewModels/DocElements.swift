@@ -73,7 +73,8 @@ public enum DocElements: Identifiable, Sendable {
 	}
 }
 
-/// MdocElements
+/// Element collection for mso-mdoc document
+/// Used for disclosure of mdoc elements
 public final class MsoMdocElements: Identifiable, @unchecked Sendable {
 	public init(docId: String, docType: String, displayName: String? = nil, isEnabled: Bool = true, nameSpacedElements: [NameSpacedElements]) {
 		self.docId = docId
@@ -84,14 +85,19 @@ public final class MsoMdocElements: Identifiable, @unchecked Sendable {
 	}
 
 	public var id: String { docId }
+	/// Document identifier
 	public var docId: String
+	/// Document type
 	public let docType: String
+	/// Display name of the document
 	public let displayName: String?
+	/// Indicates whether the document is enabled (false if requested but not available)
 	public var isEnabled: Bool = true
+	/// Collection of elements grouped by namespace
 	public var nameSpacedElements: [NameSpacedElements]
-
+	/// Dictionary of selected items grouped by namespace
 	public var selectedItemsDictionary: [String: [RequestItem]] {
-		Dictionary(grouping: nameSpacedElements, by: \.nameSpace).mapValues {ne in ne.first!.elements.filter(\.isSelected).map(\.requestItem)}
+		Dictionary(grouping: nameSpacedElements, by: \.nameSpace).filter { $1.first!.elements.count > 0}.mapValues {ne in ne.first!.elements.filter(\.isSelected).map(\.requestItem)}
 	}
 }
 
@@ -135,7 +141,7 @@ extension RequestItem {
 		let issuedElement = nsItems.first { $0.elementIdentifier == rootIdentifier }
 		let stringValue = issuedElement?.description
 		let docClaim = docClaims.first { $0.namespace == ns && $0.name == rootIdentifier }
-		return MsoMdocElement(elementIdentifier: elementIdentifier, displayName: rootDisplayName ?? rootIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
+		return MsoMdocElement(elementIdentifier: elementIdentifier, displayName: rootDisplayName ?? docClaim?.displayName ?? rootIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 }
 
@@ -156,20 +162,7 @@ extension MsoMdocElements {
 extension Array where Element == DocElements {
 	public var items: RequestItems { Dictionary(grouping: self, by: \.docId).mapValues { $0.first!.selectedItemsDictionary } }
 }
-/*
-extension RequestItems {
-	func toDocElementViewModels(docId: String, docType: String, displayName: String?, valid: Bool) -> [DocElements] {
-		compactMap { dType, nsItems in
-			if !Openid4VpUtils.vctToDocTypeMatch(dType, docType) {
-				nil
-			}
-			else {
-				DocElementsViewModel(docId: docId, docType: docType, displayName: displayName, isEnabled: valid, elements: DocElementsViewModel.fluttenItemViewModels(nsItems, valid: valid, mandatoryElementKeys: DocElementsViewModel.getMandatoryElementKeys(docType: docType)))
-			}
-		}
-	}
-}
-*/
+
 
 public final class NameSpacedElements: Identifiable, @unchecked Sendable {
 	public init(nameSpace: String, elements: [MsoMdocElement]) {
