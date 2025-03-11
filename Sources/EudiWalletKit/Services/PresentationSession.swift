@@ -75,13 +75,13 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 					guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
 					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
 					disclosedDocuments.append(.msoMdoc(msoElements))
+				case .sdjwt:
+					guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
+					guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+					let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
+					guard let sdJwtElements else { continue }
+					disclosedDocuments.append(.sdJwt(sdJwtElements))
 				default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
-					//case .sdjwt:
-					//let tmp = request.itemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-					//disclosedDocuments.append(contentsOf: tmp)
-				// case .sdjwt:
-					//let tmp = request.itemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-					//disclosedDocuments.append(contentsOf: tmp)
 			}
 
 		}

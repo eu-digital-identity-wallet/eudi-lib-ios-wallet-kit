@@ -168,7 +168,7 @@ class Openid4VpUtils {
 	static func filterSignedJwtByDocType(_ sdJwt: SignedSDJWT, docType: String) -> Bool {
 		guard let paths = try? sdJwt.recreateClaims() else { return false }
 		let type = paths.recreatedClaims["vct"].string ?? paths.recreatedClaims["type"].string
-		guard let type , !type.isEmpty else { return false }
+		guard let type, !type.isEmpty else { return false }
 		return vctToDocTypeMatch(docType, type)
 	}
 
