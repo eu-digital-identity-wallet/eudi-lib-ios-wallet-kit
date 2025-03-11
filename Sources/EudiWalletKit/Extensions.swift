@@ -247,7 +247,9 @@ extension JSON {
 			}
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
-				if let di = subJson.toDocClaim(key, order: n, claimDisplayNames, mandatoryClaims, claimValueTypes) {	a.append(di) }
+				if let di = subJson.toDocClaim(key, order: n, claimDisplayNames, mandatoryClaims, claimValueTypes) {
+					a.append(di)
+				}
 			}
 			return (a, type == .array ? "\(a.map(\.stringValue).joined(separator: ", "))" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ", "))}")
 		default: return nil
