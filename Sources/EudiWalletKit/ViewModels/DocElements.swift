@@ -127,13 +127,13 @@ public final class SdJwtElements: Identifiable, @unchecked Sendable {
 }
 
 extension IssuerSigned {
-	func extractMsoMdocElements(docId: String, docType: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> MsoMdocElements {
+	public func extractMsoMdocElements(docId: String, docType: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> MsoMdocElements {
 		MsoMdocElements(docId: docId, docType: docType, displayName: displayName, nameSpacedElements: itemsRequested.compactMap { ns, requestItems in
 			extractNameSpacedElements(docType: docType, ns: ns, docClaims: docClaims, requestItems: requestItems)
 		})
 	}
 
-	func extractNameSpacedElements(docType: String, ns: String, docClaims: [DocClaim], requestItems: [RequestItem]) -> NameSpacedElements? {
+	public func extractNameSpacedElements(docType: String, ns: String, docClaims: [DocClaim], requestItems: [RequestItem]) -> NameSpacedElements? {
 		guard let issuedItems = issuerNameSpaces?[ns] else { return nil }
 		let mandatoryElementKeys = MsoMdocElements.getMandatoryElementKeys(docType: docType, ns: ns)
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { mandatoryElementKeys.contains($0.rootIdentifier) } }
@@ -142,7 +142,7 @@ extension IssuerSigned {
 }
 
 extension SignedSDJWT {
-	func extractSdJwtElements(docId: String, vct: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> SdJwtElements? {
+	public func extractSdJwtElements(docId: String, vct: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> SdJwtElements? {
 		guard let allPaths = try? disclosedPaths() else { return nil }
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		guard let itemsReq = itemsRequested[""] else { return nil }
@@ -160,14 +160,14 @@ extension SignedSDJWT {
 }
 
 extension RequestItem {
-	func extractMsoMdocElement(ns: String, nsItems: [IssuerSignedItem], docClaims: [DocClaim], isMandatory: Bool) -> MsoMdocElement {
+	public func extractMsoMdocElement(ns: String, nsItems: [IssuerSignedItem], docClaims: [DocClaim], isMandatory: Bool) -> MsoMdocElement {
 		let issuedElement = nsItems.first { $0.elementIdentifier == rootIdentifier }
 		let stringValue = issuedElement?.description
 		let docClaim = docClaims.first { $0.namespace == ns && $0.name == rootIdentifier }
 		return MsoMdocElement(elementIdentifier: elementIdentifier, displayName: rootDisplayName ?? docClaim?.displayName ?? rootIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 
-	func extractSdJwtElement(allPaths: [JSONPointer], docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
+	public func extractSdJwtElement(allPaths: [JSONPointer], docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
 		let query = allPaths.first { elementPath == $0.tokenArray }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
@@ -176,7 +176,7 @@ extension RequestItem {
 		return SdJwtElement(elementPath: requestPath, displayNames: displayNames, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nil)
 	}
 
-	func findDocClaimByPath(docClaims: [DocClaim], requestPath: [String]) -> DocClaim? {
+	public func findDocClaimByPath(docClaims: [DocClaim], requestPath: [String]) -> DocClaim? {
 		var res: DocClaim? = nil
 		var docClaimsArray: [DocClaim]? = docClaims
 		for i in requestPath.indices {
