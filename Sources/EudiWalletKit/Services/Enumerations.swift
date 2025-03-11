@@ -17,11 +17,13 @@ limitations under the License.
 //  TransferStatus.swift
 
 import Foundation
+import MdocDataModel18013
+import eudi_lib_sdjwt_swift
 import WalletStorage
 
 /// Data exchange flow type
 public enum FlowType: Codable, Hashable, Sendable {
-	
+
 	case ble
 	case openid4vp(qrCode: Data)
 	case other
@@ -34,4 +36,10 @@ public enum StorageType: Sendable {
 	case keyChain
 }
 
+extension SignedSDJWT: @retroactive @unchecked Sendable {}
+
+public enum DocTypedData: Sendable {
+	case msoMdoc(IssuerSigned)
+	case sdJwt(SignedSDJWT)
+}
 

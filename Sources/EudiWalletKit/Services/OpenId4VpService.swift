@@ -118,16 +118,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 					}
 					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
-					vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
+					vpNonce = vp.nonce; vpClientId = vp.client.id
 					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
-					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId,
+					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id,
 						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 					self.presentationDefinition = vp.presentationDefinition
 					let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 					self.formatsRequested = fmtsReq; self.inputDescriptorMap = imap
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result = UserRequestInfo(docDataFormats: fmtsReq, validItemsRequested: items)
+					var result = UserRequestInfo(docDataFormats: fmtsReq, itemsRequested: items)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {

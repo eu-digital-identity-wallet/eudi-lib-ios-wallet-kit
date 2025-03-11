@@ -1,12 +1,12 @@
 /*
  Copyright (c) 2023 European Commission
- 
+
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
- 
+
  http://www.apache.org/licenses/LICENSE-2.0
- 
+
  Unless required by applicable law or agreed to in writing, software
  distributed under the License is distributed on an "AS IS" BASIS,
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,10 +30,9 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// This array includes document types from `EuPidModel` and `IsoMdlModel`.
 	/// - Note: The document types included are `euPidDocType` and `isoDocType`.
 	public static let knownDocTypes = [EuPidModel.euPidDocType, IsoMdlModel.isoDocType]
-	/// A published property that holds an array of CBOR decoded models conforming to the `DocClaimsDecodable` protocol.
+	/// A published property that holds an array of decoded documents conforming to the `DocClaimsDecodable` protocol.
 	/// - Note: The `@Published` property wrapper is used to allow SwiftUI views to automatically update when the value changes.
 	@Published public private(set) var docModels: [any DocClaimsDecodable] = []
-	/// A published property that holds an array of deferred documents.
 	/// - Note: This property is used to store documents that are deferred for later processing.
 	@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []
 	/// A published property that holds an array of pending documents.
@@ -46,21 +45,21 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// Error object with localized message
 	@Published public var uiError: WalletError?
 	var modelFactory: (any DocClaimsDecodableFactory)?
-	
+
 	public init(storageService: any DataStorageService, modelFactory: (any DocClaimsDecodableFactory)? = nil) {
 		self.storageService = storageService
 		self.modelFactory = modelFactory
 	}
-	
+
 	func refreshPublishedVars() async {
 		await MainActor.run {
 			hasData = !docModels.isEmpty || !deferredDocuments.isEmpty
 			docCount = docModels.count
 		}
 	}
-	
+
 	/// Refreshes the document models with the specified status.
-	/// 
+	///
 	/// - Parameters:
 	///   - docs: An array of `WalletStorage.Document` objects to be refreshed.
 	///   - docStatus: The status of the documents.
@@ -83,7 +82,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			_ = await appendDocModel(doc, uiCulture: uiCulture)
 		}
 	}
-	
+
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document, uiCulture: String?) async -> (any DocClaimsDecodable)? {
 		switch doc.status {
 		case .issued:
@@ -98,7 +97,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			return nil
 		}
 	}
-	
+
 	func removePendingOrDeferredDoc(id: String) async throws {
 		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
 			_ = await MainActor.run { pendingDocuments.remove(at: index) }
@@ -150,18 +149,20 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let validUntil: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.expirationTime})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
 	}
-	
+
 	public static func getHashingAlgorithm(doc: WalletStorage.Document) -> String? {
 		guard doc.docDataFormat == .sdjwt else { return nil }
 		guard let recreatedClaims = recreateSdJwtClaims(docData: doc.data) else { return nil }
 		return recreatedClaims.hashingAlg
 	}
-	
+
 	public static func getVctFromSdJwt(docData: Data) -> String? {
 		guard let recreatedClaims = recreateSdJwtClaims(docData: docData) else { return nil }
 		return recreatedClaims.json["vct"].stringValue
 	}
-	
+
+
+
 	static func recreateSdJwtClaims(docData: Data) -> (json: JSON, hashingAlg: String)? {
 		let parser = CompactParser()
 		guard let serString = String(data: docData, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
@@ -177,16 +178,26 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		guard let recreatedClaims, let hashingAlg else { return nil }
 		return (recreatedClaims, hashingAlg)
 	}
-	
+
 	static func extractJWTParts(_ jwt: String) -> (String, String, String) {
 		let parts = jwt.components(separatedBy: ".")
 		return (parts.count > 0 ? parts[0] : "", parts.count > 1 ? parts[1] : "" , parts.count > 2 ? parts[2] : "")
 	}
 
-	public func getDocIdsToTypes() -> [String: (String, DocDataFormat, String?)] {
-		Dictionary(uniqueKeysWithValues: docModels.filter { $0.docType != nil}.map { m in (m.id, (m.docType!, m.docDataFormat, m.displayName) ) })
+	public func getDocIdsToPresentInfo() async -> [String: DocPresentInfo] {
+		let dictValues = await docModels.filter { $0.docType != nil}.asyncCompactMap { m -> (String, DocPresentInfo)? in
+			guard let doc = try? await storageService.loadDocument(id: m.id, status: .issued) else { return nil }
+			let docTypedData: DocTypedData? = switch m.docDataFormat {
+				case .cbor: if let iss = IssuerSigned(data: doc.data.bytes) { .msoMdoc(iss) } else { nil }
+				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
+			}
+			guard let docTypedData else { return nil }
+			let presentInfo = DocPresentInfo(docType: m.docType!, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
+			return (m.id, presentInfo)
+		}
+		return Dictionary(uniqueKeysWithValues: dictValues)
 	}
-	
+
 	/// Load documents from storage
 	///
 	/// Internally sets the ``docModels``,  ``mdlModel``, ``pidModel`` variables
@@ -221,15 +232,15 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			throw error
 		}
 	}
-	
+
 	func getTypedDoc<T>(of: T.Type = T.self) -> T? where T: DocClaimsDecodable {
 		docModels.first(where: { type(of: $0) == of}) as? T
 	}
-	
+
 	func getTypedDocs<T>(of: T.Type = T.self) -> [T] where T: DocClaimsDecodable {
 		docModels.filter({ type(of: $0) == of}).map { $0 as! T }
 	}
-	
+
 	/// Get document model by index
 	/// - Parameter index: Index in array of loaded models
 	/// - Returns: The ``DocClaimsDecodable`` model
@@ -237,7 +248,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		guard index < docModels.count else { return nil }
 		return docModels[index]
 	}
-	
+
 	/// Get document model by id
 	/// - Parameter id: The id of the document model to retrieve
 	/// - Returns: The ``DocClaimsDecodable`` model
@@ -245,7 +256,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		guard let i = docModels.map(\.id).firstIndex(of: id)  else { return nil }
 		return getDocumentModel(index: i)
 	}
-	
+
 	/// Retrieves document models of a specified type.
 	///
 	/// - Parameter docType: A string representing the type of document to retrieve.
@@ -263,7 +274,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - id: The unique identifier of the document to be deleted.
 	///   - status: The current status of the document.
-	/// 
+	///
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
 		let index = switch status { case .issued: docModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
@@ -281,7 +292,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			throw error
 		}
 	}
-	
+
 	/// Delete documents
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: DocumentStatus) async throws {
@@ -298,11 +309,11 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 			throw error
 		}
 	}
-	
+
 	func setError(_ error: Error) async {
 		await MainActor.run { uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo) }
 	}
-	
+
 }
 
 

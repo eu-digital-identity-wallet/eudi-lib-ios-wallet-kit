@@ -1,3 +1,10 @@
+## v0.9.8
+ - sdJwt nested elements presentation
+ - `DocElementsViewModel` replaced with `enum DocElements`
+
+## v0.9.6
+- OfferedIssuanceModel: Change the issuerName property to represent a friendly name instead of a URL and add a new issuerLogoUrl property
+
 ## v0.9.5
 - Updated `eudi-lib-ios-openid4vci-swift` library to version [v0.12.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.12.0)
 - `openID4VciConfig` now accepts a `DPoPConstructorType`.
