@@ -22,6 +22,7 @@ public struct DocPresentInfo: Sendable {
 	let docType: String
 	let docDataFormat: DocDataFormat
 	let displayName: String?
+	let docClaims: [DocClaim]
 	let typedData: DocTypedData
 }
 
@@ -116,24 +117,25 @@ public final class SdJwtElements: Identifiable, @unchecked Sendable {
 }
 
 extension IssuerSigned {
-	func extractMsoMdocElements(docId: String, docType: String, displayName: String?, itemsRequested: [NameSpace: [RequestItem]]) -> MsoMdocElements {
+	func extractMsoMdocElements(docId: String, docType: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> MsoMdocElements {
 		MsoMdocElements(docId: docId, docType: docType, displayName: displayName, nameSpacedElements: itemsRequested.compactMap { ns, requestItems in
-			extractNameSpacedElements(docType: docType, ns: ns, requestItems: requestItems)
+			extractNameSpacedElements(docType: docType, ns: ns, docClaims: docClaims, requestItems: requestItems)
 		})
 	}
 
-	func extractNameSpacedElements(docType: String, ns: String, requestItems: [RequestItem]) -> NameSpacedElements? {
+	func extractNameSpacedElements(docType: String, ns: String, docClaims: [DocClaim], requestItems: [RequestItem]) -> NameSpacedElements? {
 		guard let issuedItems = issuerNameSpaces?[ns] else { return nil }
 		let mandatoryElementKeys = MsoMdocElements.getMandatoryElementKeys(docType: docType, ns: ns)
-		return NameSpacedElements(nameSpace: ns, elements: requestItems.map { $0.extractMsoMdocElement(nsItems: issuedItems, isMandatory: mandatoryElementKeys.contains($0.rootIdentifier)) })
+		return NameSpacedElements(nameSpace: ns, elements: requestItems.map { $0.extractMsoMdocElement(ns: ns, nsItems: issuedItems, docClaims: docClaims, isMandatory: mandatoryElementKeys.contains($0.rootIdentifier)) })
 	}
 }
 
 extension RequestItem {
-	func extractMsoMdocElement(nsItems: [IssuerSignedItem], isMandatory: Bool) -> MsoMdocElement {
+	func extractMsoMdocElement(ns: String, nsItems: [IssuerSignedItem], docClaims: [DocClaim], isMandatory: Bool) -> MsoMdocElement {
 		let issuedElement = nsItems.first { $0.elementIdentifier == rootIdentifier }
 		let stringValue = issuedElement?.description
-		return MsoMdocElement(elementIdentifier: elementIdentifier, displayName: rootDisplayName ?? rootIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, isValid: issuedElement != nil)
+		let docClaim = docClaims.first { $0.namespace == ns && $0.name == rootIdentifier }
+		return MsoMdocElement(elementIdentifier: elementIdentifier, displayName: rootDisplayName ?? rootIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 }
 
@@ -180,12 +182,13 @@ public final class NameSpacedElements: Identifiable, @unchecked Sendable {
 }
 
 public final class MsoMdocElement: Identifiable, @unchecked Sendable {
-	public init(elementIdentifier: String, displayName: String, isOptional: Bool, intentToRetain: Bool = false, stringValue: String? = nil, isValid: Bool, isSelected: Bool = true) {
+	public init(elementIdentifier: String, displayName: String, isOptional: Bool, intentToRetain: Bool = false, stringValue: String?, docClaim: DocClaim?, isValid: Bool, isSelected: Bool = true) {
 		self.elementIdentifier = elementIdentifier
 		self.displayName = displayName
 		self.isOptional = isOptional
 		self.intentToRetain = intentToRetain
 		self.stringValue = stringValue
+		self.docClaim = docClaim
 		self.isValid = isValid
 		self.isSelected = isSelected
 	}
@@ -198,9 +201,9 @@ public final class MsoMdocElement: Identifiable, @unchecked Sendable {
 	public let isOptional: Bool
 	public var intentToRetain: Bool = false
 	public let stringValue: String?
+	public let docClaim: DocClaim?
 	public var isValid: Bool
 	public var isSelected = true
-	public func selecting(_ sel: Bool) -> MsoMdocElement { .init(elementIdentifier: elementIdentifier, displayName: displayName, isOptional: isOptional, isValid: isValid, isSelected: sel) }
 
 	public var requestItem: RequestItem {
 		RequestItem(elementPath: [elementIdentifier], displayNames: [displayName], intentToRetain: intentToRetain, isOptional: isOptional)

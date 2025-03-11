@@ -73,7 +73,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 				case .cbor:
 					guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
 					guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
-					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, itemsRequested: docItemsRequested)
+					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
 					disclosedDocuments.append(.msoMdoc(msoElements))
 				default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
 					//case .sdjwt:

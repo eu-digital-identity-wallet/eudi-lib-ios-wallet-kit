@@ -192,7 +192,7 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
 			}
 			guard let docTypedData else { return nil }
-			let presentInfo = DocPresentInfo(docType: m.docType!, docDataFormat: m.docDataFormat, displayName: m.displayName, typedData: docTypedData)
+			let presentInfo = DocPresentInfo(docType: m.docType!, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
 			return (m.id, presentInfo)
 		}
 		return Dictionary(uniqueKeysWithValues: dictValues)
