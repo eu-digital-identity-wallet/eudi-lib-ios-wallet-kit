@@ -1,3 +1,9 @@
+## v0.10.1
+- OpenID4VP Draft 23 support
+
+## v0.10.0
+- Fix nil DocClaim issue for request-items
+
 ## v0.9.9
 - `DocPresentInfo` struct members public
 - `DocClaim`: added property `path: [String]` to store the path of the claim in the document
