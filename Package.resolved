@@ -1,5 +1,5 @@
 {
-  "originHash" : "6bc5052f789af1c6f18005a432f99575f72375a2df2713772d0827dc87b56d4b",
+  "originHash" : "51219fb8a370931044c84ba9973b1778542183e52da9414455335c602ba6312f",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "a3b965598ea9d6200bc3a2762862ccd65ba2e648",
-        "version" : "0.5.7"
+        "revision" : "a32a6c07542c5ea2055e619b0f1f09d9b4d70c7e",
+        "version" : "0.5.8"
       }
     },
     {
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "63dcc0bfb92bae65dfa89a7a15029f01f8447dcd",
-        "version" : "0.5.9"
+        "revision" : "4fcf227cbc80f4bc0e35e12d0e4be44dfd218a47",
+        "version" : "0.6.0"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "e30b0bfedab739a1c68dfe1f2608d544c57bd042",
-        "version" : "0.4.7"
+        "revision" : "9035e447e9a0b3107ac11613ef81472202b9adf0",
+        "version" : "0.4.8"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "8a0f93c2163b5c7210b86fe0fd43ccb2725fe30c",
-        "version" : "0.6.4"
+        "revision" : "1a5418f8bb11f31ef5acd0a795944e340ad29b9d",
+        "version" : "0.8.1"
       }
     },
     {
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
       "state" : {
-        "revision" : "90974a211a42c9cd5e7c172601b6220576ec3bb7",
-        "version" : "0.4.7"
+        "revision" : "2bccbe11d65de8954e881da1b6de578509f6e16a",
+        "version" : "0.4.8"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "a8f7d3a28e893ec4282747bf04617e5b0114fcdc",
-        "version" : "0.5.1"
+        "revision" : "cea353c9e104f6b4604d3ec1c855ac7ba7f0edc7",
+        "version" : "0.6.0"
       }
     },
     {
