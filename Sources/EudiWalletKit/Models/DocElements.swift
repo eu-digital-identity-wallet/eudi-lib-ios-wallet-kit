@@ -171,8 +171,8 @@ extension RequestItem {
 		let query = allPaths.first { elementPath == $0.tokenArray }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
-		let docClaim: DocClaim? = if elementPath.count == 1 || !bRootOnly { findDocClaimByPath(docClaims: docClaims, requestPath: requestPath) } else { nil }
-		let stringValue: String? = if elementPath.count == 1 || !bRootOnly { docClaim?.stringValue } else { nil }
+		let docClaim: DocClaim? = findDocClaimByPath(docClaims: docClaims, requestPath: requestPath)
+		let stringValue: String? = docClaim?.stringValue
 		return SdJwtElement(elementPath: requestPath, displayNames: displayNames, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nil)
 	}
 
@@ -222,7 +222,7 @@ public final class NameSpacedElements: Identifiable, @unchecked Sendable {
 	public var elements: [MsoMdocElement]
 }
 
-public final class MsoMdocElement: Identifiable, @unchecked Sendable {
+public final class MsoMdocElement: Identifiable, ObservableObject, @unchecked Sendable {
 	public init(elementIdentifier: String, displayName: String, isOptional: Bool, intentToRetain: Bool = false, stringValue: String?, docClaim: DocClaim?, isValid: Bool, isSelected: Bool = true) {
 		self.elementIdentifier = elementIdentifier
 		self.displayName = displayName
@@ -243,8 +243,8 @@ public final class MsoMdocElement: Identifiable, @unchecked Sendable {
 	public var intentToRetain: Bool = false
 	public let stringValue: String?
 	public let docClaim: DocClaim?
-	public var isValid: Bool
-	public var isSelected = true
+	@Published public var isValid: Bool
+	@Published public var isSelected = true
 	public var isValidAndSelected: Bool { isValid && isSelected }
 
 	public var requestItem: RequestItem {
@@ -252,7 +252,7 @@ public final class MsoMdocElement: Identifiable, @unchecked Sendable {
 	}
 }
 
-public final class SdJwtElement: Identifiable, @unchecked Sendable, Hashable {
+public final class SdJwtElement: Identifiable, ObservableObject, @unchecked Sendable, Hashable {
 	public init(elementPath: [String], displayNames: [String?], isOptional: Bool, intentToRetain: Bool = false, stringValue: String?, docClaim: DocClaim?, isValid: Bool, isSelected: Bool = true, nestedElements: [SdJwtElement]? = nil) {
 		self.elementPath = elementPath
 		self.displayNames = displayNames
@@ -274,8 +274,8 @@ public final class SdJwtElement: Identifiable, @unchecked Sendable, Hashable {
 	public let intentToRetain: Bool
 	public let stringValue: String?
 	public let docClaim: DocClaim?
-	public var isValid: Bool
-	public var isSelected = true
+	@Published public var isValid: Bool
+	@Published public var isSelected = true
 	public var isValidAndSelected: Bool { isValid && isSelected }
 	public var nestedElements: [SdJwtElement]?
 

@@ -25,7 +25,7 @@ import SwiftyJSON
 import OpenID4VCI
 
 /// Storage manager. Provides services and view models
-public class StorageManager: ObservableObject, @unchecked Sendable {
+public final class StorageManager: ObservableObject, @unchecked Sendable {
 	/// A static constant array containing known document types.
 	/// This array includes document types from `EuPidModel` and `IsoMdlModel`.
 	/// - Note: The document types included are `euPidDocType` and `isoDocType`.
@@ -142,24 +142,12 @@ public class StorageManager: ObservableObject, @unchecked Sendable {
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getFlatClaimMetadata(uiCulture: uiCulture)
 		guard let recreatedClaims = recreateSdJwtClaims(docData: doc.data) else { return nil }
-		if let cs = recreatedClaims.json.toClaimsArray(md?.claimDisplayNames, md?.mandatoryClaims, md?.claimValueTypes)?.0 { docClaims.append(contentsOf: cs) }
+		if let cs = recreatedClaims.json.toClaimsArray(pathPrefix: [], md?.claimDisplayNames, md?.mandatoryClaims, md?.claimValueTypes)?.0 { docClaims.append(contentsOf: cs) }
 		var type = docClaims.first(where: { $0.name == "vct"})?.stringValue
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
 		let validFrom: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.issuedAt})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let validUntil: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.expirationTime})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
-		var newChildren = [DocClaim]();	for var c in docClaims { constructPaths(&c); newChildren.append(c) }; docClaims = newChildren
 		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
-	}
-	
-	public static func constructPaths(_ docClaim: inout DocClaim) {
-		guard let children = docClaim.children else { return }
-		var newChildren = [DocClaim]()
-		for var ch in children {
-			ch.path = docClaim.path + [ch.name]
-			constructPaths(&ch)
-			newChildren.append(ch)
-		}
-		docClaim.children = newChildren
 	}
 
 	public static func getHashingAlgorithm(doc: WalletStorage.Document) -> String? {
