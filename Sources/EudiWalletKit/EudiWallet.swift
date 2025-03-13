@@ -251,16 +251,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docMetadata = cc.convertToDocMetadata()
 			let docTypeOrScope = docType ?? cc.docType ?? cc.scope
 			
-			docTypeToSave = if format == .cbor, let data {
-				IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docTypeOrScope
-			} else if format == .sdjwt, let str, let ds = str.data(using: .utf8) {
-				StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope//sdjwt single
-			} else if format == .sdjwt, let data {
-				StorageManager.getVctFromSdJwt(docData: data) ?? docTypeOrScope
-			} else {
-				docTypeOrScope
-			}
-			displayName = cc.issuerDisplay.first?.name
+			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docTypeOrScope } else if format == .sdjwt, let str, let ds = str.data(using: .utf8) {  StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope } else { docTypeOrScope }
+			displayName = cc.display.getName(uiCulture)
+			
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata()
