@@ -1,3 +1,13 @@
+## v0.10.3
+- Removed `vct` from `docClaims` collection. 
+
+## v0.10.2
+- Simplified OpenID4VCI configuration
+```swift
+wallet = try! EudiWallet(serviceName: Self.serviceName, trustedReaderCertificates: certs, 
+  openID4VciConfig: OpenId4VCIConfiguration(useDPoP: true), logFileName: "temp.txt", secureAreas: [mySecureArea])
+```
+
 ## v0.10.1
 - OpenID4VP Draft 23 support
 

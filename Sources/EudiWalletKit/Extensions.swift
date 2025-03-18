@@ -223,10 +223,10 @@ extension JSON {
 	}
 
 	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
-		let bDebug = false // UserDefaults.standard.bool(forKey: "DebugDisplay")
-		if key == "cnf", type == .dictionary, !bDebug { return nil } // members used to identify the proof-of-possession key.
-		if key == "status", type == .dictionary, self["status_list"].type == .dictionary, !bDebug { return nil } // status list.
-		if key == "assurance_level" || key == JWTClaimNames.issuer, type == .string { if !bDebug { return nil } }
+		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
+		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
+		if key == "assurance_level" || key == JWTClaimNames.issuer || key == JWTClaimNames.audience, type == .string {  return nil }
+		if key == "vct", type == .string  { return nil }
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
 		let ch = toClaimsArray(pathPrefix: pathPrefix + [key], claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
