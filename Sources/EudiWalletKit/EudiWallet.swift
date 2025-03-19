@@ -59,9 +59,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var urlSession: URLSession
 	/// If not-nil, logging to the specified log file name will be configured
 	public var logFileName: String? { didSet { try? initializeLogging() } }
-    public static let defaultClient = Client(public: "wallet-dev")
+	public static let defaultClientId = "wallet-dev"
+
 	public static let defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
-	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(client: defaultClient, authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
+	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(client: .public(id: defaultClientId), authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
 	public static let defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
 	/// - Parameters:
@@ -184,7 +185,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: Self.defaultClient, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: .public(id: Self.defaultClientId), authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
 		return openId4VCIService
 	}
 
@@ -265,14 +266,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docTypeToSave = docType ?? "PENDING"
 			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 		}
-		let id = UUID().uuidString
 		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
-		let newDocument = WalletStorage.Document(id: id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: format.rawValue, status: newDocStatus)
+		let newDocument = WalletStorage.Document(id: UUID().uuidString, docType: docTypeToSave, docDataFormat: format, data: dataToSave, secureAreaName: issueReq.secureAreaName, createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
 		try await endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
-		if pds == nil { try await storage.removePendingOrDeferredDoc(id: id) }
+		if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
 		return newDocument
 	}
 	
@@ -442,19 +442,19 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public func beginPresentation(flow: FlowType, docType: String? = nil) async -> PresentationSession {
 		do {
 			let parameters = try await prepareServiceDataParameters(docType: docType, format: flow == .ble ? .cbor : nil)
-			let docIdAndTypes = storage.getDocIdsToTypes()
+			let docIdToPresentInfo = await storage.getDocIdsToPresentInfo()
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
-				return PresentationSession(presentationService: bleSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
+				return PresentationSession(presentationService: bleSvc, docIdToPresentInfo: docIdToPresentInfo, userAuthenticationRequired: userAuthenticationRequired)
 			case .openid4vp(let qrCode):
 				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri, openId4VpVerifierLegalName: self.verifierLegalName, urlSession: urlSession)
-				return PresentationSession(presentationService: openIdSvc, docIdAndTypes: docIdAndTypes, userAuthenticationRequired: userAuthenticationRequired)
+				return PresentationSession(presentationService: openIdSvc, docIdToPresentInfo: docIdToPresentInfo, userAuthenticationRequired: userAuthenticationRequired)
 			default:
-				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), docIdAndTypes: docIdAndTypes, userAuthenticationRequired: false)
+				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), docIdToPresentInfo: docIdToPresentInfo, userAuthenticationRequired: false)
 			}
 		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error), docIdAndTypes: [:], userAuthenticationRequired: false)
+			return PresentationSession(presentationService: FaultPresentationService(error: error), docIdToPresentInfo: [:], userAuthenticationRequired: false)
 		}
 	}
 	
@@ -465,7 +465,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - docType: DocType of documents to present (optional)
 	/// - Returns: A `PresentationSession` instance,
 	public func beginPresentation(service: any PresentationService) async -> PresentationSession {
-		return PresentationSession(presentationService: service, docIdAndTypes: storage.getDocIdsToTypes(), userAuthenticationRequired: userAuthenticationRequired)
+		return await PresentationSession(presentationService: service, docIdToPresentInfo: storage.getDocIdsToPresentInfo(), userAuthenticationRequired: userAuthenticationRequired)
 	}
 	
 	/// Perform an action after user authorization via TouchID/FaceID/Passcode

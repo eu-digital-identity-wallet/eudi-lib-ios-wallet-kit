@@ -121,7 +121,8 @@ class Openid4VpUtils {
 		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
 		let elementPath = nsItemPair.1.components(separatedBy: ".")
 		let rootPathComponent = elementPath.first!
-		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] // currently only first level
+		// displayNames for nested elements are missing now
+		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] ?? rootPathComponent // currently only first level
 		let displayNames = [rootDisplayName] + Array(repeating: nil, count: elementPath.count-1)
 		return (nsItemPair.0, RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
 	}
@@ -168,7 +169,7 @@ class Openid4VpUtils {
 	static func filterSignedJwtByDocType(_ sdJwt: SignedSDJWT, docType: String) -> Bool {
 		guard let paths = try? sdJwt.recreateClaims() else { return false }
 		let type = paths.recreatedClaims["vct"].string ?? paths.recreatedClaims["type"].string
-		guard let type , !type.isEmpty else { return false }
+		guard let type, !type.isEmpty else { return false }
 		return vctToDocTypeMatch(docType, type)
 	}
 

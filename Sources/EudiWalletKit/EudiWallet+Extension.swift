@@ -22,6 +22,78 @@ extension EudiWallet {
         
         return try await finalizeIssuing(issueOutcome: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
+	
+	@MainActor
+	public func getCredentials1(scope: String?, dpopNonce: String, txCodeValue: String, docTypeKeyOptions: [String: KeyOptions]? = nil, promptMessage: String? = nil, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> [WalletStorage.Document] {
+		let offerUri = "offerUri"
+		let docTypes: [OfferedDocModel] = []
+		
+		if docTypes.isEmpty { return [] }
+		var documents = [WalletStorage.Document]()
+		var openId4VCIServices = [OpenId4VCIService]()
+		for (i, docTypeModel) in docTypes.enumerated() {
+			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypes.map(\.docTypeOrScope).joined(separator: ", "), displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: docTypeKeyOptions?[docTypeModel.docTypeOrScope], disablePrompt: i > 0, promptMessage: promptMessage))
+		}
+		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
+			if i > 0 { await openId4VCIServices[i].setBindingKey(bindingKey: await openId4VCIServices.first!.bindingKey) }
+			
+			guard let offer = await OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+			
+			
+		}
+		
+		return documents
+		
+		
+		
+		/*
+		
+		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: code)
+		
+		let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
+		
+		let credentialsOutcome = try await openId4VCIService.getCredentials(
+			dpopNonce: dpopNonce,
+			code: code,
+			scope: scope,
+			identifier: id,
+			docType: docType,
+			issuerDPopConstructorParam: issuerDPopConstructorParam
+		)
+		guard let issuanceOutcome = credentialsOutcome.0,
+				let _ = credentialsOutcome.1,
+				let authorizedRequestParams = credentialsOutcome.2 else {
+			throw  WalletError(description: "Error in getting access token")
+		}
+		
+		var document: WalletStorage.Document?
+		switch issuanceOutcome {
+		case .issued(let jsonData, let str, let cc):
+			
+			if let str = str {
+				document = try await finalizeIssuing(issueOutcome: .issued(nil, str, cc), docType: docType, format: docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+			} else {
+				guard let jsonData else {throw WalletError.generic("unable to finalizeIssuing") }
+				
+				let jsonObject = try? JSON(data: jsonData)
+				
+				if let jsonArray = jsonObject?.arrayObject as? [String] {
+					for item in jsonArray {
+						document = try await finalizeIssuing(issueOutcome: .issued(item.data(using: .utf8), item, cc), docType: docType, format: docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+					}
+					} else {
+						print("Failed to parse JSON as an array of strings")
+					}
+			}
+			
+		default:
+			print(#function, "Unhandled issuance outcome")
+		}
+		if let metadata = document?.metadata {
+			print(String(data: metadata, encoding: .utf8))
+		}
+		return (document, authorizedRequestParams)*/
+	}
     
 	@MainActor
 	public func getCredentials(docType: String, scope: String?, dpopNonce: String, code: String, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, docDataFormat: DocDataFormat, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (WalletStorage.Document?, AuthorizedRequestParams?) {
@@ -124,7 +196,7 @@ extension EudiWallet {
             return try await beginIssueDocument(id: id, keyOptions: keyOptions)
         }, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
         guard let issueReq else { throw LAError(.userCancel)}
-        let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: Self.defaultClient, authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
+        let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: .public(id: Self.defaultClientId), authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
         return (issueReq, openId4VCIService, id)
     }
     

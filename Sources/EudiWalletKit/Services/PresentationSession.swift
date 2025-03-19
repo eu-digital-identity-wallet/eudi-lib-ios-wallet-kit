@@ -37,7 +37,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
-	@Published public var disclosedDocuments: [DocElementsViewModel] = []
+	@Published public var disclosedDocuments: [DocElements] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// The ``FlowType`` instance
@@ -46,54 +46,65 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
 	// map of document id to (doc type, format, display name) pairs
-	public var docIdAndTypes: [String: (String, DocDataFormat, String?)]
+	public var docIdToPresentInfo: [String: DocPresentInfo]!
 	/// User authentication required
 	var userAuthenticationRequired: Bool
-	
-	public init(presentationService: any PresentationService, docIdAndTypes: [String: (String, DocDataFormat, String?)], userAuthenticationRequired: Bool) {
+
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
-		self.docIdAndTypes = docIdAndTypes
+		self.docIdToPresentInfo = docIdToPresentInfo
 		self.userAuthenticationRequired = userAuthenticationRequired
 	}
-	
+
 	@MainActor
 	/// Decodes a presentation request
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter request: Request information
 	func decodeRequest(_ request: UserRequestInfo) throws {
-		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
+		guard docIdToPresentInfo.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
-		disclosedDocuments = [DocElementsViewModel]()
-		for (docId, (docType, docDataFormat, displayName)) in docIdAndTypes {
+		disclosedDocuments = [DocElements]()
+		for (docId, docPresentInfo) in docIdToPresentInfo {
+			let docType = docPresentInfo.docType
 			let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { Openid4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
-			if requestFormat != docDataFormat  { continue }
-			var tmp = request.validItemsRequested.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-			if let errorRequestItems = request.errorItemsRequested, errorRequestItems.count > 0 {
-				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
+			if requestFormat != docPresentInfo.docDataFormat  { continue }
+			switch requestFormat {
+				case .cbor:
+					guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
+					guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
+					disclosedDocuments.append(.msoMdoc(msoElements))
+				case .sdjwt:
+					guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
+					guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+					let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
+					guard let sdJwtElements else { continue }
+					disclosedDocuments.append(.sdJwt(sdJwtElements))
+				default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
 			}
-			disclosedDocuments.append(contentsOf: tmp)
+
 		}
 		if let readerAuthority = request.readerCertificateIssuer {
 			readerCertIssuer = readerAuthority
 			readerCertIssuerValid = request.readerAuthValidated
 			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
-		readerLegalName = request.readerLegalName 
+		readerLegalName = request.readerLegalName
 		status = .requestReceived
 	}
-	
+
 	public static func makeError(str: String) -> NSError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
 	}
-	
+
 	public static func makeError(code: MdocDataTransfer18013.ErrorCode, str: String? = nil) -> NSError {
 		let message = str ?? code.description
 		logger.error(Logger.Message(unicodeScalarLiteral: message))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
 	}
-	
+
 	/// Start QR engagement to be presented to verifier
 	///
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
@@ -107,13 +118,13 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 		} catch { await setError(error) }
 	}
-	
+
 	@MainActor
 	func setError(_ error: Error) {
 		status = .error
 		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
-	
+
 	/// Receive request from verifer
 	///
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
@@ -130,7 +141,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			return nil
 		}
 	}
-	
+
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
@@ -144,7 +155,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			await MainActor.run {status = .responseSent }
 		} catch { await setError(error) }
 	}
-	
-	
+
+
 
 }
