@@ -222,24 +222,24 @@ extension JSON {
 		}
 	}
 
-	func toDocClaim(_ key: String, order n: Int, _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
+	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
 		let bDebug = false // UserDefaults.standard.bool(forKey: "DebugDisplay")
 		if key == "cnf", type == .dictionary, !bDebug { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary, !bDebug { return nil } // status list.
 		if key == "assurance_level" || key == JWTClaimNames.issuer, type == .string { if !bDebug { return nil } }
 		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
-		let ch = toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
+		let ch = toClaimsArray(pathPrefix: pathPrefix + [key], claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
 		let isMandatory = mandatoryClaims?[key] ?? true
-		return DocClaim(name: key, displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0)
+		return DocClaim(name: key, path: pathPrefix + [key], displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0)
 	}
 
-	func toClaimsArray(_ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
+	func toClaimsArray(pathPrefix: [String], _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
 		switch type {
 		case .array, .dictionary:
 			if case let claims = self["verified_claims"]["claims"], claims.type == .dictionary {
-				let initialResult = self["verified_claims"]["verification"].toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes) ?? ([DocClaim](), "")
+				let initialResult = self["verified_claims"]["verification"].toClaimsArray(pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes) ?? ([DocClaim](), "")
 				return claims.reduce(into: initialResult) { (partialResult, el: (String, JSON)) in
-					if let (claims1, str1) = el.1.toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes, el.0) {
+					if let (claims1, str1) = el.1.toClaimsArray(pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes, el.0) {
 						partialResult.0.append(contentsOf: claims1)
 						partialResult.1 += (partialResult.1.count == 0 ? "" : ", ") + str1
 					}
@@ -247,9 +247,12 @@ extension JSON {
 			}
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
-				if let di = subJson.toDocClaim(key, order: n, claimDisplayNames, mandatoryClaims, claimValueTypes) {	a.append(di) }
+				let n2 = if type == .array { "" } else { key }
+				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes) {
+					a.append(di)
+				}
 			}
-			return (a, type == .array ? "[\(a.map(\.stringValue).joined(separator: ", "))]" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ", "))}")
+			return (a, type == .array ? "\(a.map(\.stringValue).joined(separator: ","))" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ","))}")
 		default: return nil
 		}
 	}
@@ -263,7 +266,7 @@ extension DocClaimsDecodable {	/// Extracts display strings and images from the 
 	///   - labels: A dictionary where the key is the elementIdentifier and the value is a string representing the label.
 	///   - nsFilter: An optional array of `NameSpace` to filter/sort the extraction. Defaults to `nil`.
 	public static func extractJSONClaims(_ json: JSON, _ docClaims: inout [DocClaim], _ claimDisplayNames: [String: String]? = nil, _ mandatoryClaims: [String: Bool]? = nil, _ claimValueTypes: [String: String]? = nil) {
-		let claims = json.toClaimsArray(claimDisplayNames, mandatoryClaims, claimValueTypes)?.0 ?? []
+		let claims = json.toClaimsArray(pathPrefix: [], claimDisplayNames, mandatoryClaims, claimValueTypes)?.0 ?? []
 		docClaims.append(contentsOf: claims)
 	}
 }

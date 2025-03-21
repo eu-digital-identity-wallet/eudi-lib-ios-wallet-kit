@@ -200,16 +200,25 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func getCredentialIdentifier(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
-			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
-			logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-				return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: docType, scope: scope, display: msoMdocConf.display.map(\.displayMetadata), issuerDisplay: issuerDisplay.map(\.displayMetadata), algValuesSupported: msoMdocConf.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
-		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
-			logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: docType, scope: scope, display: sdJwtVc.display.map(\.displayMetadata), issuerDisplay: issuerDisplay.map(\.displayMetadata), algValuesSupported: sdJwtVc.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
+		if let credential = credentialsSupported.first(where: {
+			if case .msoMdoc(let msoMdocCred) = $0.value,
+				msoMdocCred.docType == docType || docType == nil,
+			   $0.key.value == identifier || identifier == nil {
+				true
+			} else {
+				false
+			}
+		}), case let .msoMdoc(msoMdocConf) = credential.value,
+			let scope = msoMdocConf.scope {
+				logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
+					return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: docType, scope: scope, display: msoMdocConf.display.map(\.displayMetadata), issuerDisplay: issuerDisplay.map(\.displayMetadata), algValuesSupported: msoMdocConf.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: msoMdocConf.claims, flatClaims: nil, order: msoMdocConf.order, format: .cbor)
+			} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
+				logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
+				return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: docType, scope: scope, display: sdJwtVc.display.map(\.displayMetadata), issuerDisplay: issuerDisplay.map(\.displayMetadata), algValuesSupported: sdJwtVc.proofTypesSupported?["jwt"]?.algorithms ?? [], msoClaims: nil, flatClaims: sdJwtVc.claims, order: nil, format: .sdjwt)
+			}
+			logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.keys)")
+			throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? scope ?? identifier ?? "")")
 		}
-		logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.keys)")
-		throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? scope ?? identifier ?? "")")
-	}
 
 	func getCredentialIdentifiers(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported]) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
 			let credentialInfos = credentialsSupported.compactMap {
@@ -298,10 +307,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	private func handleCredentialResponse(credential: Credential, format: String?, configuration: CredentialConfiguration) throws -> IssuanceOutcome {
 		logger.info("Credential issued with format \(format ?? "unknown")")
 		if case let .string(str) = credential  {
-			// logger.info("Issued credential data:\n\(strBase64)")
 			return .issued(Data(base64URLEncoded: str), str, configuration)
 		} else if case let .json(json) = credential {
-			return .issued(try JSONEncoder().encode(json), nil, configuration)
+			return .issued(try json.rawData(), nil, configuration)
 		} else {
 			throw WalletError(description: "Invalid credential")
 		}
@@ -312,7 +320,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		guard let configuration else { throw WalletError(description: "Credential configuration not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
-		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
+		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey, bindingKey, bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
 			switch request {
