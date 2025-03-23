@@ -18,14 +18,52 @@ extension EudiWallet {
         
         let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
         
-        let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: id, promptMessage: promptMessage, wia: wia)
+		let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: identifier, promptMessage: promptMessage, wia: wia)
         
         return try await finalizeIssuing(issueOutcome: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
     }
 	
+//	@MainActor
+//	@discardableResult public func issuePARDocs(docType: String?, scope: String? = "", identifiers: [String?], keyOptions: KeyOptions? = nil, promptMessage: String? = nil, wia: IssuerDPoPConstructorParam) async throws -> [WalletStorage.Document] {
+//		if identifiers.isEmpty { return [] }
+//		var documents = [WalletStorage.Document]()
+//		var openId4VCIServices = [OpenId4VCIService]()
+//		
+//		for (i, docTypeModel) in identifiers.enumerated() {
+//			let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
+//			openId4VCIServices.append(openId4VCIService)
+//		}
+//		
+//		let (issueReq, openId4VCIService, id) = try await prepareIssuingService(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
+//		
+//		let (issuance, dataFormat) = try await openId4VCIService.issuePAR(docType: docType, scope: scope, identifier: identifier, promptMessage: promptMessage, wia: wia)
+//		
+//		return try await finalizeIssuing(issueOutcome: issuance, docType: docType, format: dataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+//	}
+	
+	@MainActor
+	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> WalletStorage.Document {
+		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
+		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
+		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, issuerDPopConstructorParam: issuerDPopConstructorParam)
+		if case .pending(_) = outcome { return pendingDoc }
+		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+		return res
+	}
+	
+//	@MainActor
+//	@discardableResult public func resumePendingIssuanceDocuments(pendingDoc: [WalletStorage.Document], keyOptions: KeyOptions? = nil, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> [WalletStorage.Document] {
+//		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
+//		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
+//		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, issuerDPopConstructorParam: issuerDPopConstructorParam)
+//		if case .pending(_) = outcome { return pendingDoc }
+//		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+//		return res
+//	}
+//	
 	@MainActor
 	public func getCredentials1(scope: String?, dpopNonce: String, txCodeValue: String, docTypeKeyOptions: [String: KeyOptions]? = nil, promptMessage: String? = nil, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> [WalletStorage.Document] {
-		let offerUri = "offerUri"
+		let offerUri = "https://demo.pid-issuer.bundesdruckerei.de/c1"
 		let docTypes: [OfferedDocModel] = []
 		
 		if docTypes.isEmpty { return [] }
@@ -135,9 +173,6 @@ extension EudiWallet {
 			
 		default:
 			print(#function, "Unhandled issuance outcome")
-		}
-		if let metadata = document?.metadata {
-			print(String(data: metadata, encoding: .utf8))
 		}
 		return (document, authorizedRequestParams)
     }
