@@ -204,7 +204,7 @@
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
         "revision" : "1a5418f8bb11f31ef5acd0a795944e340ad29b9d",
-        "version" : "0.8.1"
+        "version" : "0.8.2"
       }
     },
     {

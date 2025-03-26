@@ -182,12 +182,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 
-	func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet?) async throws -> IssuanceOutcome {
+	func issueOfferedCredentialInternal(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet?, batchSize: Int? = 1) async throws -> IssuanceOutcome {
 		switch authorized {
 		case .noProofRequired:
 			return try await noProofRequiredSubmissionUseCase(issuer: issuer, noProofRequiredState: authorized, configuration: configuration, claimSet: claimSet)
 		case .proofRequired:
-			return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: authorized, configuration: configuration, claimSet: claimSet)
+			return try await proofRequiredSubmissionUseCase(issuer: issuer, authorized: authorized, configuration: configuration, claimSet: claimSet, batchSize: batchSize)
 		}
 	}
 
@@ -196,7 +196,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == configuration.configurationIdentifier.value }) else {
 			throw WalletError(description: "Cannot find credential identifier \(configuration.configurationIdentifier.value) in offer")
 		}
-		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
+//		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: issuerMetadata.batchCredentialIssuance?.batchSize)
+		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: 1)
 	}
 
 	func getCredentialIdentifier(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
@@ -300,18 +301,34 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		if case let .string(str) = credential  {
 			return .issued(Data(base64URLEncoded: str), str, configuration)
 		} else if case let .json(json) = credential {
-			return .issued(try json.rawData(), nil, configuration)
+			if configuration.format == .cbor {
+				if let stringArray = json.arrayObject as? [String] {
+					let commaSeparatedString = stringArray.joined(separator: ",")
+					return .issued(Data(base64URLEncoded: commaSeparatedString), commaSeparatedString, configuration)
+				} else {
+					return .issued(try json.rawData(), nil, configuration)
+				}
+			} else if configuration.format == .sdjwt {
+				return .issued(try json.rawData(), nil, configuration)
+			} else {
+				throw WalletError(description: "Invalid format")
+			}
 		} else {
 			throw WalletError(description: "Invalid credential")
 		}
 	}
 
-	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration?, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+	private func proofRequiredSubmissionUseCase(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration?, claimSet: ClaimSet? = nil, batchSize: Int? = 1) async throws -> IssuanceOutcome {
 		guard case .proofRequired(let accessToken, let refreshToken, _, _, let timeStamp, _) = authorized else { throw WalletError(description: "Unexpected AuthorizedRequest case") }
 		guard let configuration else { throw WalletError(description: "Credential configuration not found") }
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
-		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: [bindingKey], requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
+		
+		var bindingKeys = [BindingKey]()
+		for _ in 0..<batchSize! {
+			bindingKeys.append(bindingKey)
+		}
+		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: bindingKeys, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):
 			switch request {

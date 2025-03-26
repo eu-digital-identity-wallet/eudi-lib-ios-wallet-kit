@@ -21,6 +21,13 @@ extension OpenId4VCIService {
 		return res
 	}
 	
+	func issuePARs(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil, wia: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, DocDataFormat) {
+		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope must be provided") }
+		logger.log(level: .info, "Issuing document with docType or scope or identifier: \(docTypeOrScopeOrIdentifier)")
+		let res = try await issueByPARType(docType, scope: scope, identifier: identifier, promptMessage: promptMessage, wia: wia)
+		return res
+	}
+	
 	func getCredentials(dpopNonce: String, code: String, scope: String?, claimSet: ClaimSet? = nil, identifier: String?, docType: String?, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome?, DocDataFormat?, AuthorizedRequestParams?) {
 		do {
 			if let key = OpenId4VCIService.metadataCache.keys.first,
@@ -57,11 +64,8 @@ extension OpenId4VCIService {
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
-//		guard let webUrl else { throw WalletError(description: "Web URL not specified") }
-//		let asWeb = try await loginUserAndGetAuthCode(getAuthorizationCodeUrl: webUrl)
-//		guard case .code(let authorizationCode) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
+
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
-//		let issuer = try getIssuer(offer: offer)
 		
 		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
 		let issuer = try await getIssuer(offer: offer, with: dpopConstructor)

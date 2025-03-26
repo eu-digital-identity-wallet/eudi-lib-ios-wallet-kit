@@ -54,15 +54,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public var uiCulture: String?
 	/// OpenID4VCI issuer parameters
-	public var openID4VciConfig: OpenId4VCIConfig?
+	public var openID4VciConfig: OpenId4VCIConfiguration
 	/// This variable can be used to set a custom URLSession for network requests.
 	public var urlSession: URLSession
 	/// If not-nil, logging to the specified log file name will be configured
 	public var logFileName: String? { didSet { try? initializeLogging() } }
-	public static let defaultClientId = "wallet-dev"
-
-	public static let defaultOpenID4VciRedirectUri = URL(string: "eudi-openid4ci://authorize")!
-	public static let defaultOpenId4VCIConfig = OpenId4VCIConfig(client: .public(id: defaultClientId), authFlowRedirectionURI: defaultOpenID4VciRedirectUri)
+	
 	public static let defaultServiceName = "eudiw"
 	/// Initialize a wallet instance. All parameters are optional.
 	/// - Parameters:
@@ -84,7 +81,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// ```swift
 	/// let wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!])
 	/// ```
-	public init(storageType: StorageType = .keyChain, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfig? = nil, urlSession: URLSession? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]?, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
+	public init(storageType: StorageType = .keyChain, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, verifierApiUri: String? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfiguration? = nil, urlSession: URLSession? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]?, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
 		print(secureAreas)
 		try Self.validateServiceParams(serviceName: serviceName)
 		self.serviceName = serviceName ?? Self.defaultServiceName
@@ -97,7 +94,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		#endif
 		self.verifierApiUri	= verifierApiUri
 		self.openID4VciIssuerUrl = openID4VciIssuerUrl
-		self.openID4VciConfig = openID4VciConfig
+		self.openID4VciConfig = openID4VciConfig ?? OpenId4VCIConfiguration()
 		self.urlSession = urlSession ?? URLSession.shared
 		self.logFileName = logFileName
 		storage = self.getStorage()
@@ -179,13 +176,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: (Issue request key pair, vci service, unique id)
 	func prepareIssuing(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, disablePrompt: Bool, promptMessage: String?) async throws -> OpenId4VCIService {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-		guard openID4VciConfig?.client != nil else { throw WalletError(description: "clientId not defined")}
-		guard openID4VciConfig?.authFlowRedirectionURI != nil else { throw WalletError(description: "Auth flow Redirect URI not defined")}
+		
 		let issueReq = try await Self.authorizedAction(action: {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig ?? OpenId4VCIConfig(client: .public(id: Self.defaultClientId), authFlowRedirectionURI: Self.defaultOpenID4VciRedirectUri), urlSession: urlSession)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig.toOpenId4VCIConfig(), urlSession: urlSession)
 		return openId4VCIService
 	}
 
@@ -221,7 +217,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status") }
 		let issueReq = try IssueRequest(id: deferredDoc.id, keyOptions: keyOptions)
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig ?? Self.defaultOpenId4VCIConfig, urlSession: urlSession)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig.toOpenId4VCIConfig(), urlSession: urlSession)
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_, _, _) = data else { return deferredDoc }
 		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
