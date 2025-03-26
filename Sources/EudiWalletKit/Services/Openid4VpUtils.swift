@@ -21,6 +21,11 @@ import Logging
 import PresentationExchange
 import MdocDataModel18013
 import MdocSecurity18013
+import MdocDataTransfer18013
+import eudi_lib_sdjwt_swift
+import WalletStorage
+import JSONWebSignature
+import JSONWebAlgorithms
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *
@@ -58,22 +63,26 @@ import MdocSecurity18013
  */
 
 class Openid4VpUtils {
-	
+	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
+	static let pathNsItemRx = try! NSRegularExpression(pattern: #"\$\['([^']+)'\]\['([^']+)'\]"#, options: .caseInsensitive)
+	// example path: $.given_name_national_character
+	static let pathItemRx: NSRegularExpression = try! NSRegularExpression(pattern: #"\$\.(.+)"#, options: .caseInsensitive)
+
 	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> SessionTranscript {
 		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 		return SessionTranscript(handOver: openID4VPHandover)
 	}
-	
+
 	static func generateOpenId4VpHandover(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> CBOR {
 		let clientIdToHash = CBOR.encodeArray([clientId, mdocGeneratedNonce])
 		let responseUriToHash = CBOR.encodeArray([responseUri, mdocGeneratedNonce])
-		
+
 		let clientIdHash = [UInt8](SHA256.hash(data: clientIdToHash))
 		let responseUriHash = [UInt8](SHA256.hash(data: responseUriToHash))
-		
+
 		return CBOR.array([.byteString(clientIdHash), .byteString(responseUriHash), .utf8String(nonce)])
 	}
-	
+
 	static func generateMdocGeneratedNonce() -> String {
 		var bytes = [UInt8](repeating: 0, count: 16)
 		let result = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -83,23 +92,54 @@ class Openid4VpUtils {
 		}
 		return Data(bytes).base64URLEncodedString()
 	}
-	
+
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, logger: Logger? = nil) throws -> RequestItems? {
-		let pathRx = try NSRegularExpression(pattern: "\\$\\['([^']+)'\\]\\['([^']+)'\\]", options: .caseInsensitive)
-		var res = RequestItems()
+	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
+		var inputDescriptorMap = [String: String]()
+		var requestItems = RequestItems()
+		var formatsRequested = [String: DocDataFormat]()
 		for inputDescriptor in presentationDefinition.inputDescriptors {
-			guard let fc = inputDescriptor.formatContainer else { logger?.warning("Input descriptor with id \(inputDescriptor.id) is invalid "); continue }
-			guard fc.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) else { logger?.warning("Input descriptor with id \(inputDescriptor.id) does not contain format mso_mdoc "); continue }
-			let docType = inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let kvs: [(String, String)] = inputDescriptor.constraints.fields.compactMap(\.paths.first).compactMap { Self.parsePath($0, pathRx: pathRx) }
-			let nsItems = Dictionary(grouping: kvs, by: \.0).mapValues { $0.map(\.1) }
-			if !nsItems.isEmpty { res[docType] = nsItems }
+			let formatRequested: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
+			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
+			let docType = filterValue ?? inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
+			let id = idsToDocTypes.first { Openid4VpUtils.vctToDocTypeMatch($1, docType) && dataFormats[$0] == formatRequested }?.key ?? ""
+			let pathRx = formatRequested == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
+			var nsItems: [String: [RequestItem]] = [:]
+			for field in inputDescriptor.constraints.fields {
+				guard let pair =  Self.parseField(field, displayNames: docDisplayNames[id], pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
+				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
+				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
+			}
+			if !nsItems.isEmpty { inputDescriptorMap[docType] = inputDescriptor.id; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested }
 		}
-		return res
+		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
 
-	static func parsePath(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
+	/// parse field and return (namespace, RequestItem) pair for CBOR format
+	static func parseField(_ field: Field, displayNames: [String: [String: String]]??, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
+		guard let path = field.paths.first else { return nil }
+		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
+		let elementPath = nsItemPair.1.components(separatedBy: ".")
+		let rootPathComponent = elementPath.first!
+		// displayNames for nested elements are missing now
+		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] ?? rootPathComponent // currently only first level
+		let displayNames = [rootDisplayName] + Array(repeating: nil, count: elementPath.count-1)
+		return (nsItemPair.0, RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
+	}
+
+	/// parse path and return (namespace, itemIdentifier) pair for jwt format
+	static func parsePath1(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
+		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
+		let r2 = match.range(at: 1)
+		let r2l = path.index(path.startIndex, offsetBy: r2.location)
+		let r2r = path.index(r2l, offsetBy: r2.length)
+		let fieldName = String(path[r2l..<r2r])
+		// take parent only for now
+		return ("", fieldName)
+	}
+
+	/// parse path and return (namespace, itemIdentifier) pair
+	static func parsePath2(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
 		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
 		let r1 = match.range(at:1);
 		let r1l = path.index(path.startIndex, offsetBy: r1.location)
@@ -109,16 +149,45 @@ class Openid4VpUtils {
 		let r2r = path.index(r2l, offsetBy: r2.length)
 		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
 	}
-	
+
+	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String) async throws -> SignedSDJWT? {
+		let allPaths = try sdJwt.disclosedPaths()
+		let requestPaths = requestItems.map(\.elementPath)
+		let query = Set(allPaths.filter { requestPaths.contains($0.tokenArray) })
+		if query.isEmpty { throw WalletError(description: "No items to present found") }
+		let presentedSdJwt = try await sdJwt.present(query: query)
+		guard let presentedSdJwt else { return nil }
+		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
+		guard let sdHash = digestCreator.hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised) else { return nil }
+    	let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg),
+			kbJwtPayload: .init([Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Int(Date().timeIntervalSince1970.rounded()), Keys.sdHash.rawValue: sdHash]))
+		let holderPresentation = try await SDJWTIssuer.presentation(
+          holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
+		return holderPresentation
+	}
+
+	static func filterSignedJwtByDocType(_ sdJwt: SignedSDJWT, docType: String) -> Bool {
+		guard let paths = try? sdJwt.recreateClaims() else { return false }
+		let type = paths.recreatedClaims["vct"].string ?? paths.recreatedClaims["type"].string
+		guard let type, !type.isEmpty else { return false }
+		return vctToDocTypeMatch(docType, type)
+	}
+
+	static func vctToDocType(_ vct: String) -> String { vct.replacingOccurrences(of: "urn:", with: "").replacingOccurrences(of: ":", with: ".") }
+
+	static func vctToDocTypeMatch(_ s1: String, _ s2: String) -> Bool {
+		Openid4VpUtils.vctToDocType(s1).hasPrefix(Openid4VpUtils.vctToDocType(s2)) || Openid4VpUtils.vctToDocType(s2).hasPrefix(Openid4VpUtils.vctToDocType(s1))
+	}
 }
 
-extension ECCurveType {
+extension CoseEcCurve {
 	init?(crvName: String) {
 		switch crvName {
-		case "P-256": self = .p256
-		case "P-384": self = .p384
-		case "P-512": self = .p521
+		case "P-256": self = .P256
+		case "P-384": self = .P384
+		case "P-512": self = .P521
 		default: return nil
 		}
 	}
 }
+

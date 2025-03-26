@@ -15,15 +15,30 @@ limitations under the License.
 */
 
 import Foundation
-import OpenID4VCI
+import MdocDataModel18013
+@preconcurrency import OpenID4VCI
 import WalletStorage
 
-struct DeferredIssuanceModel: Codable {
+struct CredentialConfiguration: Sendable, Codable {
+	let configurationIdentifier: CredentialConfigurationIdentifier
+	let credentialIssuerIdentifier: String
+	let docType: String?
+	let scope: String
+	let display: [MdocDataModel18013.DisplayMetadata]
+	let issuerDisplay: [MdocDataModel18013.DisplayMetadata]
+	let algValuesSupported: [String]
+	let msoClaims: MsoMdocClaims?
+	let flatClaims: [String: Claim]?
+	let order: [String]?
+	let format: DocDataFormat
+}
+
+struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
-	let displayName: String
+	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }
 
@@ -33,24 +48,37 @@ struct PendingIssuanceModel: Codable {
 		case presentation_request_url(String)
 	}
 	let pendingReason: PendingReason
-	let identifier: CredentialConfigurationIdentifier
-	let displayName: String
+	let configuration: CredentialConfiguration
 	let metadataKey: String
 	let pckeCodeVerifier: String
 	let pckeCodeVerifierMethod: String
 }
 
 enum IssuanceOutcome {
-	case issued(Data, String?)
+	case issued(Data?, String?, CredentialConfiguration)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }
 
 extension IssuanceOutcome {
-	var isDeferred: Bool { switch self { case .deferred(_): true; default: false } }
-	var isPending: Bool { switch self { case .pending(_): true; default: false } }
-	var pendingOrDeferredStatus: DocumentStatus? { switch self { case .deferred(_): .deferred; case .pending(_): .pending; default: nil } }
+	var isDeferred: Bool {
+		switch self {
+		case .deferred(_): true
+		default: false
+		}
+	}
+	var isPending: Bool {
+		switch self {
+		case .pending(_): true
+		default: false
+		}
+	}
+	var pendingOrDeferredStatus: DocumentStatus? {
+		switch self {
+		case .deferred(_): .deferred
+		case .pending(_): .pending
+		default: nil
+		}
+	}
 }
-
-	
 

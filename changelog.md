@@ -1,3 +1,112 @@
+## v0.10.1
+- OpenID4VP Draft 23 support
+
+## v0.10.0
+- Fix nil DocClaim issue for request-items
+
+## v0.9.9
+- `DocPresentInfo` struct members public
+- `DocClaim`: added property `path: [String]` to store the path of the claim in the document
+
+## v0.9.8
+ - sdJwt nested elements presentation
+ - `DocElementsViewModel` replaced with `enum DocElements`
+
+## v0.9.6
+- OfferedIssuanceModel: Change the issuerName property to represent a friendly name instead of a URL and add a new issuerLogoUrl property
+
+## v0.9.5
+- Updated `eudi-lib-ios-openid4vci-swift` library to version [v0.12.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.12.0)
+- `openID4VciConfig` now accepts a `DPoPConstructorType`.
+- Updated `eudi-lib-ios-siop-openid4vp-swift` library to version [v0.7.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.7.0)
+### Breaking changes
+- `ElementViewModel`: removed `elementIdentifier` and `displayName` properties and added `elementPath` and `displayNames` properties:
+```
+/// path to locate the element
+public let elementPath: [String]
+// display names of the component paths 
+public let displayNames: [String?]
+```
+
+## v0.9.4
+- Added properties to `DocClaimsDecodable` protocol: `validFrom`, `validUntil`
+## v0.9.3
+- Fixed bug for OpenID4VP presentation for more than 2 documents
+## v0.9.2
+- Fixed bugs for OpenID4VP presentation
+- Added properties to `DocClaimsDecodable` protocol: `issuerDisplay`,`credentialIssuerIdentifier`, `configurationIdentifier`
+## v0.9.1
+- `EudiWallet`: added `uiCulture` string property for UI localization. It must be a 2-letter language code (optional)
+- `EudiWallet`: added `getIssuerMetadata()` function to retrieve selected issuer's metadata
+- `EudiWallet`: Issue document using either doc-type, scope or configuration identifier:  `func issueDocument(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil)`
+- `WalletStorage.Document`: added `displayName` property with localized string value
+- `ElementViewModel`: added `displayName` property with localized string value
+- `DocMetadata`: stores all localized metadata in `display` property
+- `DocClaimMetadata`: stores all localized metadata in `display` property
+- Fix bug with VP presentation
+## v0.9.0
+### Supports issuing and display of documents with sd-jwt-vc format
+- `DocClaimDecodable` protocol is supported for both mso-mdoc (cbor) and sd-jwt-vc formats
+### Supports saving and retrieving issuer metadata to be used for display
+- `DocClaim` struct has `docDataValue` property to store the typed value (enum with associated values) of the claim and `stringValue` property to store the string value of the claim
+- `DocClaim` struct has `displayName`, `isOptional` and `valueType` properties provided by the issuer
+### Updated eudi-lib-ios-openid4vci-swift to version 0.10.0
+- Feature/dpop nonce
+### Breaking changes
+- `StorageManager` property `mdocModels` renamed to `docModels`
+- `MdocDecodable` protocol renamed to `DocClaimDecodable`
+- `NameValue` struct renamed to `DocClaim`
+- `NameImage` struct removed
+
+## v0.8.2
+- Update for OpenID4VCI Draft14 (eudi-lib-ios-openid4vci-swift updated to tag 0.9.0)
+- Use @MainActor for issuing methods due to authentication UI
+
+## v0.8.1
+### Breaking changes
+- `SecureArea` protocol static factory method added: `nonisolated public static func create(storage: any SecureKeyStorage) -> Self`
+- Removed `SecureArea` protocol initializer: `init(storage: any SecureKeyStorage)` (use the static factory method instead)
+- Removed property `storage` from `SecureArea` protocol
+
+## v0.8.0
+### Secure area refactoring
+####  `EudiWallet` changes:
+- `init` added `secureAreas`: `[SecureArea]` optional parameter (default is `["SecureEnclave", "Software"]`)
+- `issueDocument`: added `keyOptions` optional parameter to specify the secure area name and other key options for the key creation
+- `issueDocumentsByOfferUrl`: added `docTypeKeyOptions` optional parameter to specify the secure area name and other key options for each doc type 
+
+## v0.7.8
+- `RequestItems` conforms to `Equatable` protocol
+
+## v0.7.7
+ - Fix issue [#118](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/118)
+ ### Breaking changes
+- `RequestItems` is now a dictionary with a key of type `String` (doc-type) and a value of type `[String: [RequestItem]]` (namespace to request items)
+- `RequestItem` is a struct with the following properties: `elementIdentifier`, `intentToRetain` and `isOptional`
+ ```swift
+ public typealias RequestItems = [String: [String: [RequestItem]]]
+```
+- ElementViewModel: `public var isMandatory: Bool` is removed
+- ElementViewModel: `public var isOptional: Bool` is added (opposite of `isMandatory`)
+
+## v0.7.4
+- Update Package.resolved and Package.swift with new versions for openid4vci, openid4vp
+
+## v0.7.3
+- Bug fix
+
+## v0.7.2
+- Removed `@MainActor` annotation from class definitions
+
+## v0.7.1
+- Swift 6 migration
+
+## v0.7.0
+- Updated OpenID4VCI to version 0.6.0
+
+## v0.6.9
+- Fill document display name in [DocElementsViewModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/docelementsviewmodel/)
+
 ## v0.6.8
 - Updated OpenID4VCI to version 0.5.0
 - Updated OpenID4VP to version 0.4.0
@@ -11,11 +120,6 @@
 ### Documentation
 - Updated README.md with new methods and explanations
 - Added documentation using Swift-DocC (deployed [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/))
-
-## v0.6.6
-### Refactoring :
- - `WalletStorage.Document` implements `DocumentProtocol` protocol
- - `MdocDataModel18013.MdocDecodable` inherits `DocumentProtocol` protocol
 
 ## v0.6.5
 ### Fixes for dynamic issuance:
@@ -78,7 +182,7 @@ e.g. 	wallet.serviceName = "wallet_dev"
 - Update eudi-lib-ios-openid4vci-swift to version [0.4.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.4.2)
 - New `EudiWallet` property `public var openID4VciConfig: OpenId4VCIConfig?` to pass OpenID4VCI issuer parameters
 - Removed `EudiWallet` properties `var openID4VciClientId` and `var openID4VciRedirectUri`
-- New `EudiWallet` property `public var modelFactory: (any MdocModelFactory.Type)?` if the UI app wants to pass a model factory type to create custom stronly-typed models. See [`MdocModelFactory`](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocmodelfactory) protocol for more details.
+
 
 ## v0.5.7
 ### StorageManager changes
@@ -87,7 +191,7 @@ e.g. 	wallet.serviceName = "wallet_dev"
 - new variable `@Published public private(set) var deferredDocuments: [WalletStorage.Document] = []` (documents that are not yet issued)
 ### Deferred issuance
 -	Request a deferred issuance based on a stored deferred document. On success, the deferred document is updated with the issued document.
-   The caller does not need to reload documents, storage manager `deferredDocuments` and `mdocModels` properties are updated.
+   The caller does not need to reload documents, storage manager `deferredDocuments` and `docModels` properties are updated.
 - New function to request deferred issuance: `@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> WalletStorage.Document`
 ### Other changes
 - Removed `otherModels`, `docTypes`, `documentIds` properties
@@ -113,10 +217,10 @@ e.g. 	wallet.serviceName = "wallet_dev"
 
 The flow is supported by existing methods:
 
-1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> OfferedIssueModel`
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
 
-2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `issueDocumentsByOfferUrl` must include the transaction code (parameter `txCodeValue`). 
+2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`). 
 
 - Note: for the clientId value the `EudiWallet/openID4VciClientId` is used.
 
@@ -150,8 +254,8 @@ The flow is supported by existing methods:
 ### Update eudi-lib-ios-openid4vci-swift to version 0.0.9
 
 ## v0.4.4
-### Breaking change - mdocModels contains not-nil items (SwiftUI breaks with nil items)
-@Published public var mdocModels: [any MdocDecodable] = []
+### Breaking change - docModels contains not-nil items (SwiftUI breaks with nil items)
+@Published public var docModels: [any MdocDecodable] = []
 
 ## v0.4.3
 Openid4vp, BLE: Support sending multiple documents with same doc-type
@@ -179,11 +283,11 @@ OpenID4VCI: Fixed issuing with https://dev.issuer.eudiw.dev
 ### Added functions:
 /// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
 
-` public func resolveOfferUrlDocTypes(uriOffer: String, format: DataFormat = .cbor, useSecureEnclave: Bool = true) async throws -> [OfferedDocModel] `
+` public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> [OfferedDocModel] `
 
 /// Issue documents by offer URI.
 
-`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], format: DataFormat, promptMessage: String? = nil, useSecureEnclave: Bool = true, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
+`public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], docTypeKeyOptions: [String: KeyOptions]? = nil, promptMessage: String? = nil, claimSet: ClaimSet? = nil) async throws -> [WalletStorage.Document] `
 
 ### Breaking change: 
  `// PresentationSession

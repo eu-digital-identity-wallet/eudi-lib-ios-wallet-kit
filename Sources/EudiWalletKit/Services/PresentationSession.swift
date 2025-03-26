@@ -17,13 +17,14 @@ limitations under the License.
 import Foundation
 import SwiftUI
 import Logging
-@_exported import MdocDataTransfer18013
+import MdocDataModel18013
+import MdocDataTransfer18013
 import LocalAuthentication
 
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
-public class PresentationSession: ObservableObject {
+public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
@@ -31,12 +32,12 @@ public class PresentationSession: ObservableObject {
 	@Published public var readerLegalName: String?
 	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
 	@Published public var readerCertValidationMessage: String?
-	/// Reader certificate issuer is valid  (only for BLE transfer wih verifier using reader authentication)
+	/// Reader certificate issuer is valid
 	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
-	@Published public var disclosedDocuments: [DocElementsViewModel] = []
+	@Published public var disclosedDocuments: [DocElements] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// The ``FlowType`` instance
@@ -44,82 +45,93 @@ public class PresentationSession: ObservableObject {
 	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
-	// map of document id to (doc type, display name) pairs
-	public var docIdAndTypes: [String: (String, String?)]
+	// map of document id to (doc type, format, display name) pairs
+	public var docIdToPresentInfo: [String: DocPresentInfo]!
 	/// User authentication required
 	var userAuthenticationRequired: Bool
-	
-	public init(presentationService: any PresentationService, docIdAndTypes: [String: (String, String?)], userAuthenticationRequired: Bool) {
+
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
-		self.docIdAndTypes = docIdAndTypes
+		self.docIdToPresentInfo = docIdToPresentInfo
 		self.userAuthenticationRequired = userAuthenticationRequired
 	}
-	
+
 	@MainActor
 	/// Decodes a presentation request
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
-	/// - Parameter request: Keys are defined in the ``UserRequestKeys``
-	func decodeRequest(_ request: [String: Any]) throws {
-		guard docIdAndTypes.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
+	/// - Parameter request: Request information
+	func decodeRequest(_ request: UserRequestInfo) throws {
+		guard docIdToPresentInfo.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
-		guard let validRequestItems = request[UserRequestKeys.valid_items_requested.rawValue] as? RequestItems else { return }
-		disclosedDocuments = [DocElementsViewModel]()
-		for (docId, (docType, displayName)) in docIdAndTypes {
-			var tmp = validRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: true)
-			if let errorRequestItems = request[UserRequestKeys.error_items_requested.rawValue] as? RequestItems, errorRequestItems.count > 0 {
-				tmp = tmp.merging(with: errorRequestItems.toDocElementViewModels(docId: docId, docType: docType, displayName: displayName, valid: false))
+		disclosedDocuments = [DocElements]()
+		for (docId, docPresentInfo) in docIdToPresentInfo {
+			let docType = docPresentInfo.docType
+			let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { Openid4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
+			if requestFormat != docPresentInfo.docDataFormat  { continue }
+			switch requestFormat {
+				case .cbor:
+					guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
+					guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
+					disclosedDocuments.append(.msoMdoc(msoElements))
+				case .sdjwt:
+					guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
+					guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+					let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
+					guard let sdJwtElements else { continue }
+					disclosedDocuments.append(.sdJwt(sdJwtElements))
+				default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
 			}
-			disclosedDocuments.append(contentsOf: tmp)
+
 		}
-		if let readerAuthority = request[UserRequestKeys.reader_certificate_issuer.rawValue] as? String {
+		if let readerAuthority = request.readerCertificateIssuer {
 			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = request[UserRequestKeys.reader_auth_validated.rawValue] as? Bool
-			readerCertValidationMessage = request[UserRequestKeys.reader_certificate_validation_message.rawValue] as? String
+			readerCertIssuerValid = request.readerAuthValidated
+			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
-		readerLegalName = request[UserRequestKeys.reader_legal_name.rawValue] as? String
+		readerLegalName = request.readerLegalName
 		status = .requestReceived
 	}
-	
+
 	public static func makeError(str: String) -> NSError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
 	}
-	
-	public static func makeError(code: ErrorCode, str: String? = nil) -> NSError {
+
+	public static func makeError(code: MdocDataTransfer18013.ErrorCode, str: String? = nil) -> NSError {
 		let message = str ?? code.description
 		logger.error(Logger.Message(unicodeScalarLiteral: message))
 		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
 	}
-	
+
 	/// Start QR engagement to be presented to verifier
 	///
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async {
 		do {
-			if let data = try await presentationService.startQrEngagement() {
-				await MainActor.run {
-					deviceEngagement = data
-					status = .qrEngagementReady
-				}
+			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
+			await MainActor.run {
+				deviceEngagement = data
+				status = .qrEngagementReady
 			}
 		} catch { await setError(error) }
 	}
-	
+
 	@MainActor
 	func setError(_ error: Error) {
 		status = .error
 		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
 	}
-	
+
 	/// Receive request from verifer
 	///
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
-	/// - Returns: A request dictionary keyed by ``MdocDataTransfer.UserRequestKeys``
-	public func receiveRequest() async -> [String: Any]? {
+	/// - Returns: A request object
+	public func receiveRequest() async -> UserRequestInfo? {
 		do {
 			let request = try await presentationService.receiveRequest()
 			try await decodeRequest(request)
@@ -129,13 +141,13 @@ public class PresentationSession: ObservableObject {
 			return nil
 		}
 	}
-	
+
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: ((URL?) -> Void)? = nil) async {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
 		do {
 			await MainActor.run {status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
@@ -143,7 +155,7 @@ public class PresentationSession: ObservableObject {
 			await MainActor.run {status = .responseSent }
 		} catch { await setError(error) }
 	}
-	
-	
+
+
 
 }

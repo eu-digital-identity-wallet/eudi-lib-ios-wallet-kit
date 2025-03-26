@@ -17,11 +17,13 @@ limitations under the License.
 //  TransferStatus.swift
 
 import Foundation
+import MdocDataModel18013
+import eudi_lib_sdjwt_swift
 import WalletStorage
 
 /// Data exchange flow type
-public enum FlowType: Codable, Hashable {
-	
+public enum FlowType: Codable, Hashable, Sendable {
+
 	case ble
 	case openid4vp(qrCode: Data)
 	case other
@@ -30,24 +32,14 @@ public enum FlowType: Codable, Hashable {
 	public var qrCode: Data? { if case let .openid4vp(qrCode) = self { qrCode} else { nil} }
 }
 
-/// Data format of the exchanged data
-public enum DataFormat: String {
-	case cbor = "cbor"
-	case sdjwt = "sdjwt"
-}
-
-public extension DataFormat {
-	init?(_ docDataType: DocDataType) {
-		switch docDataType {
-		case .cbor:	self = .cbor
-		case .sjwt:	self = .sdjwt
-		default: return nil
-		}
-	}
-}
-
-public enum StorageType {
+public enum StorageType: Sendable {
 	case keyChain
 }
 
+extension SignedSDJWT: @retroactive @unchecked Sendable {}
+
+public enum DocTypedData: Sendable {
+	case msoMdoc(IssuerSigned)
+	case sdJwt(SignedSDJWT)
+}
 

@@ -1,0 +1,263 @@
+{
+    "id": "6ba896b2-b78f-4918-a9db-9e0c666cf6be",
+    "input_descriptors": [
+      {
+        "id": "1ec06004-dd2a-4aa0-b119-41df22378fba",
+        "name": "Person Identification Data (PID)",
+        "purpose": "",
+        "format": {
+          "vc+sd-jwt": {
+            "sd-jwt_alg_values": [
+              "ES256",
+              "ES384"
+            ],
+            "kb-jwt_alg_values": [
+              "ES256",
+              "ES384"
+            ]
+          }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": [
+                "$.vct"
+              ],
+              "filter": {
+                "type": "string",
+                "const": "urn:eu.europa.ec.eudi:pid:1"
+              }
+            },
+            {
+              "path": [
+                "$.family_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.given_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.birthdate"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.age_equal_or_over.18"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.age_in_years"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.age_birth_year"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.birth_family_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.birth_given_name"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.place_of_birth.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.place_of_birth.country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.place_of_birth.region"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.place_of_birth.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.formatted"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.region"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.locality"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.postal_code"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.street_address"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.address.house_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.gender"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.nationalities"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.iat"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.exp"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.issuing_authority"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.document_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.administrative_number"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.issuing_country"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$.issuing_jurisdiction"
+              ],
+              "intent_to_retain": false
+            }
+          ]
+        }
+      },
+      {
+        "id": "eu.europa.ec.eudi.pseudonym.age_over_18.1",
+        "name": "Age Over 18",
+        "purpose": "",
+        "format": {
+          "mso_mdoc": {
+            "alg": [
+              "ES256",
+              "ES384",
+              "ES512"
+            ]
+          }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['age_over_18']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['user_pseudonym']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['issuance_date']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['expiry_date']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['issuing_authority']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['issuing_jurisdiction']"
+              ],
+              "intent_to_retain": false
+            },
+            {
+              "path": [
+                "$['eu.europa.ec.eudi.pseudonym.age_over_18.1']['issuing_country']"
+              ],
+              "intent_to_retain": false
+            }
+          ]
+        }
+      }
+    ]
+  }

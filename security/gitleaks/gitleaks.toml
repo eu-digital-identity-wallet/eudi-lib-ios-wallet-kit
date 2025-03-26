@@ -1522,7 +1522,6 @@ stopwords= [
     "layout",
     "webrtc",
     "logic",
-    "login",
     "worker",
     "toolkit",
     "mocha",
