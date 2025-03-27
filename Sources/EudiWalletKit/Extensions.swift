@@ -16,7 +16,7 @@ limitations under the License.
 Created on 09/11/2023
 */
 import Foundation
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage

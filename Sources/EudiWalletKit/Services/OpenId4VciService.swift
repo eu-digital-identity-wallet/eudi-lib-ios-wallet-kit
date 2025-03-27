@@ -15,7 +15,7 @@
  */
 
 import Foundation
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 import JOSESwift
 import MdocDataModel18013
 import AuthenticationServices

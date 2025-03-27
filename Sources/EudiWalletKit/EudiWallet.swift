@@ -21,7 +21,7 @@ import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
 import CryptoKit
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 import SwiftCBOR
 import Logging
 // ios specific imports

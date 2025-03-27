@@ -16,7 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 import WalletStorage
 
 struct CredentialConfiguration: Sendable, Codable {
