@@ -50,6 +50,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var iaca: [SecCertificate]!
 	// map of docType to data format (formats requested)
 	var formatsRequested: [String: DocDataFormat]!
+	var transactionData: [TransactionData]?
 	/// map of docType to inputDescriptor-id
 	var inputDescriptorMap: [String: String]!
 	var dauthMethod: DeviceAuthMethod
@@ -126,6 +127,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					self.presentationDefinition = vp.presentationDefinition
 					let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(vp.presentationDefinition, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 					self.formatsRequested = fmtsReq; self.inputDescriptorMap = imap
+					self.transactionData = vp.transactionData
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
 					var result = UserRequestInfo(docDataFormats: fmtsReq, itemsRequested: items)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
@@ -195,7 +197,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
 					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 					let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
-					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId) else {
+					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
 						continue
 					}
 					inputToPresentations.append((inputDescrId, VpToken.VerifiablePresentation.generic(presented.serialisation)))
