@@ -19,19 +19,20 @@ import MdocDataModel18013
 import OpenID4VCI
 import WalletStorage
 
-struct CredentialConfiguration: Sendable, Codable {
+struct CredentialConfiguration: Codable, Sendable {
+	/// the credential issuer identifier (issuer URL)
 	let configurationIdentifier: CredentialConfigurationIdentifier
 	let credentialIssuerIdentifier: String
-	let docType: String?
-	let scope: String
-	let display: [MdocDataModel18013.DisplayMetadata]
-	let issuerDisplay: [MdocDataModel18013.DisplayMetadata]
-	let algValuesSupported: [String]
-	let msoClaims: MsoMdocClaims?
-	let flatClaims: [String: Claim]?
-	let order: [String]?
-	let format: DocDataFormat
-}
+    let docType: String?
+	let vct: String?
+    let scope: String?
+    //public let cryptographicBindingMethodsSupported: [CryptographicBindingMethod]
+    let credentialSigningAlgValuesSupported: [String]
+	let issuerDisplay: [DisplayMetadata]    //public let proofTypesSupported: [String: ProofTypeSupportedMeta]?
+    let display: [DisplayMetadata]
+    let claims: [Claim]
+   	let format: DocDataFormat
+ }
 
 struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
