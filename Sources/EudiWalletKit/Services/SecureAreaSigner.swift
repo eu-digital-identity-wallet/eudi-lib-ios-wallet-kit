@@ -16,26 +16,27 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import JOSESwift
+@preconcurrency import JOSESwift
 import JSONWebAlgorithms
 import OpenID4VCI
 
-class SecureAreaSigner: AsyncSignerProtocol {
+final class SecureAreaSigner: AsyncSignerProtocol {
 	let id: String
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
 	let algorithm: JOSESwift.SignatureAlgorithm
-	var signature: Data?
+	let signature: Data?
 	let unlockData: Data?
-	
+
 	init(secureArea: SecureArea, id: String, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
 		self.id = id
 		self.secureArea = secureArea
 		self.ecAlgorithm = ecAlgorithm
 		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
+		signature = nil
 		self.unlockData = unlockData
 	}
-	
+
 	static func getSignatureAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
 		switch sa {
 		case .ES256: return .ES256
@@ -65,5 +66,5 @@ func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
       	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
 		return try await sign(signingInput)
 	}
-		
+
 }
