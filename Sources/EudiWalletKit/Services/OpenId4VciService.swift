@@ -142,10 +142,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			logger.info("Starting issuing with identifer \(id), scope \(sc), displayName: \(dn)")
 			let issuer = try getIssuer(offer: offer)
 			let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: configuration, claimSet: claimSet)
-			// logger.info("Credential str:\n\(str)")
 			return res
 		} catch {
-			// logger.error("Failed to issue document with scope \(ci.scope)")
 			logger.info("Exception: \(error)")
 			return nil
 		}
@@ -197,7 +195,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			throw WalletError(description: "Cannot find credential identifier \(configuration.configurationIdentifier.value) in offer")
 		}
 //		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: issuerMetadata.batchCredentialIssuance?.batchSize)
-		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: 1)
+		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: 3)
 	}
 
 	func getCredentialIdentifier(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
