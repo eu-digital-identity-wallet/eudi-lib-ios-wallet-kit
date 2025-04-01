@@ -305,6 +305,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
+		let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption)
+		await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
 		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
 		switch deferredRequestResponse {
 		case .success(let response):
