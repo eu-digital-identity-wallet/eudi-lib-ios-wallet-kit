@@ -30,6 +30,14 @@ extension String {
 	}
 }
 
+func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFError>?>) -> Result?) throws -> Result {
+    var errorQ: Unmanaged<CFError>? = nil
+    guard let result = body(&errorQ) else {
+        throw errorQ!.takeRetainedValue() as Error
+    }
+    return result
+}
+
 extension Array where Element == Display {
 	func getName(_ uiCulture: String?) -> String? {
 		(first(where: { if #available(iOS 16, *) {
@@ -108,7 +116,7 @@ extension WalletStorage.Document {
 			guard let cmd = md.claimMetadata?.convertToCborClaimMetadata(uiCulture) else { return nil }
 			return cmd.displayNames
 		} else if docDataFormat == .sdjwt {
-			guard let cmd = md.claimMetadata?.convertToJsonClaimMetadata(uiCulture, key: nil) else { return nil }
+			guard let cmd = md.claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: nil) else { return nil }
 			return ["": cmd.displayNames]
 		}
 		return nil
@@ -179,13 +187,13 @@ extension Array where Element == DocClaimMetadata {
 		return (displayNames, mandatory)
 	}
 
-	func convertToJsonClaimMetadata(_ uiCulture: String?, key: String?, keyIndex: Int = -1) -> (displayNames: [String: String], mandatory: [String: Bool]) {
-		guard allSatisfy({ $0.claimPath.count > keyIndex + 1}) else { return ([:], [:]) } // sanity check
-		let arr = if let key { filter { $0.claimPath[keyIndex] == key } } else { self }
-		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[keyIndex+1]} )
+	func convertToJsonClaimMetadata(_ uiCulture: String?, keyPrefix: [String]?) -> (displayNames: [String: String], mandatory: [String: Bool], childMetadata: [DocClaimMetadata]) {
+		let groupIndex = keyPrefix?.count ?? 0
+		let arr = if let keyPrefix { filter { keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) && $0.claimPath.count > groupIndex } } else { self }
+		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[groupIndex]} )
 		let displayNames = dictKeys.compactMapValues { $0.first?.display?.getName(uiCulture) }
 		let mandatory =  dictKeys.compactMapValues { $0.first?.isMandatory }
-		return (displayNames, mandatory)
+		return (displayNames, mandatory, arr)
 	}
 }
 
@@ -239,24 +247,11 @@ extension JSON {
 	func toClaimsArray(pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?) -> ([DocClaim], String)? {
 		switch type {
 		case .array, .dictionary:
-		/*
-			var verified_claims = self["verified_claims"]
-			if case let claims = verified_claims["claims"], claims.type == .dictionary {
-				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: nil)
-				let x = verified_claims["verification"].toClaimsArray(pathPrefix: pathPrefix, cmd?.displayNames, cmd?.mandatory)
-				return claims.reduce(into: initialResult) { (partialResult, el: (String, JSON)) in
-					if let (claims1, str1) = el.1.toClaimsArray(pathPrefix: pathPrefix, cmd?.displayNames, cmd?.mandatory) {
-						partialResult.0.append(contentsOf: claims1)
-						partialResult.1 += (partialResult.1.count == 0 ? "" : ", ") + str1
-					}
-				}
-			}
-			*/
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
 				let isArray = type == .array
 				let n2 = if isArray { "" } else { key }
-				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, key: key, keyIndex: pathPrefix.count)
+				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
 				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimMetadata, uiCulture, cmd?.displayNames[key], cmd?.mandatory[key]) {
 					a.append(di)
 				}
