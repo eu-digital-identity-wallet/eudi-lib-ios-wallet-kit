@@ -249,7 +249,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
         if let result = response.credentialResponses.first {
           switch result {
           case .deferred(let transactionId):
-			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken , refreshToken: authorized.refreshToken, transactionId: transactionId, configuration: configuration, timeStamp: authorized.timeStamp)
+		  	guard let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey else { throw ValidationError.error(reason: "Encryption specification not available")}
+			let derKeyData = try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data
+			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken , refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
 			return .deferred(deferredModel)
           case .issued(let format, let credentials, _, _):
             return try handleCredentialResponse(credentials: credentials, format: format, configuration: configuration)
@@ -283,7 +285,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let issuer = try getIssuerForDeferred(data: model)
 		let authorized = AuthorizedRequest(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil)
-		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId, configuration: model.configuration)
+		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId, derKeyData: model.derKeyData, configuration: model.configuration)
 	}
 
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> IssuanceOutcome {
@@ -303,9 +305,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return res
 	}
 
-	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
+	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, derKeyData: Data, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
-		let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption)
+		let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData)
 		await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
 		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
 		switch deferredRequestResponse {
@@ -315,7 +317,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				return try handleCredentialResponse(credentials: credentials, format: nil, configuration: configuration)
 			case .issuancePending(let transactionId):
 				logger.info("Credential not ready yet. Try after \(transactionId.interval ?? 0)")
-				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, configuration: configuration, timeStamp: authorized.timeStamp)
+				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
 				return .deferred(deferredModel)
 			case .errored(_, let errorDescription):
 				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")

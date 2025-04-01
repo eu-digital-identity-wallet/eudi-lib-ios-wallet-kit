@@ -39,6 +39,7 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
+	let derKeyData: Data
 	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }

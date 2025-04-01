@@ -42,9 +42,14 @@ public struct DocMetadata: Sendable, Codable {
 	}
 }
 
-public struct DocClaimMetadata: Sendable, Codable {
+@DebugDescription
+public struct DocClaimMetadata: Sendable, Codable, CustomStringConvertible, CustomDebugStringConvertible {
 	public func getDisplayName(_ uiCulture: String?) -> String? { display?.getName(uiCulture) }
 	public let display: [DisplayMetadata]?
 	public let isMandatory: Bool?
 	public let claimPath: [String]
+	/// Description of the claim.
+	public var description: String { "\(claimPath)" }
+	/// Debug description of the claim.
+	public var debugDescription: String { "\(claimPath)" }
 }
