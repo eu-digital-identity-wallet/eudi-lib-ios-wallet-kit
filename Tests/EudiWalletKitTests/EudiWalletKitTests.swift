@@ -92,6 +92,4 @@ struct EudiWalletKitTests {
 		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
-
-
-	}
+}
