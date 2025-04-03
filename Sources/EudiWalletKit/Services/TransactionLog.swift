@@ -2,49 +2,66 @@ import Foundation
 import Logging
 import XCGLogger
 import MdocDataModel18013
+import SiopOpenID4VP
 
-/**
- * A transaction log.
- * @property timestamp The timestamp of the transaction.
- * @property status The status of the transaction.
- */
+/// Transaction log.
 public struct TransactionLog: Sendable, Codable {
     let timestamp: Int64
     let status: Status
 	let errorMessage: String?
 	let requestPayload: Data
-	let responsePayload: Data
+	let responsePayload: Data?
+	let relyingParty: RelyingParty?
 	let transactionType: TransactionType
 	let format: LogDataFormat
+
 }
 
 public enum LogDataFormat: Int, Sendable, Codable {
 	case cbor
 	case json
-	case xml
+}
+
+public struct VpRequestPayload: Codable {
+	let presentationDefinition: PresentationDefinition?
+	let transactionData: [TransactionData]?
+}
+public struct VpResponsePayload: Codable {
+	let verifiablePresentations: [VerifiablePresentationPayload]
+	let presentationSubmission: PresentationSubmission
+	let transactionData: [TransactionData]?
+}
+
+public struct VerifiablePresentationPayload: Codable {
+	let id: String
+	let type: LogDataFormat
+	let docData: String
+	let metadata: DocMetadata?
+}
+
+public struct RelyingParty: Codable, Sendable {
+	/// The name of the relying party
+	let name: String
+	/// Whether the relying party is verified.
+	let isVerified: Bool
+	/// The certificate chain of the relying party.
+	let certificateChain: [String]
+	/// The reader authentication data. This is populated only when mdoc presentation is used.
+	let readerAuth: String?
 }
 
 public enum TransactionType: Int, Sendable, Codable {
-	case proximityPresentation
-	case vpPresentation
+	case issuance
+	case presentation
 }
 
 public enum Status: Int, Sendable, Codable {
-        /**
-         * Indicates that the transaction is incomplete
-         */
-        case incomplete
-
-        /**
-         * Indicates that the transaction was completed successfully.
-         */
-        case completed
-
-        /**
-         * Indicates that the transaction failed.
-         * @param cause the cause of the failure.
-         */
-        case failed
+    /// Indicates that the transaction is incomplete
+    case incomplete
+    // Indicates that the transaction was completed successfully.
+    case completed
+    // Indicates that the transaction failed.
+    case failed
 }
 
 /// A logger for transactions.
