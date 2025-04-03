@@ -96,6 +96,7 @@ class Openid4VpUtils {
 	}
 
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
+	/// dataFormats: map of document-id to data format
 	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
 		var inputDescriptorMap = [String: String]()
 		var requestItems = RequestItems()
@@ -123,7 +124,7 @@ class Openid4VpUtils {
 		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
 		let elementPath = nsItemPair.1.components(separatedBy: ".")
 		let rootPathComponent = elementPath.first!
-		// displayNames for nested elements are missing now
+		// displayNames for nested elements: todo
 		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] ?? rootPathComponent // currently only first level
 		let displayNames = [rootDisplayName] + Array(repeating: nil, count: elementPath.count-1)
 		return (nsItemPair.0, RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
