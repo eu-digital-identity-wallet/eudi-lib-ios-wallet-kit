@@ -3,18 +3,30 @@ import Logging
 import XCGLogger
 import MdocDataModel18013
 import SiopOpenID4VP
+import Copyable
 
 /// Transaction log.
+@Copyable
 public struct TransactionLog: Sendable, Codable {
+	public init(timestamp: Int64, status: Status, errorMessage: String? = nil, rawRequest: Data? = nil, rawResponse: Data? = nil, relyingParty: RelyingParty? = nil, type: TransactionLogType, dataFormat: LogDataFormat) {
+		self.timestamp = timestamp
+		self.status = status
+		self.errorMessage = errorMessage
+		self.rawRequest = rawRequest
+		self.rawResponse = rawResponse
+		self.relyingParty = relyingParty
+		self.type = type
+		self.dataFormat = dataFormat
+	}
+
     let timestamp: Int64
     let status: Status
 	let errorMessage: String?
-	let requestPayload: Data
-	let responsePayload: Data?
+	let rawRequest: Data?
+	let rawResponse: Data?
 	let relyingParty: RelyingParty?
-	let transactionType: TransactionType
-	let format: LogDataFormat
-
+	let type: TransactionLogType
+	let dataFormat: LogDataFormat
 }
 
 public enum LogDataFormat: Int, Sendable, Codable {
@@ -45,14 +57,15 @@ public struct RelyingParty: Codable, Sendable {
 	/// Whether the relying party is verified.
 	let isVerified: Bool
 	/// The certificate chain of the relying party.
-	let certificateChain: [String]
+	let certificateChain: [Data]
 	/// The reader authentication data. This is populated only when mdoc presentation is used.
-	let readerAuth: String?
+	let readerAuth: Data?
 }
 
-public enum TransactionType: Int, Sendable, Codable {
-	case issuance
+public enum TransactionLogType: Int, Sendable, Codable {
 	case presentation
+	case issuance
+	case signing
 }
 
 public enum Status: Int, Sendable, Codable {

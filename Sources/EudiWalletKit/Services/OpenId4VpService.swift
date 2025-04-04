@@ -71,6 +71,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var eReaderPub: CoseKey?
 	var urlSession: URLSession
 	var unlockData: [String: Data]!
+	public var transactionLog: TransactionLog
 	public var flow: FlowType
 
 	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
@@ -88,6 +89,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
 		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
 		self.urlSession = urlSession
+		transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .incomplete, type: .presentation, dataFormat: .json)
 	}
 
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
