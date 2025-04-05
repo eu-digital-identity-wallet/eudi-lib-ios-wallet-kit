@@ -166,19 +166,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
 		guard userAccepted, itemsToSend.count > 0 else {
-			try await SendVpToken(nil, pd, resolved, onSuccess)
+			try await SendVpTokens(nil, pd, resolved, onSuccess)
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
-		if formatsRequested.count == 1, formatsRequested.allSatisfy({ (key: String, value: DocDataFormat) in value == .cbor }) {
-			makeCborDocs()
+		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
+		if formatsRequested.allSatisfy({ (_, value: DocDataFormat) in value == .cbor }) {
 			let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend)
-			try await SendVpToken([(pd.inputDescriptors.first!.id, nil, vpToken)], pd, resolved, onSuccess)
+			try await SendVpTokens([(pd.inputDescriptors.first!.id, nil, vpToken)], pd, resolved, onSuccess)
 		} else {
-			if formatsRequested.first(where: { (key: String, value: DocDataFormat) in value == .cbor }) != nil {
-				makeCborDocs()
-			}
 			let parser = CompactParser()
 			let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
 			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
@@ -207,13 +204,21 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					inputToPresentations.append((inputDescrId, docId, VpToken.VerifiablePresentation.generic(presented.serialisation)))
 				}
 			}
-			try await SendVpToken(inputToPresentations, pd, resolved, onSuccess)
+			try await SendVpTokens(inputToPresentations, pd, resolved, onSuccess)
 		}
 	}
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
-	fileprivate func SendVpToken(_ vpTokens: [(String, String?, VpToken.VerifiablePresentation)]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
+	/// A description
+	/// - Parameters:
+	///   - vpTokens:
+	///   - pd:
+	///   - resolved:
+	///   - onSuccess:
+	///
+	/// - Throws:
+	fileprivate func SendVpTokens(_ vpTokens: [(String, String?, VpToken.VerifiablePresentation)]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens {
 			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens.map(\.2)), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: vpTokens.enumerated().map { i,v in
 			 let descr = pd.inputDescriptors.first(where: { $0.id == v.0 })!
