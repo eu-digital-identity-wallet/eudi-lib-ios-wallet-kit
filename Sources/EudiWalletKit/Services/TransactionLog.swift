@@ -8,7 +8,8 @@ import Copyable
 /// Transaction log.
 @Copyable
 public struct TransactionLog: Sendable, Codable {
-	public init(timestamp: Int64, status: Status, errorMessage: String? = nil, rawRequest: Data? = nil, rawResponse: Data? = nil, relyingParty: RelyingParty? = nil, type: TransactionLogType, dataFormat: LogDataFormat) {
+	public init(timestamp: Int64, status: Status, errorMessage: String? = nil, rawRequest: Data? = nil, rawResponse: Data? = nil, relyingParty: RelyingParty? = nil, type: TransactionLogType, dataFormat: LogDataFormat, sessionTranscript: Data? = nil, docMetadata: [Data]? = nil) {
+		// Initialize the properties with the provided values
 		self.timestamp = timestamp
 		self.status = status
 		self.errorMessage = errorMessage
@@ -17,6 +18,8 @@ public struct TransactionLog: Sendable, Codable {
 		self.relyingParty = relyingParty
 		self.type = type
 		self.dataFormat = dataFormat
+		self.sessionTranscript = sessionTranscript
+		self.docMetadata = docMetadata
 	}
 
     let timestamp: Int64
@@ -27,6 +30,8 @@ public struct TransactionLog: Sendable, Codable {
 	let relyingParty: RelyingParty?
 	let type: TransactionLogType
 	let dataFormat: LogDataFormat
+	let sessionTranscript: Data?
+    let docMetadata: [Data]?
 }
 
 public enum LogDataFormat: Int, Sendable, Codable {
@@ -81,9 +86,9 @@ public enum Status: Int, Sendable, Codable {
 ///
 /// Implementations of this protocol should log transactions to some persistent storage.
 /// The storage can be a file, a database, or any other storage medium.
-public protocol TransactionLogger {
+public protocol TransactionLogger: Actor {
     ///  Logs a transaction.
-    func log(transaction: TransactionLog)
+    func log(transaction: TransactionLog) async throws
 }
 
 /// A logger for transactions.
@@ -93,7 +98,7 @@ public protocol TransactionLogger {
 /// The file is named `transaction.log`.
 /// The file is rotated when it reaches a size of 1 MB.
 /// The file is deleted when the app is terminated.
-public struct FileTransactionLogger: TransactionLogger {
+public actor FileTransactionLogger: TransactionLogger {
 	private let logger: XCGLogger
 
 	/// Creates a new `FileTransactionLogger` instance.
@@ -111,7 +116,7 @@ public struct FileTransactionLogger: TransactionLogger {
 
 	/// Logs a transaction.
 	/// - Parameter transaction: The transaction to log.
-	public func log(transaction: TransactionLog) {
+	public func log(transaction: TransactionLog) async throws {
 		logger.info("\(transaction.timestamp) - \(transaction.status)")
 	}
 }

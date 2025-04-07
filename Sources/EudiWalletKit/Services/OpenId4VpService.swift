@@ -37,6 +37,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var dataFormats: [String: DocDataFormat]!
 	// map of document-id to data
 	var docs: [String: Data]!
+	var docMetadata: [String: Data?]!
 	var docDisplayNames: [String: [String: [String: String]]?]!
 	// map of document-id to IssuerSigned
 	var docsCbor: [String: IssuerSigned]!
@@ -79,6 +80,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let objs = parameters.toInitializeTransferInfo()
 		dataFormats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects
 		iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod
+		docMetadata = parameters.docMetadata
 		idsToDocTypes = objs.idsToDocTypes
 		docDisplayNames = objs.docDisplayNames
 		docsHashingAlgs = objs.hashingAlgs
@@ -131,7 +133,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					self.formatsRequested = fmtsReq; self.inputDescriptorMap = imap
 					self.transactionData = vp.transactionData
 					guard let items else { throw PresentationSession.makeError(str: "Invalid presentation definition") }
-					var result = UserRequestInfo(docDataFormats: fmtsReq, itemsRequested: items)
+					let docMetadataToSend = docMetadata.filter { (key: String, value: Data?) in items.keys.contains(key) && value != nil }.compactMapValues { $0 }
+					var result = UserRequestInfo(docDataFormats: fmtsReq, itemsRequested: items, docMetadata: docMetadataToSend)
 					logger.info("Verifer requested items: \(items.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {
@@ -210,14 +213,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
-	/// A description
+	/// Send the verifiable presentation tokens to the verifier
 	/// - Parameters:
-	///   - vpTokens:
-	///   - pd:
-	///   - resolved:
-	///   - onSuccess:
+	///   - vpTokens: tuples of inputDescriptor-id, docId and verifiable presentation
+	///   - pd: input presentation definition
+	///   - resolved: Resolved request data
+	///   - onSuccess: Callback function to be called on success
 	///
-	/// - Throws:
+	/// - Throws: PresentationSessionError if the presentation submission is not accepted
 	fileprivate func SendVpTokens(_ vpTokens: [(String, String?, VpToken.VerifiablePresentation)]?, _ pd: PresentationDefinition, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens {
 			.vpToken(vpToken: .init(apu: mdocGeneratedNonce.base64urlEncode, verifiablePresentations: vpTokens.map(\.2)), presentationSubmission: .init(id: UUID().uuidString, definitionID: pd.id, descriptorMap: vpTokens.enumerated().map { i,v in

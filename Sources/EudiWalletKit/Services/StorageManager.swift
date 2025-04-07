@@ -122,7 +122,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
-		guard let (d, _, _) = doc.getDataForTransfer(), let iss = IssuerSigned(data: d.1.bytes) else { return nil }
+		guard let (d, _, _, _) = doc.getDataForTransfer(), let iss = IssuerSigned(data: d.1.bytes) else { return nil }
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let md = docMetadata?.getCborClaimMetadata(uiCulture: uiCulture)
 		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
@@ -160,8 +160,6 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		guard let recreatedClaims = recreateSdJwtClaims(docData: docData) else { return nil }
 		return recreatedClaims.json["vct"].stringValue
 	}
-
-
 
 	static func recreateSdJwtClaims(docData: Data) -> (json: JSON, hashingAlg: String)? {
 		let parser = CompactParser()

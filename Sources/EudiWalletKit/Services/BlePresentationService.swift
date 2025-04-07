@@ -34,7 +34,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 
 	public init(parameters: InitializeTransferData) throws {
 		bleServerTransfer = try MdocGattServer(parameters: parameters)
-		transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .incomplete, type: .presentation, dataFormat: .cbor)
+		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
 		bleServerTransfer.delegate = self
 	}
 
@@ -59,9 +59,11 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	///
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> UserRequestInfo {
-		return try await withCheckedThrowingContinuation { c in
+		let userRequestInfo = try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
+		TransactionLogUtils.setBleTransactionLogRequestInfo(userRequestInfo, transactionLog: &transactionLog)
+		return userRequestInfo
 	}
 
 	public func unlockKey(id: String) async throws -> Data? {
@@ -78,6 +80,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend)
 		handleSelected = nil
+		TransactionLogUtils.setBleTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
 	}
 }
 

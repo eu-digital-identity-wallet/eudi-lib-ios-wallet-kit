@@ -40,20 +40,20 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public var disclosedDocuments: [DocElements] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
-	/// The ``FlowType`` instance
-	// public var flow: FlowType { presentationService.flow }
-	var handleSelected: ((Bool, RequestItems?) -> Void)?
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [String: DocPresentInfo]!
 	/// User authentication required
 	var userAuthenticationRequired: Bool
+	/// transaction logger
+	var transactionLogger: TransactionLogger?
 
-	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool) {
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: TransactionLogger?) {
 		self.presentationService = presentationService
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.userAuthenticationRequired = userAuthenticationRequired
+		self.transactionLogger = transactionLogger
 	}
 
 	@MainActor
@@ -151,6 +151,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		do {
 			await MainActor.run {status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
+			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run {status = .responseSent }
 		} catch { await setError(error) }
