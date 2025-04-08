@@ -268,7 +268,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		try await endIssueDocument(newDocument)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
-		if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
+		
+		do {
+			if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
+		} catch { }
 		return newDocument
 	}
 	
