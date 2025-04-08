@@ -53,7 +53,36 @@ extension OpenId4VCIService {
 	}
 	
 	
-	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
+	func resumePendingDocumentIssuance(pendingDoc: WalletStorage.Document, docTypeModels: [OfferedDocModel], authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (AuthorizeRequestOutcome, [CredentialConfiguration]) {
+		
+		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
+		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
+
+		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
+		
+		
+		let credentialInfos = docTypeModels.compactMap { try? getCredentialIdentifier(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: $0.credentialConfigurationIdentifier, docType: $0.docType, scope: $0.scope) }
+		guard credentialInfos.count > 0, credentialInfos.count == docTypeModels.count else { throw WalletError(description: "Missing Credential identifiers") }
+		
+		try await initSecurityKeys(algSupported: Set(credentialInfos.flatMap { $0.algValuesSupported }))
+		
+		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode):	preAuthorizedCode; case .both(_, let preAuthorizedCode):	preAuthorizedCode; case .authorizationCode(_), .none: nil	}
+		let txCodeSpec: TxCode? = code?.txCode
+		let preAuthorizedCode: String? = code?.preAuthorizedCode
+		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
+		let issuer = try await getIssuer(offer: offer, with: dpopConstructor)
+		if preAuthorizedCode != nil && txCodeSpec != nil { throw WalletError(description: "A transaction code is required for this offer") }
+		
+		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
+		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil))).get()
+		
+		let authorizeRequestOutcome = AuthorizeRequestOutcome.authorized(authorized)
+		
+		return (authorizeRequestOutcome, credentialInfos)
+	}
+	
+	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, batchCount: Int, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
 
@@ -65,9 +94,14 @@ extension OpenId4VCIService {
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil))).get()
+		
 		let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authorized)
-		try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported))
-		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: model.configuration, claimSet: nil)
+		
+		for _ in 1...batchCount {
+			try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported))
+		}
+		
+		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: model.configuration, claimSet: nil, algSupported: Set(model.configuration.algValuesSupported))
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return (res, authReqParams)
 	}

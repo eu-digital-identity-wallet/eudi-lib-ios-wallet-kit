@@ -32,7 +32,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	let issueReq: IssueRequest
 	let credentialIssuerURL: String
 	let uiCulture: String?
-	var bindingKey: BindingKey!
+	var bindingKeys: [BindingKey]
 	let logger: Logger
 	let config: OpenId4VCIConfig
 	static var metadataCache = [String: CredentialOffer]()
@@ -41,6 +41,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	//TODO: remove following, use it in better way
 	static var parReqCache: UnauthorizedRequest?
 	let alg = JWSAlgorithm(.ES256)
+	var publicCoseKey: CoseKey?
 
 	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, urlSession: URLSession) {
 		self.issueReq = issueRequest
@@ -49,6 +50,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		self.urlSession = urlSession
 		logger = Logger(label: "OpenId4VCI")
 		self.config = config
+		bindingKeys = [BindingKey]()
 	}
 
 	func initSecurityKeys(algSupported: Set<String>) async throws {
@@ -58,16 +60,24 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		guard !algTypes.isEmpty, let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue), algTypes.contains(algType) else {
 			throw WalletError(description: "Unable to find supported signing algorithm \(secureAreaSigningAlg)")
 		}
-		let publicCoseKey = try await issueReq.createKey()
-		let publicKey: SecKey = try publicCoseKey.toSecKey()
+		if publicCoseKey == nil {
+			publicCoseKey = try await issueReq.createKey()
+		}
+		
+		let publicKey: SecKey = try publicCoseKey!.toSecKey()
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
+		
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
-		bindingKey = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer) , issuer: config.client.id)
+		let bindingKey: BindingKey? = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer) , issuer: config.client.id)
+		guard let bindingKey else {
+			throw WalletError(description: "Unable to create ")
+		}
+		bindingKeys.append(bindingKey)
 	}
 
-	func setBindingKey(bindingKey: BindingKey) {
-		self.bindingKey = bindingKey
+	func setBindingKey(bindingKeys: [BindingKey]) {
+		self.bindingKeys = bindingKeys
 	}
 
 	static func removeOfferFromMetadata(offerUri: String) {
@@ -189,13 +199,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 
-	func issueOfferedCredentialInternalValidated(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet? = nil) async throws -> IssuanceOutcome {
+	func issueOfferedCredentialInternalValidated(_ authorized: AuthorizedRequest, offer: CredentialOffer, issuer: Issuer, configuration: CredentialConfiguration, claimSet: ClaimSet? = nil, algSupported: Set<String>? = nil) async throws -> IssuanceOutcome {
 		let issuerMetadata = offer.credentialIssuerMetadata
 		guard issuerMetadata.credentialsSupported.keys.contains(where: { $0.value == configuration.configurationIdentifier.value }) else {
 			throw WalletError(description: "Cannot find credential identifier \(configuration.configurationIdentifier.value) in offer")
 		}
-//		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: issuerMetadata.batchCredentialIssuance?.batchSize)
-		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet, batchSize: 3)
+		return try await issueOfferedCredentialInternal(authorized, issuer: issuer, configuration: configuration, claimSet: claimSet)
 	}
 
 	func getCredentialIdentifier(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?) throws -> CredentialConfiguration {
@@ -322,10 +331,6 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier, claimSet: claimSet)
 		let responseEncryptionSpecProvider = { @Sendable in Issuer.createResponseEncryptionSpec($0) }
 		
-		var bindingKeys = [BindingKey]()
-		for _ in 0..<batchSize! {
-			bindingKeys.append(bindingKey)
-		}
 		let requestOutcome = try await issuer.request(proofRequest: authorized, bindingKeys: bindingKeys, requestPayload: payload, responseEncryptionSpecProvider: responseEncryptionSpecProvider)
 		switch requestOutcome {
 		case .success(let request):

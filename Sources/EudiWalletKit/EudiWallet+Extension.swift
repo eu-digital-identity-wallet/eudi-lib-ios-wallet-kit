@@ -24,38 +24,16 @@ extension EudiWallet {
     }
 	
 	@MainActor
-	@discardableResult public func resumePendingIssuanceDocuments(pendingDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> ([WalletStorage.Document], AuthorizedRequestParams?) {
+	@discardableResult public func resumePendingIssuanceDocuments(docType: String?, docDataFormat: DocDataFormat, pendingDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam, promptMessage: String? = nil) async throws -> WalletStorage.Document? {
+		
 		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
-		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
 		
-		let (issuanceOutcome, authReqParams) = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, issuerDPopConstructorParam: issuerDPopConstructorParam)
-		if case .pending(_) = issuanceOutcome { return ([pendingDoc], authReqParams) }
+		let (issueReq, openId4VCIService, _) = try await prepareIssuingService(id: UUID().uuidString, docType: pendingDoc.docType, displayName: nil, keyOptions: keyOptions, promptMessage: promptMessage)
 		
-		var documents = [WalletStorage.Document]()
+		let (issuanceOutcome, _) = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, batchCount: 1, issuerDPopConstructorParam: issuerDPopConstructorParam)
 		
-		switch issuanceOutcome {
-		case .issued(let data, let string, let credential):
-			if let string = string {
-				let credentialString = string.components(separatedBy: ",")
-				for cred in credentialString {
-					let issuenceOutcome: IssuanceOutcome = .issued(Data(base64URLEncoded: cred), cred, credential)
-					let doc = try await finalizeIssuing(issueOutcome: issuenceOutcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
-					documents.append(doc)
-				}
-			}
-			
-			if let data = data, let json = try? JSON(data: data), let stringArray = json.arrayObject as? [String] {//sdjwt
-				for cred in stringArray {
-					let issuenceOutcome: IssuanceOutcome = .issued(nil, cred, credential)
-					
-					let doc = try await finalizeIssuing(issueOutcome: issuenceOutcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
-					documents.append(doc)
-				}
-			}
-		default:
-			break
-		}
-		return (documents, authReqParams)
+		let document = await saveCredentials(docType: pendingDoc.docType, docDataFormat: docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService, issuanceOutcome: issuanceOutcome)
+		return document
 	}
     
 	@MainActor
@@ -143,8 +121,7 @@ extension EudiWallet {
     
     private func prepareIssuingService(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, promptMessage: String? = nil) async throws -> (IssueRequest, OpenId4VCIService, String) {
         guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
-        
-        let id: String = UUID().uuidString
+		
         let issueReq = try await Self.authorizedAction(action: {
             return try await beginIssueDocument(id: id, keyOptions: keyOptions)
         }, disabled: !userAuthenticationRequired || docType == nil, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
