@@ -110,6 +110,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
 			case .notSecured(data: _):
 				throw PresentationSession.makeError(str: "Not secure request received.")
+			case .invalidResolution(error: let error, dispatchDetails: let details):
+				logger.error("Invalid resolution: \(error.localizedDescription)")
+				if let details { logger.error("Details: \(details)") }
+				throw PresentationSession.makeError(str: "Invalid resolution: \(error.localizedDescription)")
 			case let .jwt(request: resolvedRequestData):
 				self.resolvedRequestData = resolvedRequestData
 				switch resolvedRequestData {
