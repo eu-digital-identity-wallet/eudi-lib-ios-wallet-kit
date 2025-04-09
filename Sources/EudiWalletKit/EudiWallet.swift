@@ -244,18 +244,18 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		switch issueOutcome {
 		case .issued(let data, let str, let cc):
 			dataToSave = if format == .cbor, let data { data } else if let str, let data = str.data(using: .utf8) { data } else { Data() }
-			docMetadata = cc.convertToDocMetadata(docId: issueReq.id)
+			docMetadata = cc.convertToDocMetadata()
 			let docTypeOrScope = docType ?? cc.docType ?? cc.scope
 			docTypeToSave = if format == .cbor, let data { IssuerSigned(data: [UInt8](data))?.issuerAuth.mso.docType ?? docTypeOrScope } else if format == .sdjwt, let str, let ds = str.data(using: .utf8) {  StorageManager.getVctFromSdJwt(docData: ds) ?? docTypeOrScope } else { docTypeOrScope }
 			displayName = cc.display.getName(uiCulture)
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
-			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata(docId: issueReq.id)
+			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata()
 			docTypeToSave = docType ?? "DEFERRED"
 			displayName = deferredIssuanceModel.configuration.display.getName(uiCulture)
 		case .pending(let pendingAuthModel):
 			dataToSave = try JSONEncoder().encode(pendingAuthModel)
-			docMetadata = pendingAuthModel.configuration.convertToDocMetadata(docId: issueReq.id)
+			docMetadata = pendingAuthModel.configuration.convertToDocMetadata()
 			docTypeToSave = docType ?? "PENDING"
 			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 		}
@@ -393,7 +393,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let id = UUID().uuidString
 			_ = try await pkCose.secureArea.createKey(id: id, keyOptions: nil)
 			let displayName = dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType)
-			let docMetadata = DocMetadata(docId: id, credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [])
+			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [])
 			let docSample = Document(id: id, docType: dsd.docType, docDataFormat: .cbor, data: dsd.issData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: Date.distantPast, metadata: docMetadata.toData(), displayName: displayName, status: .issued)
 			try await storage.storageService.saveDocument(docSample, allowOverwrite: true)
 		}
