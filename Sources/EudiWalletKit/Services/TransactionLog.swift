@@ -22,16 +22,16 @@ public struct TransactionLog: Sendable, Codable {
 		self.docMetadata = docMetadata
 	}
 
-    let timestamp: Int64
-    let status: Status
-	let errorMessage: String?
-	let rawRequest: Data?
-	let rawResponse: Data?
-	let relyingParty: RelyingParty?
-	let type: LogType
-	let dataFormat: DataFormat
-	let sessionTranscript: Data?
-    let docMetadata: [Data?]?
+	public let timestamp: Int64
+	public let status: Status
+	public let errorMessage: String?
+	public let rawRequest: Data?
+	public let rawResponse: Data?
+	public let relyingParty: RelyingParty?
+	public let type: LogType
+	public let dataFormat: DataFormat
+	public let sessionTranscript: Data?
+	public let docMetadata: [Data?]?
 
 	public enum DataFormat: Int, Sendable, Codable {
 		case cbor
@@ -40,13 +40,13 @@ public struct TransactionLog: Sendable, Codable {
 
 	public struct RelyingParty: Codable, Sendable {
 		/// The name of the relying party
-		let name: String
+		public let name: String
 		/// Whether the relying party is verified.
-		let isVerified: Bool
+		public let isVerified: Bool
 		/// The certificate chain of the relying party.
-		let certificateChain: [Data]
+		public let certificateChain: [Data]
 		/// The reader authentication data. This is populated only when mdoc presentation is used.
-		let readerAuth: Data?
+		public let readerAuth: Data?
 	}
 
 	public enum LogType: Int, Sendable, Codable {
@@ -72,10 +72,10 @@ public enum TransactionLogData {
 }
 
 public struct PresentationLogData {
-	let timestamp: Date
-	let status: TransactionLog.Status
-	let relyingParty: TransactionLog.RelyingParty
-	let documents: [DocClaimsDecodable]
+	public let timestamp: Date
+	public let status: TransactionLog.Status
+	public let relyingParty: TransactionLog.RelyingParty
+	public let documents: [DocClaimsDecodable]
 
 	public init(_ transactionLog: TransactionLog, uiCulture: String?) {
 		timestamp = Date(timeIntervalSince1970: TimeInterval(transactionLog.timestamp))
