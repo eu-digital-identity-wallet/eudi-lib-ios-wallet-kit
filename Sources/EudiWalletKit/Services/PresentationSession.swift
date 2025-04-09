@@ -47,9 +47,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	/// transaction logger
-	public var transactionLogger: TransactionLogger?
+	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: TransactionLogger? = nil) {
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.userAuthenticationRequired = userAuthenticationRequired
