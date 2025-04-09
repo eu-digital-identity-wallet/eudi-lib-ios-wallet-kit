@@ -13,7 +13,6 @@ import JOSESwift
 import WalletStorage
 
 extension OpenId4VCIService {
-	
 	func issuePAR(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil, wia: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, DocDataFormat) {
 		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope must be provided") }
 		logger.log(level: .info, "Issuing document with docType or scope or identifier: \(docTypeOrScopeOrIdentifier)")
@@ -21,42 +20,10 @@ extension OpenId4VCIService {
 		return res
 	}
 	
-	func getCredentials(dpopNonce: String, code: String, scope: String?, claimSet: ClaimSet? = nil, identifier: String?, docType: String?, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome?, DocDataFormat?, AuthorizedRequestParams?) {
-		do {
-			if let key = OpenId4VCIService.metadataCache.keys.first,
-			   let offer = OpenId4VCIService.metadataCache[key],
-			   let unauthorizedRequest = OpenId4VCIService.parReqCache {
-				let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
-				let issuer = try await getIssuer(offer: offer, with: dpopConstructor)
-				
-				let authReq = try await handleAuthorizationCodeBothCases(issuer: issuer, request: unauthorizedRequest, authorizationCode: code)
-				
-				if offer.credentialConfigurationIdentifiers.first != nil {
-					do {
-						let configuration = try  getCredentialIdentifier(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: nil, docType: docType, scope: scope)
-						
-						try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
-						
-						let issuanceOutcome = try await issueOfferedCredentialInternal(authReq, issuer: issuer, configuration: configuration, claimSet: claimSet)
-						
-						let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authReq)
-						return (issuanceOutcome, configuration.format, authReqParams)
-					} catch {
-						throw WalletError(description: "Invalid issuer metadata")
-					}
-				}
-			}
-		} catch  {
-			throw WalletError(description: "Invalid issuer metadata")
-		}
-		return (nil, nil, nil)
-	}
-	
-	
-	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
+	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, batchCount: Int, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
-
+		
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
 		
 		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
@@ -65,9 +32,14 @@ extension OpenId4VCIService {
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil))).get()
+		
 		let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authorized)
-		try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported))
-		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: model.configuration, claimSet: nil)
+		
+		for _ in 1...batchCount {
+			try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported))
+		}
+		
+		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: model.configuration, claimSet: nil, algSupported: Set(model.configuration.algValuesSupported))
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return (res, authReqParams)
 	}
@@ -122,7 +94,7 @@ extension OpenId4VCIService {
 			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let configuration = try getCredentialIdentifier(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope)
-//				try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
+				//				try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.configurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				
 				let dPopConstructor = DPoPConstructor(algorithm: JWSAlgorithm(.ES256), jwk: wia.jwk, privateKey: .secKey(wia.privateKey))
@@ -163,7 +135,7 @@ extension OpenId4VCIService {
 			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let configuration = try getCredentialIdentifier(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope)
-				//				try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
+				try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
 				let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.configurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 				// Authorize with auth code flow
 				let issuer = try await getIssuer(offer: offer, with: dpopConstructor)
@@ -244,7 +216,7 @@ public struct IssuerDPoPConstructorParam {
 	let jti: String?
 	let jwk: JWK
 	let privateKey: SecKey
-
+	
 	public init(clientID: String?, expirationDuration: TimeInterval?, aud: String?, jti: String?, jwk: JWK, privateKey: SecKey) {
 		self.clientID = clientID
 		self.expirationDuration = expirationDuration
