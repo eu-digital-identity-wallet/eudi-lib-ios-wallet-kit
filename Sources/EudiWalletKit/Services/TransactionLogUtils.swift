@@ -49,10 +49,11 @@ class TransactionLogUtils {
 			do {
 				let vpResponse = try decoder.decode(VpResponsePayload.self, from: raw)
 				for m in vpResponse.presentation_submission.descriptorMap.enumerated() {
+					let presentedStr = vpResponse.verifiable_presentations[m.offset]
 					if m.element.toJSON()["format"] as? String == "mso_mdoc" {
-						if let isd = Data(base64Encoded: vpResponse.verifiable_presentations[m.offset]), let iss = IssuerSigned(data: isd.bytes), let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: transactionLog.docMetadata?[m.offset], uiCulture: uiCulture) { res.append(docDecodable) }
+						if let isd = Data(base64Encoded: presentedStr), let iss = IssuerSigned(data: isd.bytes), let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: transactionLog.docMetadata?[m.offset], uiCulture: uiCulture) { res.append(docDecodable) }
 					} else if m.element.toJSON()["format"] as? String == "vc+sd-jwt" {
-						if let docDecodable = parseSdJwtDocClaimsDecodable(id: UUID().uuidString, docType: "", sdJwtSerialized: vpResponse.verifiable_presentations[m.offset], metadata: transactionLog.docMetadata?[m.offset], uiCulture: uiCulture) { res.append(docDecodable) }
+						if let docDecodable = parseSdJwtDocClaimsDecodable(id: UUID().uuidString, docType: "", sdJwtSerialized: presentedStr, metadata: transactionLog.docMetadata?[m.offset], uiCulture: uiCulture) { res.append(docDecodable) }
 					}
 				}
 			} catch {
@@ -70,7 +71,7 @@ class TransactionLogUtils {
 
 	static func parseSdJwtDocClaimsDecodable(id: String, docType: String, sdJwtSerialized: String, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
 		guard let sdJwtData = sdJwtSerialized.data(using: .utf8) else { return nil }
-		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: sdJwtData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
+		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .sdjwt, data: sdJwtData, secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
 		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture)
 	}
 
