@@ -1,3 +1,27 @@
+## v0.10.6
+### OpenID4VCI - Draft 15
+- Updated OpenID4VCI library to version [0.13.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.13.0)
+- Issuing functions updated to work with OpenID4VCI - Draft 15
+
+### Transaction logging
+- To log the transaction data, provide an implementation of the `TransactionLogger` protocol:
+```swift
+public actor DbTransactionLogger: TransactionLogger {
+	public func log(transaction: TransactionLog) async throws {
+		// Implement your logging logic here
+	}
+}
+
+- Set the `transactionLogger`` property of the `EudiWallet` instance to a `TransactionLogger` implementation instance:
+```swift
+wallet.transactionLogger = DbTransactionLogger()
+```
+- To display presented documents for a transaction, use the `parseTransactionLog` function of the `EudiWallet` instance:
+```swift
+let presentationData = await wallet.parseTransactionLog(transaction)
+```
+
+
 ## v0.10.5
 - Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.9.0)
 - Updated OpenID4VCI library to version [0.12.3](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.12.3)
