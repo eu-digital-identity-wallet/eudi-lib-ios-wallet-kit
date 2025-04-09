@@ -88,6 +88,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		case .issued:
 			let mdoc: (any DocClaimsDecodable)? = Self.toClaimsModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
 			if let mdoc { await MainActor.run { docModels.append(mdoc) } }
+			else { logger.error("Could not decode claims of \(doc.docType ?? "")") }
 			return mdoc
 		case .deferred:
 			await MainActor.run { deferredDocuments.append(doc) }
@@ -122,17 +123,20 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
-		guard let (d, _, _) = doc.getDataForTransfer(), let iss = IssuerSigned(data: d.1.bytes) else { return nil }
-		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
-		let md = docMetadata?.getCborClaimMetadata(uiCulture: uiCulture)
-		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
+		guard let (d, _, _) = doc.getDataForTransfer() else { return nil }
+		// guard let str = D dd = Data(base64Encoded: d.1.bytes)  else { return nil }
+		guard let iss = IssuerSigned(data: d.1.bytes) else { logger.error("Could not decode IssuerSigned"); return nil }
+		let docMetadata = DocMetadata(from: doc.metadata)
+		let md = docMetadata?.getMetadata(uiCulture: uiCulture)
+		let cmd = md?.claimMetadata?.convertToCborClaimMetadata(uiCulture)
+		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		if retModel == nil {
 			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier,  validFrom: iss.validFrom, validUntil: iss.validUntil, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
+			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier,  validFrom: iss.validFrom, validUntil: iss.validUntil, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, claimDisplayNames: md?.claimDisplayNames, mandatoryClaims: md?.mandatoryClaims, claimValueTypes: md?.claimValueTypes)
+			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		}
 		return retModel
 	}
@@ -140,9 +144,9 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	public static func toSdJwtDocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		var docClaims = [DocClaim]()
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
-		let md = docMetadata?.getFlatClaimMetadata(uiCulture: uiCulture)
+		let md = docMetadata?.getMetadata(uiCulture: uiCulture)
 		guard let recreatedClaims = recreateSdJwtClaims(docData: doc.data) else { return nil }
-		if let cs = recreatedClaims.json.toClaimsArray(pathPrefix: [], md?.claimDisplayNames, md?.mandatoryClaims, md?.claimValueTypes)?.0 { docClaims.append(contentsOf: cs) }
+		if let cs = recreatedClaims.json.toClaimsArray(pathPrefix: [], md?.claimMetadata, uiCulture)?.0 { docClaims.append(contentsOf: cs) }
 		var type = docClaims.first(where: { $0.name == "vct"})?.stringValue
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
 		let validFrom: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.issuedAt})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }

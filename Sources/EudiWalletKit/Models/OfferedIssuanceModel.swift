@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import Foundation
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
 ///
