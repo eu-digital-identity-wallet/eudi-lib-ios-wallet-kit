@@ -62,7 +62,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		let userRequestInfo = try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
-		TransactionLogUtils.setBleTransactionLogRequestInfo(userRequestInfo, transactionLog: &transactionLog)
+		TransactionLogUtils.setCborTransactionLogRequestInfo(userRequestInfo, transactionLog: &transactionLog)
 		return userRequestInfo
 	}
 
@@ -80,7 +80,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend)
 		handleSelected = nil
-		TransactionLogUtils.setBleTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
+		TransactionLogUtils.setCborTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
 	}
 }
 

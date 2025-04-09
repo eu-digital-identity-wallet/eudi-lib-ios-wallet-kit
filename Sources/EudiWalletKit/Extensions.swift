@@ -66,6 +66,16 @@ extension FileManager {
 	}
 }
 
+extension Encodable {
+    /// Converting object to postable JSON
+    func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
+        guard let data = try? encoder.encode(self),
+              let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
+              let json = object as? [String: Any] else { return [:] }
+        return json
+    }
+}
+
 extension WalletStorage.Document {
 	public var authorizePresentationUrl: String? {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
@@ -268,6 +278,7 @@ extension JSON {
 		}
 	}
 }
+
 
 
 

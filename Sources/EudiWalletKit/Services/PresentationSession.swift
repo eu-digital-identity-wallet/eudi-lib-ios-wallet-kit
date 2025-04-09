@@ -47,9 +47,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	/// transaction logger
-	var transactionLogger: TransactionLogger?
+	public var transactionLogger: TransactionLogger?
 
-	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: TransactionLogger?) {
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: TransactionLogger? = nil) {
 		self.presentationService = presentationService
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.userAuthenticationRequired = userAuthenticationRequired
@@ -149,12 +149,16 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
 		do {
-			await MainActor.run {status = .userSelected }
+			await MainActor.run { status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
-			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
-			await MainActor.run {status = .responseSent }
-		} catch { await setError(error) }
+			await MainActor.run { status = .responseSent }
+			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
+		} catch {
+			await setError(error)
+			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
+			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
+		}
 	}
 
 

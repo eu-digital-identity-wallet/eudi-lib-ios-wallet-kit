@@ -433,7 +433,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - flow: Presentation ``FlowType`` instance
 	///   - docType: DocType of documents to present (optional)
 	/// - Returns: A presentation session instance,
-	public func beginPresentation(flow: FlowType, docType: String? = nil, transactionLogger: TransactionLogger?) async -> PresentationSession {
+	public func beginPresentation(flow: FlowType, docType: String? = nil, transactionLogger: TransactionLogger? = nil) async -> PresentationSession {
 		do {
 			let parameters = try await prepareServiceDataParameters(docType: docType, format: flow == .ble ? .cbor : nil)
 			let docIdToPresentInfo = await storage.getDocIdsToPresentInfo()
@@ -468,6 +468,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - action: Action to perform after user authorization
 	public static func authorizedAction<T: Sendable>(action: () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
 		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
+	}
+
+	public func parseTransactionLog(_ transactionLog: TransactionLog) -> TransactionLogData {
+		switch transactionLog.type {
+			case .presentation: .presentation(log: PresentationLogData(transactionLog, uiCulture: uiCulture))
+			case .issuance: .issuance
+			case .signing: .signing
+		}
 	}
 
 	/// Executes an authorized action with optional fallback and dismissal handling.
