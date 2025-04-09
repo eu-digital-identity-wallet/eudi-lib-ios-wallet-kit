@@ -123,7 +123,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
-		guard let (d, _, _) = doc.getDataForTransfer() else { return nil }
+		guard let (d, _, _, _) = doc.getDataForTransfer() else { return nil }
 		// guard let str = D dd = Data(base64Encoded: d.1.bytes)  else { return nil }
 		guard let iss = IssuerSigned(data: d.1.bytes) else { logger.error("Could not decode IssuerSigned"); return nil }
 		let docMetadata = DocMetadata(from: doc.metadata)
@@ -164,8 +164,6 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		guard let recreatedClaims = recreateSdJwtClaims(docData: docData) else { return nil }
 		return recreatedClaims.json["vct"].stringValue
 	}
-
-
 
 	static func recreateSdJwtClaims(docData: Data) -> (json: JSON, hashingAlg: String)? {
 		let parser = CompactParser()

@@ -38,30 +38,6 @@ func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFErro
     return result
 }
 
-extension Array where Element == Display {
-	func getName(_ uiCulture: String?) -> String? {
-		(first(where: { if #available(iOS 16, *) {
-			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
-		} else {
-				$0.locale?.languageCode == uiCulture
-		} }) ?? first)?.name
-	}
-
-	func getLogo(_ uiCulture: String?) -> Display.Logo? {
-		(first(where: { if #available(iOS 16, *) {
-			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
-		} else {
-				$0.locale?.languageCode == uiCulture
-		} }) ?? first)?.logo
-	}
-}
-
-extension Array where Element == MdocDataModel18013.DisplayMetadata {
-	func getName(_ uiCulture: String?) -> String? {
-		(first(where: { $0.localeIdentifier == uiCulture }) ?? first)?.name
-	}
-}
-
 extension Display {
 	public var displayMetadata: MdocDataModel18013.DisplayMetadata {
 		let logoMetadata = LogoMetadata(urlString: logo?.uri?.absoluteString, alternativeText: logo?.alternativeText)
@@ -96,6 +72,16 @@ extension FileManager {
 			}
 			return paths[0]
 	}
+}
+
+extension Encodable {
+    /// Converting object to postable JSON
+    func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
+        guard let data = try? encoder.encode(self),
+              let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
+              let json = object as? [String: Any] else { return [:] }
+        return json
+    }
 }
 
 extension WalletStorage.Document {
@@ -284,6 +270,7 @@ extension JSON {
 		}
 	}
 }
+
 
 
 

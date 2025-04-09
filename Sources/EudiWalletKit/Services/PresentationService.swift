@@ -32,7 +32,9 @@ public protocol PresentationService: Sendable {
 	func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String
 	/// Receive request.
 	func receiveRequest() async throws -> UserRequestInfo
-	
+
+	var transactionLog: TransactionLog { get }
+
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response

@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
 	name: "EudiWalletKit",
-	platforms: [.macOS(.v13), .iOS(.v15)],
+	platforms: [.macOS(.v13), .iOS(.v16), .watchOS(.v10)],
 	products: [
 		// Products define the executables and libraries a package produces, making them visible to other packages.
 		.library(
@@ -20,6 +20,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.6.0"),
 		.package(url:"https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.9.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",exact: "0.13.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git", from: "0.0.3")
 	],
 	targets: [
 		// Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -34,6 +35,7 @@ let package = Package(
 				.product(name: "eudi-lib-sdjwt-swift", package: "eudi-lib-sdjwt-swift"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "FileLogging", package: "swift-log-file"),
+				.product(name: "Copyable", package: "SwiftCopyableMacro"),
 			]
 		),
 		.testTarget(
