@@ -20,6 +20,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", from: "0.6.0"),
 		.package(url:"https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.9.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",exact: "0.13.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git", exact: "0.1.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git", from: "0.0.3")
 	],
 	targets: [
@@ -35,6 +36,7 @@ let package = Package(
 				.product(name: "eudi-lib-sdjwt-swift", package: "eudi-lib-sdjwt-swift"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "FileLogging", package: "swift-log-file"),
+				.product(name: "eudi-lib-ios-statium-swift", package: "eudi-lib-ios-statium-swift"),
 				.product(name: "Copyable", package: "SwiftCopyableMacro"),
 			]
 		),

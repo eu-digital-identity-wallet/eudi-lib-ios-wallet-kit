@@ -1,5 +1,5 @@
 {
-  "originHash" : "0e22b127f6ad750613e84e08b9560c6124d06971cb4cfbcce5bcdd4c46f4caf4",
+  "originHash" : "62421aa6d3a877dd74fba3bf84d2aa949cd32833ef85aefbc69ebbaef44ad416",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -80,6 +80,15 @@
       "state" : {
         "revision" : "679a14c70ffd8ee37a81412ce388298e726747a7",
         "version" : "0.9.0"
+      }
+    },
+    {
+      "identity" : "eudi-lib-ios-statium-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git",
+      "state" : {
+        "revision" : "1eb17d2ce09012464fa8d9d5968e11a9ea2b4113",
+        "version" : "0.1.1"
       }
     },
     {
