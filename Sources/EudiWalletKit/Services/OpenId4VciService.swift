@@ -257,14 +257,14 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
             return try handleCredentialResponse(credentials: credentials, format: format, configuration: configuration)
           }
         } else {
-          throw ValidationError.error(reason: "No credential response results available")
+			throw WalletError(description: "No credential response results available")
         }
       case .invalidProof:
-        throw ValidationError.error(reason: "Although providing a proof with c_nonce the proof is still invalid")
+        throw WalletError(description: "Although providing a proof with c_nonce the proof is still invalid")
       case .failed(let error):
-        throw ValidationError.error(reason: error.localizedDescription)
+        throw WalletError(description: error.localizedDescription)
       }
-    case .failure(let error): throw ValidationError.error(reason: error.localizedDescription)
+	case .failure(let error): throw WalletError(description: error.localizedDescription)
     }
   }
 
