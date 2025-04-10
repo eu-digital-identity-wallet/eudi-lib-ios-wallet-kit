@@ -16,7 +16,7 @@ limitations under the License.
 Created on 09/11/2023
 */
 import Foundation
-@preconcurrency import OpenID4VCI
+import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage
@@ -30,28 +30,12 @@ extension String {
 	}
 }
 
-extension Array where Element == Display {
-	func getName(_ uiCulture: String?) -> String? {
-		(first(where: { if #available(iOS 16, *) {
-			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
-		} else {
-				$0.locale?.languageCode == uiCulture
-		} }) ?? first)?.name
-	}
-
-	func getLogo(_ uiCulture: String?) -> Display.Logo? {
-		(first(where: { if #available(iOS 16, *) {
-			$0.locale?.language.languageCode?.identifier == uiCulture ?? Locale.current.language.languageCode?.identifier
-		} else {
-				$0.locale?.languageCode == uiCulture
-		} }) ?? first)?.logo
-	}
-}
-
-extension Array where Element == MdocDataModel18013.DisplayMetadata {
-	func getName(_ uiCulture: String?) -> String? {
-		(first(where: { $0.localeIdentifier == uiCulture }) ?? first)?.name
-	}
+func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFError>?>) -> Result?) throws -> Result {
+    var errorQ: Unmanaged<CFError>? = nil
+    guard let result = body(&errorQ) else {
+        throw errorQ!.takeRetainedValue() as Error
+    }
+    return result
 }
 
 extension Display {
@@ -90,6 +74,16 @@ extension FileManager {
 	}
 }
 
+extension Encodable {
+    /// Converting object to postable JSON
+    func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
+        guard let data = try? encoder.encode(self),
+              let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
+              let json = object as? [String: Any] else { return [:] }
+        return json
+    }
+}
+
 extension WalletStorage.Document {
 	public var authorizePresentationUrl: String? {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
@@ -101,16 +95,19 @@ extension WalletStorage.Document {
 		return docMetadata?.getDisplayName(uiCulture)
 	}
 
-	public func getDisplayNames(_ uiCulture: String?) -> [String: [String: String]]? {
-		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
-		if docDataFormat == .cbor, let ncs1 = docMetadata?.namespacedClaims?.mapValues({ nc in nc.filter({ $1.getDisplayName(uiCulture) != nil})}),
-		 case let ncs = ncs1.mapValues({n1 in n1.mapValues({ $0.getDisplayName(uiCulture)! })}) { return ncs }
-		if docDataFormat == .sdjwt, let ncs = docMetadata?.flatClaims?.filter({ $1.getDisplayName(uiCulture) != nil}).mapValues({ $0.getDisplayName(uiCulture)! }) { return ["": ncs] }
+	public func getClaimDisplayNames(_ uiCulture: String?) -> [String: [String: String]]? {
+		guard let docMetadata = DocMetadata(from: metadata) else { return nil }
+		let md = docMetadata.getMetadata(uiCulture: uiCulture)
+		if docDataFormat == .cbor {
+			guard let cmd = md.claimMetadata?.convertToCborClaimMetadata(uiCulture) else { return nil }
+			return cmd.displayNames
+		} else if docDataFormat == .sdjwt {
+			guard let cmd = md.claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: nil) else { return nil }
+			return ["": cmd.displayNames]
+		}
 		return nil
 	}
 }
-
-extension ClaimSet: @retroactive @unchecked Sendable {}
 
 extension CredentialIssuerMetadata: @retroactive @unchecked Sendable {}
 
@@ -163,45 +160,45 @@ extension AuthorizeRequestOutcome: @unchecked Sendable {
 }
 
 extension Claim {
-	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, valueType: valueType) }
+	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description)) }
+}
+
+extension Array where Element == DocClaimMetadata {
+	func convertToCborClaimMetadata(_ uiCulture: String?) -> (displayNames: [NameSpace: [String: String]], mandatory: [NameSpace: [String: Bool]]) {
+		guard allSatisfy({ $0.claimPath.count > 1 }) else { return ([:], [:]) } // sanity check
+		let dictNs = Dictionary(grouping: self, by: { $0.claimPath[0]})
+		let dictNsAndKeys = dictNs.mapValues { Dictionary(grouping: $0, by: { $0.claimPath[1]}) } // group by namespace and key
+		let displayNames = dictNsAndKeys.mapValues { nsv in nsv.compactMapValues { kv in kv.first?.display?.getName(uiCulture) } }
+		let mandatory = dictNsAndKeys.mapValues { nsv in nsv.compactMapValues { kv in kv.first?.isMandatory } }
+		return (displayNames, mandatory)
+	}
+
+	func convertToJsonClaimMetadata(_ uiCulture: String?, keyPrefix: [String]?) -> (displayNames: [String: String], mandatory: [String: Bool], childMetadata: [DocClaimMetadata]) {
+		let groupIndex = keyPrefix?.count ?? 0
+		let arr = if let keyPrefix { filter { keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) && $0.claimPath.count > groupIndex } } else { self }
+		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[groupIndex]} )
+		let displayNames = dictKeys.compactMapValues { $0.first?.display?.getName(uiCulture) }
+		let mandatory =  dictKeys.compactMapValues { $0.first?.isMandatory }
+		return (displayNames, mandatory, arr)
+	}
 }
 
 extension CredentialConfiguration {
 	func convertToDocMetadata() -> DocMetadata {
-		let namespacedClaims = msoClaims?.mapValues { (claims: [String: Claim]) in
-			claims.mapValues(\.metadata)
-		}
-		let flatClaims = flatClaims?.mapValues(\.metadata)
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType, display: display, issuerDisplay: issuerDisplay, namespacedClaims: namespacedClaims, flatClaims: flatClaims)
+		let claimMetadata = claims.map(\.metadata)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata)
 	}
 }
 
 extension DocMetadata {
-	func getCborClaimMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimDisplayNames: [NameSpace: [String: String]]?, mandatoryClaims: [NameSpace: [String: Bool]]?, claimValueTypes: [NameSpace: [String: String]]?) {
-		guard let namespacedClaims = namespacedClaims else { return (nil, nil, nil, nil, nil, nil, nil, nil) }
-		let claimDisplayNames = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}
-		}
-		let mandatoryClaims = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
-		}
-		let claimValueTypes = namespacedClaims.mapValues { (claims: [String: DocClaimMetadata]) in
-			claims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }
-		}
-		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, claimDisplayNames, mandatoryClaims, claimValueTypes)
-	}
-
-	func getFlatClaimMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimDisplayNames: [String: String]?, mandatoryClaims: [String: Bool]?, claimValueTypes: [String: String]?) {
-		guard let flatClaims = flatClaims else { return (nil, nil, nil, nil, nil, nil, nil, nil) }
-		let claimDisplayNames = flatClaims.filter { (k,v) in v.getDisplayName(uiCulture) != nil }.mapValues { $0.getDisplayName(uiCulture)!}
-		let mandatoryClaims = flatClaims.filter { (k,v) in v.isMandatory != nil }.mapValues { $0.isMandatory!}
-		let claimValueTypes = flatClaims.filter { (k,v) in v.valueType != nil }.mapValues { $0.valueType! }
-		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier,  claimDisplayNames, mandatoryClaims, claimValueTypes)
+	func getMetadata(uiCulture: String?) -> (displayName: String?, display: [DisplayMetadata]?, issuerDisplay: [DisplayMetadata]?, credentialIssuerIdentifier: String?, configurationIdentifier: String?, claimMetadata: [DocClaimMetadata]?) {
+		guard let claims else { return (nil, nil, nil, nil, nil, nil) }
+		return (getDisplayName(uiCulture), display, issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier,  claims)
 	}
 }
 
 extension JSON {
-	func getDataValue(name: String, valueType: String?) -> (DocDataValue, String)? {
+	func getDataValue(name: String) -> (DocDataValue, String)? {
 		switch type {
 		case .number:
 			if name == "sex", let isex = Int(stringValue), isex <= 2 { return (.string(NSLocalizedString(isex == 1 ? "male" : "female", comment: "")), stringValue) }
@@ -222,33 +219,26 @@ extension JSON {
 		}
 	}
 
-	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, namespace: String? = nil) -> DocClaim? {
+	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?, _ displayName: String?, _ mandatory: Bool?) -> DocClaim? {
 		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
 		if key == "assurance_level" || key == JWTClaimNames.issuer || key == JWTClaimNames.audience, type == .string {  return nil }
 		if key == "vct", type == .string  { return nil }
-		guard let pair = getDataValue(name: key, valueType: claimValueTypes?[key]) else { return nil}
-		let ch = toClaimsArray(pathPrefix: pathPrefix + [key], claimDisplayNames, mandatoryClaims, claimValueTypes, namespace)
-		let isMandatory = mandatoryClaims?[key] ?? true
-		return DocClaim(name: key, path: pathPrefix + [key], displayName: claimDisplayNames?[key], dataValue: pair.0, stringValue: ch?.1 ?? pair.1, valueType: claimValueTypes?[key], isOptional: !isMandatory, order: n, namespace: namespace, children: ch?.0)
+		guard let pair = getDataValue(name: key) else { return nil}
+		let ch = toClaimsArray(pathPrefix: pathPrefix + [key], claimMetadata, uiCulture)
+		let isMandatory = mandatory ?? false
+		return DocClaim(name: key, path: pathPrefix + [key], displayName: displayName, dataValue: pair.0, stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: nil, children: ch?.0)
 	}
 
-	func toClaimsArray(pathPrefix: [String], _ claimDisplayNames: [String: String]?, _ mandatoryClaims: [String: Bool]?, _ claimValueTypes: [String: String]?, _ namespace: String? = nil) -> ([DocClaim], String)? {
+	func toClaimsArray(pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?) -> ([DocClaim], String)? {
 		switch type {
 		case .array, .dictionary:
-			if case let claims = self["verified_claims"]["claims"], claims.type == .dictionary {
-				let initialResult = self["verified_claims"]["verification"].toClaimsArray(pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes) ?? ([DocClaim](), "")
-				return claims.reduce(into: initialResult) { (partialResult, el: (String, JSON)) in
-					if let (claims1, str1) = el.1.toClaimsArray(pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes, el.0) {
-						partialResult.0.append(contentsOf: claims1)
-						partialResult.1 += (partialResult.1.count == 0 ? "" : ", ") + str1
-					}
-				}
-			}
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
-				let n2 = if type == .array { "" } else { key }
-				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimDisplayNames, mandatoryClaims, claimValueTypes) {
+				let isArray = type == .array
+				let n2 = if isArray { "" } else { key }
+				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
+				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimMetadata, uiCulture, cmd?.displayNames[key], cmd?.mandatory[key]) {
 					a.append(di)
 				}
 			}
@@ -258,18 +248,6 @@ extension JSON {
 	}
 }
 
-extension DocClaimsDecodable {	/// Extracts display strings and images from the provided namespaces and populates the given arrays.
-	///
-	/// - Parameters:
-	///   - nameSpaces: A dictionary where the key is a `NameSpace` and the value is an array of `IssuerSignedItem`.
-	///   - docClaims: An inout parameter that will be populated with `DocClaim` items extracted from the namespaces.
-	///   - labels: A dictionary where the key is the elementIdentifier and the value is a string representing the label.
-	///   - nsFilter: An optional array of `NameSpace` to filter/sort the extraction. Defaults to `nil`.
-	public static func extractJSONClaims(_ json: JSON, _ docClaims: inout [DocClaim], _ claimDisplayNames: [String: String]? = nil, _ mandatoryClaims: [String: Bool]? = nil, _ claimValueTypes: [String: String]? = nil) {
-		let claims = json.toClaimsArray(pathPrefix: [], claimDisplayNames, mandatoryClaims, claimValueTypes)?.0 ?? []
-		docClaims.append(contentsOf: claims)
-	}
-}
 
 extension SecureAreaSigner: eudi_lib_sdjwt_swift.AsyncSignerProtocol {
     func signAsync(_ data: Data) async throws -> Data {
@@ -292,6 +270,7 @@ extension JSON {
 		}
 	}
 }
+
 
 
 

@@ -24,26 +24,31 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 	public var status: TransferStatus = .error
 	public var flow: FlowType = .other
 	var error: Error
-	
+	public var transactionLog: TransactionLog
+
 	public init(msg: String) {
 		self.error = PresentationSession.makeError(str: msg)
+		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, errorMessage: msg, type: .presentation, dataFormat: .cbor)
+		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
 	}
-	
+
 	public init(error: Error) {
 		self.error = error
+		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, type: .presentation, dataFormat: .cbor)
+		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
 	}
-	
+
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		throw error
 	}
-	
+
 	public func receiveRequest() async throws -> UserRequestInfo {
 		throw error
 	}
-	
+
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems,  onSuccess: ((URL?) -> Void)?) async throws{
 		throw error
 	}
-	
-	
+
+
 }
