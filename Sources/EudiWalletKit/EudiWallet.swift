@@ -22,13 +22,13 @@ import WalletStorage
 import LocalAuthentication
 import CryptoKit
 import OpenID4VCI
+import eudi_lib_ios_statium_swift
 import SwiftCBOR
 import Logging
 // ios specific imports
 #if canImport(UIKit)
 import FileLogging
 import UIKit
-import eudi_lib_ios_statium_swift
 #endif
 
 /// User wallet implementation
@@ -481,7 +481,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			case .signing: .signing
 		}
 	}
-	
+
 	/// Get document status
 	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
 		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
