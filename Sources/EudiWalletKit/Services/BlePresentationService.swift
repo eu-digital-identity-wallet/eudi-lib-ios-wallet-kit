@@ -29,14 +29,16 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var handleSelected: ((Bool, RequestItems?) async -> Void)?
 	var deviceEngagement: String?
 	var request: UserRequestInfo?
+	public var transactionLog: TransactionLog
 	public var flow: FlowType { .ble }
 
 	public init(parameters: InitializeTransferData) throws {
 		bleServerTransfer = try MdocGattServer(parameters: parameters)
+		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
 		bleServerTransfer.delegate = self
 	}
 
-	/// Generate device engagement QR code 
+	/// Generate device engagement QR code
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
@@ -52,16 +54,18 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		try await self.bleServerTransfer.performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), crv: crv)
 		return self.bleServerTransfer.status == .qrEngagementReady ? self.bleServerTransfer.qrCodePayload! : ""
 	}
-	
+
 	///  Receive request via BLE
-	/// 
-	/// - Returns: The requested items. 
+	///
+	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> UserRequestInfo {
-		return try await withCheckedThrowingContinuation { c in
+		let userRequestInfo = try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
+		TransactionLogUtils.setCborTransactionLogRequestInfo(userRequestInfo, transactionLog: &transactionLog)
+		return userRequestInfo
 	}
-	
+
 	public func unlockKey(id: String) async throws -> Data? {
 		if let devicePrivateKey = bleServerTransfer.devicePrivateKeys[id] {
 			return try await devicePrivateKey.secureArea.unlockKey(id: id)
@@ -69,13 +73,14 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		return nil
 	}
 	/// Send response via BLE
-	/// 
+	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend)
 		handleSelected = nil
+		TransactionLogUtils.setCborTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
 	}
 }
 
@@ -98,7 +103,7 @@ extension BlePresentationService: MdocOfflineDelegate {
 	public func didFinishedWithError(_ error: Error) {
 		continuationRequest?.resume(throwing: error); continuationRequest = nil
 	}
-	
+
 	/// Received request handler
 	/// - Parameters:
 	///   - request: Request information
@@ -109,5 +114,5 @@ extension BlePresentationService: MdocOfflineDelegate {
 		continuationRequest?.resume(returning: request)
 		continuationRequest = nil
 	}
-	
+
 }
