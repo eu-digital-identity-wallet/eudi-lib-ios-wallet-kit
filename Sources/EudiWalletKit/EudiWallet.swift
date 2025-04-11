@@ -22,6 +22,7 @@ import WalletStorage
 import LocalAuthentication
 import CryptoKit
 import OpenID4VCI
+import eudi_lib_ios_statium_swift
 import SwiftCBOR
 import Logging
 // ios specific imports
@@ -472,12 +473,19 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
 	}
 
+	/// Parse transaction log
 	public func parseTransactionLog(_ transactionLog: TransactionLog) -> TransactionLogData {
 		switch transactionLog.type {
 			case .presentation: .presentation(log: PresentationLogData(transactionLog, uiCulture: uiCulture))
 			case .issuance: .issuance
 			case .signing: .signing
 		}
+	}
+
+	/// Get document status
+	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
+		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
+		return try await actor.getStatus()
 	}
 
 	/// Executes an authorized action with optional fallback and dismissal handling.

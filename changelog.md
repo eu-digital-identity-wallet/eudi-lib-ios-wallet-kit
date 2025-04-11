@@ -1,3 +1,15 @@
+## v0.10.7
+### Document Status Checks
+- Integration with `eudi-lib-ios-statium-swift` library for document status checks (Token Status List Specification [draft 10](https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-10.html))
+- Added `public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus` method to `EudiWallet` class.
+```swift
+for m in wallet.storage.docModels {
+	guard let st = m.statusIdentifier else { continue }
+	let status = try? await wallet.getDocumentStatus(for: st)
+	// mark document according to its status as active or revoked, etc...
+}
+
+
 ## v0.10.6
 ### OpenID4VCI - Draft 15
 - Updated OpenID4VCI library to version [0.13.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.13.0)
@@ -11,8 +23,9 @@ public actor DbTransactionLogger: TransactionLogger {
 		// Implement your logging logic here
 	}
 }
+```
 
-- Set the `transactionLogger`` property of the `EudiWallet` instance to a `TransactionLogger` implementation instance:
+- Set the `transactionLogger` property of the `EudiWallet` instance to a `TransactionLogger` implementation instance:
 ```swift
 wallet.transactionLogger = DbTransactionLogger()
 ```
@@ -20,7 +33,6 @@ wallet.transactionLogger = DbTransactionLogger()
 ```swift
 let presentationData = await wallet.parseTransactionLog(transaction)
 ```
-
 
 ## v0.10.5
 - Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.9.0)
