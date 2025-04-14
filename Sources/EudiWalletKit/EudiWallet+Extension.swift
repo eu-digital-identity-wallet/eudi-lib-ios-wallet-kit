@@ -28,6 +28,7 @@ extension EudiWallet {
 		
 		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
 		
+		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		var openId4VCIServices = [(IssueRequest, OpenId4VCIService)]()
 		for _ in 1...batchCount {
 			let id = UUID().uuidString
@@ -35,7 +36,9 @@ extension EudiWallet {
 			openId4VCIServices.append((issueReq, openId4VCIService))
 		}
 		
-		let (issuanceOutcome, authorizedRequestParams) = try await openId4VCIServices.first!.1.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, batchCount: batchCount, issuerDPopConstructorParam: issuerDPopConstructorParam)
+		let issueRequestsIds = openId4VCIServices.map{ $0.0.id }
+		
+		let (issuanceOutcome, authorizedRequestParams) = try await openId4VCIServices.first!.1.resumePendingIssuance(pendingDoc: pendingDoc, authorizationCode: authorizationCode, batchCount: batchCount, issuerDPopConstructorParam: issuerDPopConstructorParam, issueRequestsIds: issueRequestsIds)
 		
 		var documents = [WalletStorage.Document]()
 		if let document = await saveCredentials(docType: pendingDoc.docType, docDataFormat: docDataFormat, issueReq: openId4VCIServices, issuanceOutcome: issuanceOutcome) {

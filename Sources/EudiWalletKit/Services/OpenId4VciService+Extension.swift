@@ -13,6 +13,30 @@ import JOSESwift
 import WalletStorage
 
 extension OpenId4VCIService {
+	
+	func initSecurityKeys(algSupported: Set<String>, docID: String) async throws {
+		let crvType = issueReq.keyOptions?.curve ?? type(of: issueReq.secureArea).defaultEcCurve
+		let secureAreaSigningAlg: SigningAlgorithm = crvType.defaultSigningAlgorithm
+		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
+		guard !algTypes.isEmpty, let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue), algTypes.contains(algType) else {
+			throw WalletError(description: "Unable to find supported signing algorithm \(secureAreaSigningAlg)")
+		}
+		if publicCoseKey == nil {
+			publicCoseKey = try await issueReq.createKey()
+		}
+		
+		let publicKey: SecKey = try publicCoseKey!.toSecKey()
+		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
+		let unlockData = try await issueReq.secureArea.unlockKey(id: docID)
+		
+		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
+		let bindingKey: BindingKey? = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer) , issuer: config.client.id)
+		guard let bindingKey else {
+			throw WalletError(description: "Unable to create ")
+		}
+		bindingKeys.append(bindingKey)
+	}
+	
 	func issuePAR(docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil, wia: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, DocDataFormat) {
 		guard let docTypeOrScopeOrIdentifier = docType ?? scope ?? identifier else { throw WalletError(description: "docType or scope must be provided") }
 		logger.log(level: .info, "Issuing document with docType or scope or identifier: \(docTypeOrScopeOrIdentifier)")
@@ -20,7 +44,7 @@ extension OpenId4VCIService {
 		return res
 	}
 	
-	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, batchCount: Int, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
+	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, batchCount: Int, issuerDPopConstructorParam: IssuerDPoPConstructorParam, issueRequestsIds: [String]) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
 		
@@ -35,8 +59,8 @@ extension OpenId4VCIService {
 		
 		let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authorized)
 		
-		for _ in 1...batchCount {
-			try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported))
+		for i in 0..<batchCount {
+			try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported), docID: issueRequestsIds[i])
 		}
 		
 		let res = try await issueOfferedCredentialInternalValidated(authorized, offer: offer, issuer: issuer, configuration: model.configuration, claimSet: nil, algSupported: Set(model.configuration.algValuesSupported))
