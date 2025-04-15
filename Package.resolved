@@ -1,5 +1,5 @@
 {
-  "originHash" : "b36f60931823704ba40f28d053b658bfa8db6bc6539aff238621ea88b9dc9173",
+  "originHash" : "ad35e98fd549b3a16ddd731c7f83dd6eba4f225cb9191e4a2f2678094902bce0",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "29bc19c293cab650ae2d0d2cdd4f8c20dacec15f",
-        "version" : "0.6.3"
+        "revision" : "880763c809db126e8194ab2ca80651dc590fb238",
+        "version" : "0.6.4"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Sextant.git",
       "state" : {
-        "revision" : "b2141d4a693e2a768720534009cb621252be39a0",
-        "version" : "0.4.33"
+        "revision" : "91729059122eaafe42aa47207e1873c8bb9a844d",
+        "version" : "0.4.34"
       }
     },
     {
@@ -177,8 +177,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Spanker.git",
       "state" : {
-        "revision" : "d4b439bf76a40fb45d86a24d13b9c26e7d630eee",
-        "version" : "0.2.49"
+        "revision" : "dc24d4860c64c41f8def204ba28db841b9099336",
+        "version" : "0.2.50"
       }
     },
     {
@@ -204,8 +204,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "274f8668d3ec5d2892904d8465635c5ea659f767",
-        "version" : "1.7.0"
+        "revision" : "d608282ae53b9bf2e14c8a5b67c89927ba5d7afe",
+        "version" : "1.8.1"
       }
     },
     {
@@ -222,8 +222,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "a98e4be0dd9f0377a818f2198a2bc87bbd2bfcea",
-        "version" : "3.11.2"
+        "revision" : "e8d6eba1fef23ae5b359c46b03f7d94be2f41fed",
+        "version" : "3.12.3"
       }
     },
     {
