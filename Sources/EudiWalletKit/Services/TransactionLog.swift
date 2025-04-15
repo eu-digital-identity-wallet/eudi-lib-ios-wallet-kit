@@ -65,13 +65,13 @@ public struct TransactionLog: Sendable, Codable {
 	}
 }
 
-public enum TransactionLogData {
+public enum TransactionLogData: Sendable {
 	case presentation(log: PresentationLogData)
 	case issuance //todo
 	case signing //todo
 }
 
-public struct PresentationLogData {
+public struct PresentationLogData: Sendable {
 	public let timestamp: Date
 	public let status: TransactionLog.Status
 	public let relyingParty: TransactionLog.RelyingParty
