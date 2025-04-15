@@ -1,3 +1,11 @@
+## v0.10.9
+- Updated eudi-lib-ios-siop-openid4vp-swift library to (v0.10.1)[https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.10.1]
+- Updated eudi-lib-ios-statium-swift library to (v0.2.0)[https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.2.0]
+- Add Sendable conformance to TransactionLogData and PresentationLogData structs.
+
+## v0.10.8
+- Modified BLE data transfer initialisation to ensure BLE powered on before advertising UUID service and presenting QR code
+
 ## v0.10.7
 ### Document Status Checks
 - Integration with `eudi-lib-ios-statium-swift` library for document status checks (Token Status List Specification [draft 10](https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-10.html))

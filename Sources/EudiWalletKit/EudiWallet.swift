@@ -22,7 +22,7 @@ import WalletStorage
 import LocalAuthentication
 import CryptoKit
 import OpenID4VCI
-import eudi_lib_ios_statium_swift
+import StatiumSwift
 import SwiftCBOR
 import Logging
 // ios specific imports
