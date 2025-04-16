@@ -96,7 +96,7 @@ extension EudiWallet {
 			
 			let authRequest: AuthorizedRequest = .noProofRequired(accessToken: try IssuanceAccessToken(accessToken: accessToken, tokenType: .none), refreshToken: try IssuanceRefreshToken(refreshToken: refreshToken), credentialIdentifiers: nil, timeStamp: 3600, dPopNonce: nil)
 			
-			let credentialsOutcome = try await openId4VCIServices.first!.1.getCredentialsWithRefreshToken(docType, scope: scope, claimSet: nil, identifier: identifier, authorizedRequest: authRequest, issuerDPopConstructorParam: issuerDPopConstructorParam)
+			let credentialsOutcome = try await openId4VCIServices.first!.1.getCredentialsWithRefreshToken(docType, scope: scope, claimSet: nil, identifier: identifier, authorizedRequest: authRequest, issuerDPopConstructorParam: issuerDPopConstructorParam, docId: openId4VCIServices.first!.0.id)
 			
 			guard let issuanceOutcome = credentialsOutcome.0,
 					let _ = credentialsOutcome.1,

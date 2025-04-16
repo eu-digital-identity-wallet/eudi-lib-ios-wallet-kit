@@ -68,7 +68,7 @@ extension OpenId4VCIService {
 		return (res, authReqParams)
 	}
 	
-	func getCredentialsWithRefreshToken(_ docType: String?, scope: String?, claimSet: ClaimSet?, identifier: String?, authorizedRequest: AuthorizedRequest, issuerDPopConstructorParam: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome?, DocDataFormat?, AuthorizedRequestParams?) {
+	func getCredentialsWithRefreshToken(_ docType: String?, scope: String?, claimSet: ClaimSet?, identifier: String?, authorizedRequest: AuthorizedRequest, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docId: String) async throws -> (IssuanceOutcome?, DocDataFormat?, AuthorizedRequestParams?) {
 		
 		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
 		do {
@@ -88,7 +88,7 @@ extension OpenId4VCIService {
 						do {
 							let configuration = try getCredentialIdentifier(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: identifier, docType: docType, scope: scope)
 							
-							try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported))
+							try await initSecurityKeys(algSupported: Set(configuration.algValuesSupported), docID: docId)
 							
 							let issuanceOutcome = try await issueOfferedCredentialInternalValidated(authRequest, offer: offer, issuer: issuer, configuration: configuration, claimSet: claimSet)
 							
