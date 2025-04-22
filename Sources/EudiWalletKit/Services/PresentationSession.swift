@@ -49,7 +49,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var docIdToPresentInfo: [String: DocPresentInfo]!
 	/// User authentication required
 	var userAuthenticationRequired: Bool
-
+	public var relyingPartyInfo: RelyingPartyInfo?
+	
 	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool) {
 		self.presentationService = presentationService
 		self.docIdToPresentInfo = docIdToPresentInfo
@@ -131,14 +132,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request object
-	public func receiveRequest() async -> UserRequestInfo? {
+	public func receiveRequest() async -> (UserRequestInfo?, RelyingPartyInfo?) {
 		do {
 			let request = try await presentationService.receiveRequest()
-			try await decodeRequest(request)
+			relyingPartyInfo = request.1
+			try await decodeRequest(request.0)
 			return request
 		} catch {
 			await setError(error)
-			return nil
+			return (nil, nil)
 		}
 	}
 

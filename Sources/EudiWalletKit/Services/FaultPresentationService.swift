@@ -37,7 +37,7 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 		throw error
 	}
 	
-	public func receiveRequest() async throws -> UserRequestInfo {
+	public func receiveRequest() async throws -> (UserRequestInfo, RelyingPartyInfo?) {
 		throw error
 	}
 	

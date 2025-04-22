@@ -25,7 +25,7 @@ import MdocDataTransfer18013
 public final class BlePresentationService: @unchecked Sendable, PresentationService {
 	var bleServerTransfer: MdocGattServer
 	public var status: TransferStatus = .initializing
-	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
+	var continuationRequest: CheckedContinuation<(UserRequestInfo, RelyingPartyInfo?), Error>?
 	var handleSelected: ((Bool, RequestItems?) async -> Void)?
 	var deviceEngagement: String?
 	var request: UserRequestInfo?
@@ -56,7 +56,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	///  Receive request via BLE
 	/// 
 	/// - Returns: The requested items. 
-	public func receiveRequest() async throws -> UserRequestInfo {
+	public func receiveRequest() async throws -> (UserRequestInfo, RelyingPartyInfo?) {
 		return try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
@@ -106,7 +106,7 @@ extension BlePresentationService: MdocOfflineDelegate {
 	public func didReceiveRequest(_ request: UserRequestInfo, handleSelected: @escaping (Bool, MdocDataTransfer18013.RequestItems?) async -> Void) {
 		self.handleSelected = handleSelected
 		self.request = request
-		continuationRequest?.resume(returning: request)
+		continuationRequest?.resume(returning: (request, nil))
 		continuationRequest = nil
 	}
 	

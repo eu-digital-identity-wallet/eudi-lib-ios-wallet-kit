@@ -31,7 +31,7 @@ public protocol PresentationService: Sendable {
 	/// Generate a QR code to be shown to verifier (optional)
 	func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String
 	/// Receive request.
-	func receiveRequest() async throws -> UserRequestInfo
+	func receiveRequest() async throws -> (UserRequestInfo, RelyingPartyInfo?)
 	
 	/// Send response to verifier
 	/// - Parameters:
