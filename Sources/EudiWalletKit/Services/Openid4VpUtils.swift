@@ -156,7 +156,7 @@ class Openid4VpUtils {
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
 		let allPaths = try sdJwt.disclosedPaths()
 		let requestPaths = requestItems.map(\.elementPath)
-		let query = Set(allPaths.filter { requestPaths.contains($0.tokenArray) })
+		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.tokenArray) }) })
 		if query.isEmpty { throw WalletError(description: "No items to present found") }
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
