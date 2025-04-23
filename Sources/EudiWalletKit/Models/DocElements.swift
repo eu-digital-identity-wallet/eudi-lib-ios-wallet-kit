@@ -169,7 +169,7 @@ extension RequestItem {
 
 	public func extractSdJwtElement(allPaths: [JSONPointer], docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
 		// find path that the request item contains it
-		let query = allPaths.first { path in elementPath.contains(path.tokenArray) }
+		let query = allPaths.first { path in elementPath.elementsEqual(path.tokenArray) } ?? allPaths.first { path in elementPath.contains(path.tokenArray) }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
 		let docClaim: DocClaim? = findDocClaimByPath(docClaims: docClaims, requestPath: requestPath)
