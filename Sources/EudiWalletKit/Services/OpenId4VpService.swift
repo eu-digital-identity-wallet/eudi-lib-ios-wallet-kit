@@ -31,7 +31,7 @@ import X509
 
 /// Implementation is based on the OpenID4VP specification
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
-	public var status: TransferStatus = .initialized
+    public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	// map of document-id to data format
 	var dataFormats: [String: DocDataFormat]!
@@ -103,7 +103,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///  Receive request from an openid4vp URL
 	///
 	/// - Returns: The requested items.
-	public func receiveRequest() async throws -> UserRequestInfo {
+	public func receiveRequest() async throws -> (UserRequestInfo, RelyingPartyInfo?) {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf(verifierApiUrl: openId4VpVerifierApiUri, verifierLegalName: openId4VpVerifierLegalName))
 			switch try await siopOpenId4Vp.authorize(url: openid4VPURI)  {
@@ -135,7 +135,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
 						result.readerCertificateValidationMessage = readerCertificateValidationMessage
 					}
-					return result
+					var relyingPartyInfo: RelyingPartyInfo?
+					switch vp.client {
+					case let .x509SanUri(_, certificate),
+						 let .x509SanDns(_, certificate):
+						relyingPartyInfo = getRelyingPartyInfo(cer: certificate)
+					default:
+						break
+					}
+					return (result, relyingPartyInfo)
 				default: throw PresentationSession.makeError(str: "SiopAuthentication request received, not supported yet.")
 				}
 			}
@@ -257,5 +265,37 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return res
 	}
 
+	private func getRelyingPartyInfo(cer: Certificate) -> RelyingPartyInfo {
+		let subject = cer.subject.description.split(separator: ",")
+			.map{ $0.split(separator: "=") }
+			.reduce(into: [String: String]()) { dict, pair in
+				let key = String(pair[0]).trimmingCharacters(in: .whitespaces)
+				let value = String(pair[1]).trimmingCharacters(in: .whitespaces)
+				dict[key] = value
+			}
+		let commonName = subject["CN"]
+		let country = subject["C"]
+		
+		return RelyingPartyInfo(version: cer.version.description, issuer: commonName ?? "", validFrom: cer.notValidBefore, validTo: cer.notValidAfter, serialNumber: cer.serialNumber.description, signatureAlgorithm: cer.signatureAlgorithm.description, country: country ?? "")
+	}
 }
 
+public struct RelyingPartyInfo {
+	public let version: String
+	public let issuer: String
+	public let validFrom: Date
+	public let validTo: Date
+	public let serialNumber: String
+	public let signatureAlgorithm: String
+	public var country: String? = nil
+	
+	public init(version: String, issuer: String, validFrom: Date, validTo: Date, serialNumber: String, signatureAlgorithm: String, country: String? = nil) {
+		self.version = version
+		self.issuer = issuer
+		self.validFrom = validFrom
+		self.validTo = validTo
+		self.serialNumber = serialNumber
+		self.signatureAlgorithm = signatureAlgorithm
+		self.country = country
+	}
+}
