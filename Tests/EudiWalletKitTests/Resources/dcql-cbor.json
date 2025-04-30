@@ -1,0 +1,30 @@
+{
+	"type": "vp_token",
+	"dcql_query": {
+	  "credentials": [
+		{
+		  "id": "query_0",
+		  "format": "mso_mdoc",
+		  "meta": {
+			"doctype_value": "eu.europa.ec.eudi.pid.1"
+		  },
+		  "claims": [
+			{
+			  "namespace": "eu.europa.ec.eudi.pid.1",
+			  "claim_name": "family_name"
+			},
+			{
+			  "namespace": "eu.europa.ec.eudi.pid.1",
+			  "claim_name": "given_name"
+			},
+			{
+			  "namespace": "eu.europa.ec.eudi.pid.1",
+			  "claim_name": "age_over_18"
+			}
+		  ]
+		}
+	  ]
+	},
+	"nonce": "44d6355a-ea0c-479f-9cfa-52e8a0c3283b",
+	"request_uri_method": "get"
+  }
