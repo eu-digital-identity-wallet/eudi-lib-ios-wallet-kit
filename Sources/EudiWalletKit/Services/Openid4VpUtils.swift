@@ -95,6 +95,39 @@ class Openid4VpUtils {
 		return Data(bytes).base64URLEncodedString()
 	}
 
+	static func parseDcql(_ dcql: DCQL, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
+		var inputDescriptorMap = [String: String]()
+		var requestItems = RequestItems()
+		var formatsRequested = [String: DocDataFormat]()
+		for credQuery in dcql.credentials {
+			let formatRequested: DocDataFormat = credQuery.format.format == "mso_mdoc"  ? .cbor : .sdjwt
+			guard let docType = credQuery.meta?.first?.1.stringValue, let claims = credQuery.claims else { continue }
+			//let id = idsToDocTypes.first { Openid4VpUtils.vctToDocTypeMatch($1, docType) && dataFormats[$0] == formatRequested }?.key ?? ""
+			var nsItems: [String: [RequestItem]] = [:]
+			for claim in claims {
+				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
+				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
+				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
+			}
+			if !nsItems.isEmpty { inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested }
+		}
+		return (requestItems, formatsRequested, inputDescriptorMap)
+	}
+
+	/// parse claim-query and return (namespace, itemIdentifier) pair
+	static func parseClaim(_ claim: ClaimsQuery, _ docDataFormat: DocDataFormat) -> (String, RequestItem)? {
+		if docDataFormat == .cbor {
+			let ns = claim.namespace?.namespace ?? claim.path?.component1().description
+			let itemIdentifier = claim.claimName?.claimName ?? claim.path?.component2()?.head().description
+			return if let ns, let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], displayNames: [nil], intentToRetain: false, isOptional: false)) } else { nil }
+		} else if docDataFormat == .sdjwt {
+			let elementPath = claim.path?.value.map(\.description)
+			let displayNames: [String?] = Array(repeating: nil, count: elementPath?.count ?? 0)
+			return if let elementPath { ("", RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: false, isOptional: false)) } else { nil }
+		}
+		return nil
+	}
+
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
 	/// dataFormats: map of document-id to data format
 	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
@@ -118,7 +151,7 @@ class Openid4VpUtils {
 		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
 
-	/// parse field and return (namespace, RequestItem) pair for CBOR format
+	/// parse field and return (namespace, RequestItem) pair
 	static func parseField(_ field: Field, displayNames: [String: [String: String]]??, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
 		guard let path = field.paths.first else { return nil }
 		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
