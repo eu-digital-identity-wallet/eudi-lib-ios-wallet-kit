@@ -150,7 +150,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					self.transactionData = vp.transactionData
 					guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
 					var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
-					logger.info("Verifer requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
+					logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
 					if let readerCertificateIssuer {
 						result.readerAuthValidated = readerAuthValidated
@@ -170,7 +170,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?]) {
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docDisplayNames: docDisplayNames, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData)
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()

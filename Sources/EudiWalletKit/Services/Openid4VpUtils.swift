@@ -101,15 +101,15 @@ class Openid4VpUtils {
 		var formatsRequested = [String: DocDataFormat]()
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.format.format == "mso_mdoc"  ? .cbor : .sdjwt
-			guard let docType = credQuery.meta?.first?.1.stringValue, let claims = credQuery.claims else { continue }
-			//let id = idsToDocTypes.first { Openid4VpUtils.vctToDocTypeMatch($1, docType) && dataFormats[$0] == formatRequested }?.key ?? ""
+			let metaDocType = credQuery.meta?.dictionaryObject?.first?.value
+			guard let docType = metaDocType as? String ?? (metaDocType as? [String])?.first else { continue }
 			var nsItems: [String: [RequestItem]] = [:]
-			for claim in claims {
+			for claim in credQuery.claims ?? [] {
 				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
 				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
 				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
 			}
-			if !nsItems.isEmpty { inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested }
+			inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested 
 		}
 		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
@@ -119,11 +119,10 @@ class Openid4VpUtils {
 		if docDataFormat == .cbor {
 			let ns = claim.namespace?.namespace ?? claim.path?.component1().description
 			let itemIdentifier = claim.claimName?.claimName ?? claim.path?.component2()?.head().description
-			return if let ns, let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], displayNames: [nil], intentToRetain: false, isOptional: false)) } else { nil }
+			return if let ns, let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], intentToRetain: false, isOptional: false)) } else { nil }
 		} else if docDataFormat == .sdjwt {
 			let elementPath = claim.path?.value.map(\.description)
-			let displayNames: [String?] = Array(repeating: nil, count: elementPath?.count ?? 0)
-			return if let elementPath { ("", RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: false, isOptional: false)) } else { nil }
+			return if let elementPath { ("", RequestItem(elementPath: elementPath, intentToRetain: false, isOptional: false)) } else { nil }
 		}
 		return nil
 	}
@@ -138,11 +137,10 @@ class Openid4VpUtils {
 			let formatRequested: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
 			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
 			let docType = filterValue ?? inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let id = idsToDocTypes.first { Openid4VpUtils.vctToDocTypeMatch($1, docType) && dataFormats[$0] == formatRequested }?.key ?? ""
 			let pathRx = formatRequested == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
 			var nsItems: [String: [RequestItem]] = [:]
 			for field in inputDescriptor.constraints.fields {
-				guard let pair =  Self.parseField(field, displayNames: docDisplayNames[id], pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
+				guard let pair =  Self.parseField(field, pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
 				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
 				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
 			}
@@ -152,15 +150,11 @@ class Openid4VpUtils {
 	}
 
 	/// parse field and return (namespace, RequestItem) pair
-	static func parseField(_ field: Field, displayNames: [String: [String: String]]??, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
+	static func parseField(_ field: Field, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
 		guard let path = field.paths.first else { return nil }
 		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
 		let elementPath = nsItemPair.1.components(separatedBy: ".")
-		let rootPathComponent = elementPath.first!
-		// displayNames for nested elements: todo
-		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] ?? rootPathComponent // currently only first level
-		let displayNames = [rootDisplayName] + Array(repeating: nil, count: elementPath.count-1)
-		return (nsItemPair.0, RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
+		return (nsItemPair.0, RequestItem(elementPath: elementPath, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
 	}
 
 	/// parse path and return (namespace, itemIdentifier) pair for jwt format
