@@ -143,7 +143,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 						formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
 						case let .byDigitalCredentialsQuery(dcql):
 						self.dcql = dcql
-						deviceRequestBytes = nil // try? JSONEncoder().encode(dcql)
+						deviceRequestBytes = try? JSONEncoder().encode(dcql)
 						let (items, fmtsReq, imap) = try Openid4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 						formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
 					}
