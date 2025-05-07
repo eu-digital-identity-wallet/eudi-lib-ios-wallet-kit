@@ -1,5 +1,5 @@
 {
-  "originHash" : "aa72a4d246b6a72d6079ed8fbeaa74754725861a73c4512df91a0340162c44b4",
+  "originHash" : "9c2d10bc4a21b1e72e7686442bd5086d73ba120bf2ebcaf5ffa4e82550903567",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "183c76315b914329d67c2e32cc25a8785bf4937a",
-        "version" : "0.6.5"
+        "revision" : "9bc7392c0a4cd7bf3c7b1f7963717a4c555f0c94",
+        "version" : "0.6.6"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-presentation-exchange-swift.git",
       "state" : {
-        "revision" : "773d7cccdf3d2df4fc6f7629a6076dfe4b2b680d",
-        "version" : "0.3.0"
+        "revision" : "3c0e80bc212bf3f68de2781b38565235dca83b23",
+        "version" : "0.4.0"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "d859d78d3109e8de5307b688e41d4c34e0fd5bdd",
-        "version" : "0.10.1"
+        "revision" : "4ffcbd99cd2cac9cf0e0eb4d3b2c289f404ef610",
+        "version" : "0.11.0"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KittyMac/Sextant.git",
       "state" : {
-        "revision" : "91729059122eaafe42aa47207e1873c8bb9a844d",
-        "version" : "0.4.34"
+        "revision" : "74b947a80df5c8c776262546832e370afe2341f6",
+        "version" : "0.4.35"
       }
     },
     {
@@ -195,8 +195,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "ae33e5941bb88d88538d0a6b19ca0b01e6c76dcf",
-        "version" : "1.3.1"
+        "revision" : "a54383ada6cecde007d374f58f864e29370ba5c3",
+        "version" : "1.3.2"
       }
     },
     {
@@ -204,8 +204,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "d608282ae53b9bf2e14c8a5b67c89927ba5d7afe",
-        "version" : "1.8.1"
+        "revision" : "999fd70c7803da89f3904d635a6815a2a7cd7585",
+        "version" : "1.10.0"
       }
     },
     {
