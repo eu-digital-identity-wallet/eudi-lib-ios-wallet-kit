@@ -87,7 +87,8 @@ public struct PresentationLogData: Sendable {
 
 struct VpResponsePayload: Codable {
 	let verifiable_presentations: [String]
-	let presentation_submission: PresentationSubmission
+	let presentation_submission: PresentationSubmission? // if presentation definition query
+	let data_formats: [DocDataFormat]? // if dcql query
 	let transaction_data: [TransactionData]?
 }
 

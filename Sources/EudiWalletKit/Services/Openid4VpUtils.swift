@@ -100,16 +100,15 @@ class Openid4VpUtils {
 		var requestItems = RequestItems()
 		var formatsRequested = [String: DocDataFormat]()
 		for credQuery in dcql.credentials {
-			let formatRequested: DocDataFormat = credQuery.format.format == "mso_mdoc"  ? .cbor : .sdjwt
-			let metaDocType = credQuery.meta?.dictionaryObject?.first?.value
-			guard let docType = metaDocType as? String ?? (metaDocType as? [String])?.first else { continue }
+			let formatRequested: DocDataFormat = credQuery.dataFormat
+			guard let docType = credQuery.docType else { continue }
 			var nsItems: [String: [RequestItem]] = [:]
 			for claim in credQuery.claims ?? [] {
 				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
 				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
 				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
 			}
-			inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested 
+			inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested
 		}
 		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
@@ -232,3 +231,21 @@ extension CoseEcCurve {
 	}
 }
 
+
+extension CredentialQuery {
+	public var docType: String? {
+		let metaDocType = meta?.dictionaryObject?.first?.value
+		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
+		return docType
+	}
+
+	public var dataFormat: DocDataFormat {
+		format.format == "mso_mdoc"  ? .cbor : .sdjwt
+	}
+}
+
+extension DCQL {
+	public func findQuery(id: String) -> CredentialQuery? {
+		credentials.first { $0.id.value == id }
+	}
+}
