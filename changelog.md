@@ -1,3 +1,13 @@
+## v0.11.2
+- Update eudi-lib-ios-siop-openid4vp-swift package dependency to version 0.11.0
+- DCQL query language support 
+
+## v0.11.1
+- Package updates
+
+## v0.11.0
+- Bug fixes
+
 ## v0.10.9
 - Updated eudi-lib-ios-siop-openid4vp-swift library to (v0.10.1)[https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.10.1]
 - Updated eudi-lib-ios-statium-swift library to (v0.2.0)[https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.2.0]
