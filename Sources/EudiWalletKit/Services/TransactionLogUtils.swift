@@ -6,26 +6,30 @@ import SwiftCBOR
 
 class TransactionLogUtils {
 
+	static func getTimestamp() -> Int64 {
+		return Int64(Date.now.timeIntervalSince1970.rounded())
+	}
+
 	static func initializeTransactionLog(type: TransactionLog.LogType, dataFormat: TransactionLog.DataFormat) -> TransactionLog {
-		let transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .incomplete, type: type, dataFormat: dataFormat)
+		let transactionLog = TransactionLog(timestamp: getTimestamp(), status: .incomplete, type: type, dataFormat: dataFormat)
 		return transactionLog
 	}
 
 	static func setCborTransactionLogRequestInfo(_ requestInfo: UserRequestInfo, transactionLog: inout TransactionLog) {
-		transactionLog = transactionLog.copy(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), rawRequest: requestInfo.deviceRequestBytes, relyingParty: TransactionLogUtils.getRelyingParty(requestInfo), dataFormat: .cbor)
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), rawRequest: requestInfo.deviceRequestBytes, relyingParty: TransactionLogUtils.getRelyingParty(requestInfo), dataFormat: .cbor)
 	}
 
 	static func setCborTransactionLogResponseInfo(_ bleServerTransfer: MdocGattServer, transactionLog: inout TransactionLog) {
 		let sessionTranscript: Data? = if let stb = bleServerTransfer.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
-		transactionLog = transactionLog.copy(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .completed, rawResponse: bleServerTransfer.deviceResponseBytes, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: bleServerTransfer.responseMetadata)
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: bleServerTransfer.deviceResponseBytes, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: bleServerTransfer.responseMetadata)
 	}
 
 	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, transactionLog: inout TransactionLog) {
-		transactionLog = transactionLog.copy(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .completed, rawResponse: deviceResponseBytes, dataFormat: dataFormat, sessionTranscript: sessionTranscript, docMetadata: responseMetadata)
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: deviceResponseBytes, dataFormat: dataFormat, sessionTranscript: sessionTranscript, docMetadata: responseMetadata)
 	}
 
 	static func setErrorTransactionLog(type: TransactionLog.LogType, error: Error, transactionLog: inout TransactionLog) {
-		transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, errorMessage: error.localizedDescription, type: type, dataFormat: transactionLog.dataFormat)
+		transactionLog = TransactionLog(timestamp: getTimestamp(), status: .failed, errorMessage: error.localizedDescription, type: type, dataFormat: transactionLog.dataFormat)
 	}
 
 	static func getRelyingParty(_ requestInfo: UserRequestInfo) -> TransactionLog.RelyingParty? {
