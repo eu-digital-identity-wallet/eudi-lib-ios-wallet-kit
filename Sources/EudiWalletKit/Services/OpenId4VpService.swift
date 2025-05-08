@@ -261,11 +261,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			logger.info("Dispatch rejected, reason: \(reason)")
 			throw PresentationSession.makeError(str: reason)
 		}
-		if let vpTokens, let presentationSubmission, vpTokens.allSatisfy({ $0.1 != nil }) {
+		if let vpTokens, presentationSubmission != nil || dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
 			let docIds = vpTokens.compactMap { $0.1 }
+			let data_formats: [DocDataFormat]? = if let dcql, case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent { vp.keys.map { dcql.findQuery(id: $0.value)!.dataFormat} } else { nil }
 			let responseMetadata: [Data?] = docIds.map { docMetadata[$0].flatMap { $0 } }
-			let vpTokenValues = vpTokens.map { $0.2.getString() }
-			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues, presentation_submission: presentationSubmission, transaction_data: transactionData)
+			let vpTokenValues: [String]? = if case let .vpToken(vpContent) = consent, case .presentationExchange(_,_) = vpContent {  vpTokens.map { $0.2.getString() } } else if case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent {  vp.values.map {$0.getString() } } else  { nil }
+			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues!, presentation_submission: presentationSubmission, data_formats: data_formats, transaction_data: transactionData)
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, transactionLog: &transactionLog)
 		} else if case let .negative(message) = consent {
 			transactionLog = transactionLog.copy(status: .failed, errorMessage: message)
