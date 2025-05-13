@@ -1,3 +1,11 @@
+## v0.11.4
+- Update eudi-lib-ios-siop-openid4vp-swift package dependency to version 0.12.0
+- Supports openid4vp draft 24
+
+## v0.11.3
+- Display "Unidentified Relying Party" when reader authentication is disabled.
+- Fix transactions log for verifications with DCQL queries
+
 ## v0.11.2
 - Update eudi-lib-ios-siop-openid4vp-swift package dependency to version 0.11.0
 - DCQL query language support 

@@ -116,12 +116,12 @@ class Openid4VpUtils {
 	/// parse claim-query and return (namespace, itemIdentifier) pair
 	static func parseClaim(_ claim: ClaimsQuery, _ docDataFormat: DocDataFormat) -> (String, RequestItem)? {
 		if docDataFormat == .cbor {
-			let ns = claim.namespace?.namespace ?? claim.path?.component1().description
-			let itemIdentifier = claim.claimName?.claimName ?? claim.path?.component2()?.head().description
-			return if let ns, let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], intentToRetain: false, isOptional: false)) } else { nil }
+			let ns = claim.path.component1().description
+			let itemIdentifier = claim.path.component2()?.head().description
+			return if let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], intentToRetain: claim.intentToRetain, isOptional: false)) } else { nil }
 		} else if docDataFormat == .sdjwt {
-			let elementPath = claim.path?.value.map(\.description)
-			return if let elementPath { ("", RequestItem(elementPath: elementPath, intentToRetain: false, isOptional: false)) } else { nil }
+			let elementPath = claim.path.value.map(\.description)
+			return ("", RequestItem(elementPath: elementPath, intentToRetain: false, isOptional: false))
 		}
 		return nil
 	}
