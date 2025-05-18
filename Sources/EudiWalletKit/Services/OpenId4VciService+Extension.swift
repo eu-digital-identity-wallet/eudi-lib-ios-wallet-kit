@@ -45,9 +45,16 @@ extension OpenId4VCIService {
 	}
 	
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, authorizationCode: String, batchCount: Int, issuerDPopConstructorParam: IssuerDPoPConstructorParam, issueRequestsIds: [String]) async throws -> (IssuanceOutcome, AuthorizedRequestParams?) {
+		
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
 		
+		if Self.metadataCache[model.metadataKey] == nil {
+			if let cachedOffer = Self.metadataCache.values.first as? CredentialOffer {
+				Self.metadataCache[model.metadataKey] = cachedOffer
+			}
+		}
+		print(Self.metadataCache.keys)
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
 		
 		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
@@ -55,6 +62,7 @@ extension OpenId4VCIService {
 		
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
+		
 		let authorized = try await issuer.authorizeWithAuthorizationCode(authorizationCode: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil))).get()
 		
 		let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authorized)
@@ -111,10 +119,9 @@ extension OpenId4VCIService {
 	private func issueByPARType(_ docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil, claimSet: ClaimSet? = nil, wia: IssuerDPoPConstructorParam) async throws -> (IssuanceOutcome, DocDataFormat) {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
 		let issuerMetadata = await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier))
-		print("issuerMetadata: \(issuerMetadata)")
+		
 		switch issuerMetadata {
 		case .success(let metaData):
-			print("issuerMetadata: \(metaData)")
 			if let authorizationServer = metaData.authorizationServers?.first {
 				let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 				let configuration = try getCredentialIdentifier(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope)
