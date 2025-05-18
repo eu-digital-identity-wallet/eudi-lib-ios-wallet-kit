@@ -54,7 +54,6 @@ extension OpenId4VCIService {
 				Self.metadataCache[model.metadataKey] = cachedOffer
 			}
 		}
-		print(Self.metadataCache.keys)
 		guard let offer = Self.metadataCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
 		
 		let dpopConstructor = DPoPConstructor(algorithm: alg, jwk: issuerDPopConstructorParam.jwk, privateKey: .secKey(issuerDPopConstructorParam.privateKey))
