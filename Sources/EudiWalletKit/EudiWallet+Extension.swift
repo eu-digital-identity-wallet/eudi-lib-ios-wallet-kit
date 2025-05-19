@@ -25,7 +25,6 @@ extension EudiWallet {
 	
 	@MainActor
 	@discardableResult public func resumePendingIssuanceDocuments(docType: String?, docDataFormat: DocDataFormat, pendingDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil, authorizationCode: String, issuerDPopConstructorParam: IssuerDPoPConstructorParam, promptMessage: String? = nil, batchCount: Int) async throws -> (WalletStorage.Document?, AuthorizedRequestParams?) {
-		
 		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
 		
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
