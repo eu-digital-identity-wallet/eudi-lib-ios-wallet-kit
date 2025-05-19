@@ -19,6 +19,10 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.4.8"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",exact: "0.6.0"),
 		.package(url:"https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",exact: "0.8.3"),
+		.package(
+		  url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-presentation-exchange-swift.git",
+		  exact: "0.3.0"
+		),
 //		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",exact: "0.12.1"),
 		.package(url: "https://github.com/pankaj-sp/eudi-lib-ios-openid4vci-swift.git", branch: "update-credentials-with-refresh-token"),
 	],
@@ -36,6 +40,10 @@ let package = Package(
 				.product(name: "eudi-lib-sdjwt-swift", package: "eudi-lib-sdjwt-swift"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "FileLogging", package: "swift-log-file"),
+				.product(
+				  name: "PresentationExchange",
+				  package: "eudi-lib-ios-presentation-exchange-swift"
+				)
 			]
 		),
 		.testTarget(
