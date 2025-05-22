@@ -21,6 +21,12 @@ import OpenID4VCI
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)``
 public struct OfferedIssuanceModel: Sendable {
+	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], txCodeSpec: TxCode? = nil) {
+		self.issuerName = issuerName
+		self.issuerLogoUrl = issuerLogoUrl
+		self.docModels = docModels
+		self.txCodeSpec = txCodeSpec
+	}
 	/// Issuer name
 	public let issuerName: String
 	/// Issuer logo URL
