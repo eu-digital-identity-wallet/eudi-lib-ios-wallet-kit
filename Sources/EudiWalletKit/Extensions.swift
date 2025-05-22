@@ -109,8 +109,6 @@ extension WalletStorage.Document {
 	}
 }
 
-extension CredentialIssuerMetadata: @retroactive @unchecked Sendable {}
-
 extension MdocDataModel18013.CoseKeyPrivate {
   // decode private key data cbor string and save private key in key chain
 	public static func from(base64: String) async -> MdocDataModel18013.CoseKeyPrivate? {
@@ -150,13 +148,6 @@ extension MdocDataModel18013.SignUpResponse {
 			return await CoseKeyPrivate.from(base64: privateKey)
 		}
 	}
-}
-
-/// Extension to make BindingKey conform to Sendable
-extension BindingKey: @unchecked @retroactive Sendable {
-}
-
-extension AuthorizeRequestOutcome: @unchecked Sendable {
 }
 
 extension Claim {
