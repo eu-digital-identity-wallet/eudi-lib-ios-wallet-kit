@@ -275,8 +275,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			}
 		let commonName = subject["CN"] ?? ""
 		let country = subject["C"]
+		let issuerName = presentationDefinition?.name ?? commonName
 		
-		return RelyingPartyInfo(version: cer.version.description, issuer: presentationDefinition?.name ?? commonName, validFrom: cer.notValidBefore, validTo: cer.notValidAfter, serialNumber: cer.serialNumber.description, signatureAlgorithm: cer.signatureAlgorithm.description, country: country ?? "")
+		return RelyingPartyInfo(version: cer.version.description, issuer: issuerName, validFrom: cer.notValidBefore, validTo: cer.notValidAfter, serialNumber: cer.serialNumber.description, signatureAlgorithm: cer.signatureAlgorithm.description, country: country ?? "")
 	}
 }
 
