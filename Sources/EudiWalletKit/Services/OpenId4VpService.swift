@@ -55,7 +55,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// map of docType to inputDescriptor-id
 	var inputDescriptorMap: [String: String]!
 	var dauthMethod: DeviceAuthMethod
-	var devicePrivateKeys: [String: CoseKeyPrivate]!
+	var privateKeyObjects: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
 	var presentationDefinition: PresentationDefinition?
 	var dcql: DCQL?
@@ -80,7 +80,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, urlSession: URLSession) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = parameters.toInitializeTransferInfo()
-		dataFormats = objs.dataFormats; docs = objs.documentObjects; devicePrivateKeys = objs.privateKeyObjects
+		dataFormats = objs.dataFormats; docs = objs.documentObjects; privateKeyObjects = objs.privateKeyObjects
 		iaca = objs.iaca; dauthMethod = objs.deviceAuthMethod
 		docMetadata = parameters.docMetadata
 		idsToDocTypes = objs.idsToDocTypes
@@ -99,7 +99,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		if unlockData == nil {
 			unlockData = [String: Data]()
-			for (id, key) in devicePrivateKeys {
+			for (id, key) in privateKeyObjects {
 				let ud = try await key.secureArea.unlockKey(id: id)
 				if let ud { unlockData[id] = ud }
 			}
@@ -170,7 +170,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?]) {
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: itemsToSend, eReaderKey: eReaderPub, devicePrivateKeys: devicePrivateKeys, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData)
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -214,11 +214,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
 					inputToPresentations.append((inputDescrId, docId, vpToken.0))
 				} else if dataFormats[docId] == .sdjwt {
-					let docSigned = docsSdJwt[docId]; let dpk = devicePrivateKeys[docId]
+					let docSigned = docsSdJwt[docId]; let dpk = privateKeyObjects[docId]
 					guard let docSigned, let dpk, let items = nsItems.first?.value else { continue }
 					let unlockData = try await dpk.secureArea.unlockKey(id: docId)
-					let keyInfo = try await dpk.secureArea.getKeyInfo(id: docId);	let dsa = keyInfo.publicKey.crv.defaultSigningAlgorithm
-					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, ecAlgorithm: dsa, unlockData: unlockData)
+					let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
+					let dsa = keyInfo.crv.defaultSigningAlgorithm
+					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
 					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 					let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
 					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {

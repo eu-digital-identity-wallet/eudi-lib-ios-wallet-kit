@@ -187,15 +187,16 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		return (parts.count > 0 ? parts[0] : "", parts.count > 1 ? parts[1] : "" , parts.count > 2 ? parts[2] : "")
 	}
 
-	public func getDocIdsToPresentInfo() async -> [String: DocPresentInfo] {
+	public func getDocIdsToPresentInfo(documents: [WalletStorage.Document]? = nil) async throws -> [String: DocPresentInfo] {
+		let docs = if let documents { documents } else { try? await storageService.loadDocuments(status: .issued) }
 		let dictValues = await docModels.filter { $0.docType != nil}.asyncCompactMap { m -> (String, DocPresentInfo)? in
-			guard let doc = try? await storageService.loadDocument(id: m.id, status: .issued) else { return nil }
+			guard let doc = docs?.first(where: { $0.id == m.id }), let dki = DocKeyInfo(from: doc.docKeyInfo) else { return nil }
 			let docTypedData: DocTypedData? = switch m.docDataFormat {
 				case .cbor: if let iss = IssuerSigned(data: doc.data.bytes) { .msoMdoc(iss) } else { nil }
 				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
 			}
 			guard let docTypedData else { return nil }
-			let presentInfo = DocPresentInfo(docType: m.docType!, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
+			let presentInfo = DocPresentInfo(docType: m.docType!, secureAreaName: dki.secureAreaName, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
 			return (m.id, presentInfo)
 		}
 		return Dictionary(uniqueKeysWithValues: dictValues)
@@ -208,8 +209,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus, uiCulture: String?) async throws -> [WalletStorage.Document]?  {
 		do {
 			guard let docs = try await storageService.loadDocuments(status: status) else { return nil }
-			let docs2 = docs.map { d in WalletStorage.Document(id: d.id, docType: d.docType, docDataFormat: d.docDataFormat, data: d.data, secureAreaName: d.secureAreaName,
-			 createdAt: d.createdAt, modifiedAt: d.modifiedAt, metadata: d.metadata, displayName: d.getDisplayName(uiCulture), status: d.status)   }
+			let docs2 = docs.map { d in WalletStorage.Document(id: d.id, docType: d.docType, docDataFormat: d.docDataFormat, data: d.data, docKeyInfo: d.docKeyInfo, createdAt: d.createdAt, modifiedAt: d.modifiedAt, metadata: d.metadata, displayName: d.getDisplayName(uiCulture), status: d.status) }
 			await refreshDocModels(docs2, uiCulture: uiCulture, docStatus: status)
 			await refreshPublishedVars()
 			return docs

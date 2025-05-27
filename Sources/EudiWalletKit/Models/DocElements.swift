@@ -21,6 +21,7 @@ import eudi_lib_sdjwt_swift
 
 public struct DocPresentInfo: Sendable {
 	public let docType: String
+	public let secureAreaName: String?
 	public let docDataFormat: DocDataFormat
 	public let displayName: String?
 	public let docClaims: [DocClaim]

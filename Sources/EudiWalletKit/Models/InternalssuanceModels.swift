@@ -57,7 +57,7 @@ struct PendingIssuanceModel: Codable {
 }
 
 enum IssuanceOutcome {
-	case issued(Data?, String?, CredentialConfiguration)
+	case issued([(Data?, String?)], CredentialConfiguration)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }
@@ -81,6 +81,12 @@ extension IssuanceOutcome {
 		case .pending(_): .pending
 		default: nil
 		}
+	}
+
+	func getDataToSave(index: Int, format: DocDataFormat) -> Data {
+		guard case let .issued(dataPairs, _) = self, dataPairs.count > index else { return Data() }
+		let (data, str) = dataPairs[index]
+		return if format == .cbor, let data { data } else if let str, let sd = str.data(using: .utf8) { sd } else { Data() }
 	}
 }
 

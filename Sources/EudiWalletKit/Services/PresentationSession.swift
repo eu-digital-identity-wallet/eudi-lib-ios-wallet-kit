@@ -44,14 +44,17 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public var deviceEngagement: String?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [String: DocPresentInfo]!
+	// map of document id to key index to use
+	public var documentKeyIndexes: [String: Int]!
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
 		self.docIdToPresentInfo = docIdToPresentInfo
+		self.documentKeyIndexes = documentKeyIndexes
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.transactionLogger = transactionLogger
 	}
@@ -151,8 +154,11 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		do {
 			await MainActor.run { status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
-			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?()}, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
+			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run { status = .responseSent }
+			for (id, dpi) in docIdToPresentInfo {
+				try await SecureAreaRegistry.shared.get(name: dpi.secureAreaName).updateKeyBatchInfo(id: id, keyIndex: documentKeyIndexes[id] ?? 0)
+			}
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
 			await setError(error)
