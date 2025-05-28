@@ -175,7 +175,7 @@ extension Array where Element == DocClaimMetadata {
 
 	func convertToJsonClaimMetadata(_ uiCulture: String?, keyPrefix: [String]?) -> (displayNames: [String: String], mandatory: [String: Bool], childMetadata: [DocClaimMetadata]) {
 		let groupIndex = keyPrefix?.count ?? 0
-		let arr = if let keyPrefix { filter { keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) && $0.claimPath.count > groupIndex } } else { self }
+		let arr = if let keyPrefix { filter { $0.claimPath.count > groupIndex && keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) } } else { self }
 		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[groupIndex]} )
 		let displayNames = dictKeys.compactMapValues { $0.first?.display?.getName(uiCulture) }
 		let mandatory =  dictKeys.compactMapValues { $0.first?.isMandatory }
