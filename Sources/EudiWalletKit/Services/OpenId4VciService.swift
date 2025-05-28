@@ -193,8 +193,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func getCredentialIdentifiers(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported]) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
 			let credentialInfos = credentialsSupported.compactMap {
-				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, scope: scope, displayName: msoMdocCred.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
-				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, scope: scope, displayName: sdJwtVc.display.map(\.displayMetadata).getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
+				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, vct: nil, scope: scope, displayName: msoMdocCred.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
+				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, vct: sdJwtVc.vct, scope: scope, displayName: sdJwtVc.display.map(\.displayMetadata).getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported) { (identifier: $0.key, scope: scope, offered: offered) }
 				else { nil } }
 			return credentialInfos
 	}

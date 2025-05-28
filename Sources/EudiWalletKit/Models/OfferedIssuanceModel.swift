@@ -43,9 +43,10 @@ public struct OfferedIssuanceModel: Sendable {
 /// Information about an offered document to issue
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, scope: String, displayName: String, algValuesSupported: [String]) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, displayName: String, algValuesSupported: [String]) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
+		self.vct = vct
 		self.scope = scope
 		self.displayName = displayName
 		self.algValuesSupported = algValuesSupported
@@ -54,6 +55,8 @@ public struct OfferedDocModel: Sendable {
 	public let credentialConfigurationIdentifier: String
 	/// Document type
 	public let docType: String?
+	/// vct (for sdJwt credential offers)
+	public let vct: String?
 	/// Scope of the offer
 	public let scope: String
 	/// Display name for document type
