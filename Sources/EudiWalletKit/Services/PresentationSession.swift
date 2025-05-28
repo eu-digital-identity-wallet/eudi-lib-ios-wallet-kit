@@ -19,6 +19,7 @@ import SwiftUI
 import Logging
 import MdocDataModel18013
 import MdocDataTransfer18013
+import WalletStorage
 import LocalAuthentication
 
 /// Presentation session
@@ -26,6 +27,7 @@ import LocalAuthentication
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
+	var storageService: (any DataStorageService)!
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
 	/// Reader legal name (if provided)
@@ -51,8 +53,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
+		self.storageService = storageService
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.documentKeyIndexes = documentKeyIndexes
 		self.userAuthenticationRequired = userAuthenticationRequired
@@ -145,7 +148,19 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		}
 	}
 
-	/// Send response to verifier
+	func updateKeyBatchInfoAndDeleteCredentialIfNeeded() async throws {
+		for (id, dpi) in docIdToPresentInfo {
+			let secureArea = SecureAreaRegistry.shared.get(name: dpi.secureAreaName)
+			guard let keyIndex = documentKeyIndexes[id] else { continue }
+			let newKeyBatchInfo = try await secureArea.updateKeyBatchInfo(id: id, keyIndex: keyIndex)
+			if newKeyBatchInfo.credentialPolicy == .oneTimeUse {
+				try await storageService?.deleteDocumentCredential(id: id, index: keyIndex)
+				try await secureArea.deleteKeyBatch(id: id, startIndex: keyIndex, batchSize: 1)
+			}
+		}
+	}
+
+/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
@@ -156,9 +171,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run { status = .responseSent }
-			for (id, dpi) in docIdToPresentInfo {
-				try await SecureAreaRegistry.shared.get(name: dpi.secureAreaName).updateKeyBatchInfo(id: id, keyIndex: documentKeyIndexes[id] ?? 0)
-			}
+			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded()
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
 			await setError(error)
