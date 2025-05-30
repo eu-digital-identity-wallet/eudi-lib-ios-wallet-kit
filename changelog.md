@@ -1,26 +1,23 @@
 ## v0.12.0
 
-* Batch issuance support *
+### Batch issuance support
 To issue multiple credentials for a document, specify the `keyOptions` parameter in the `issueDocument` method. This allows to set the `credentialPolicy` and `batchSize` options.
 
 Example usage:
 ```swift
 try await wallet.issueDocument(docType: nil, scope: nil, identifier: identifier, keyOptions: KeyOptions(credentialPolicy: .oneTimeUse, batchSize: 10))
 ```
-* Additional method *
+
+#### Additional method 
 ``` swift
 /// Get the remaining presentations count for a document.	
- Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
+/// Returns: Remaining presentations count (if one-time use policy was used to issue the document, otherwise nil)
 public func getRemainingCredentialsCount(id: String) async throws -> Int?
 ```
 
-## SecureArea Protocol: Batch-Oriented API Changes
-
-### Overview
+### SecureArea Protocol: Batch-Oriented API Changes
 
 The `SecureArea` protocol was refactored to support batch-oriented key management and cryptographic operations. This change introduces methods for handling multiple keys at once. This affects implementors of the `SecureArea` protocol.
-
-### Key Changes
 
 #### 1. Batch Operations Added
 
