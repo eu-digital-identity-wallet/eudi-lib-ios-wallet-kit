@@ -410,7 +410,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	/// Get remaining credentials (available for presentation) count
+	/// Get a document's remaining credentials, available for presentation count
+	/// - Parameters:
+	/// 	- id: Document id
+	/// - Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
 	public func getRemainingCredentialsCount(id: String) async throws -> Int? {
 		let secureAreaName = storage.getDocumentModel(id: id)?.secureAreaName
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)

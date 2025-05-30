@@ -1,6 +1,57 @@
-## v0.11.4
-- Update eudi-lib-ios-siop-openid4vp-swift package dependency to version 0.12.0
-- Supports openid4vp draft 24
+## v0.12.0
+
+* Batch issuance support *
+To issue multiple credentials for a document, specify the `keyOptions` parameter in the `issueDocument` method. This allows to set the `credentialPolicy` and `batchSize` options.
+
+Example usage:
+```swift
+try await wallet.issueDocument(docType: nil, scope: nil, identifier: identifier, keyOptions: KeyOptions(credentialPolicy: .oneTimeUse, batchSize: 10))
+```
+* Additional method *
+``` swift
+/// Get the remaining presentations count for a document.	
+ Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
+public func getRemainingCredentialsCount(id: String) async throws -> Int?
+```
+
+## SecureArea Protocol: Batch-Oriented API Changes
+
+### Overview
+
+The `SecureArea` protocol was refactored to support batch-oriented key management and cryptographic operations. This change introduces methods for handling multiple keys at once. This affects implementors of the `SecureArea` protocol.
+
+### Key Changes
+
+#### 1. Batch Operations Added
+
+- **Key Creation:**
+  - `createKeyBatch(id: String, keyOptions: KeyOptions?) async throws -> [CoseKey]`
+    - Creates a batch of keys and returns their public keys.
+
+- **Key Deletion:**
+  - `deleteKeyBatch(id: String, startIndex: Int, batchSize: Int) async throws`
+    - Deletes a batch of keys starting from a specific index.
+  - `deleteKeyInfo(id: String) async throws`
+    - Deletes key metadata for a given batch.
+
+- **Signature and Key Agreement:**
+  - `signature(id: String, index: Int, algorithm: SigningAlgorithm, dataToSign: Data, unlockData: Data?) async throws -> Data`
+    - Computes a signature using a specific key in the batch.
+  - `keyAgreement(id: String, index: Int, publicKey: CoseKey, unlockData: Data?) async throws -> SharedSecret`
+    - Performs key agreement with a specific key in the batch.
+
+- **Key Info:**
+  - `getKeyBatchInfo(id: String) async throws -> KeyBatchInfo`
+    - Returns information about a batch of keys.
+
+- **Default Algorithm:**
+  - `defaultSigningAlgorithm(ecCurve: CoseEcCurve) -> SigningAlgorithm`
+    - Returns the default signing algorithm for a given curve.
+
+#### 2. Single-Key Methods Removed
+
+- Single-key methods `createKey`, `deleteKey`, and `getKeyInfo` were removed.
+
 
 ## v0.11.3
 - Display "Unidentified Relying Party" when reader authentication is disabled.
