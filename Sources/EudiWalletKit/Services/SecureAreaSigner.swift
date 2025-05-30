@@ -22,14 +22,16 @@ import OpenID4VCI
 
 final class SecureAreaSigner: AsyncSignerProtocol {
 	let id: String
+	let index: Int
 	let secureArea: SecureArea
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
 	let algorithm: JOSESwift.SignatureAlgorithm
 	let signature: Data?
 	let unlockData: Data?
 
-	init(secureArea: SecureArea, id: String, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
+	init(secureArea: SecureArea, id: String, index: Int, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
 		self.id = id
+		self.index = index
 		self.secureArea = secureArea
 		self.ecAlgorithm = ecAlgorithm
 		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
@@ -56,13 +58,12 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	}
 
 	func sign(_ signingInput: Data) async throws -> Data {
-		let ecdsaSignature = try await secureArea.signature(id: id, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+		let ecdsaSignature = try await secureArea.signature(id: id, index: index, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
 		return ecdsaSignature
 	}
 
-func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
-		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }
-      .joined(separator: ".").data(using: .ascii)
+	func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }.joined(separator: ".").data(using: .ascii)
       	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
 		return try await sign(signingInput)
 	}

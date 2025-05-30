@@ -17,12 +17,12 @@ limitations under the License.
 import Foundation
 import OpenID4VCI
 
-enum AsWebOutcome {
+enum AsWebOutcome: @unchecked Sendable {
 	case code(String)
 	case presentation_request(URL)
 }
 
-enum AuthorizeRequestOutcome {
+enum AuthorizeRequestOutcome: @unchecked Sendable {
 	case authorized(AuthorizedRequest)
 	case presentation_request(URL)
 }
