@@ -276,7 +276,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		if case let .string(str) = $0  {
 			// logger.info("Issued credential data:\n\(strBase64)")
 			return [(Data(base64URLEncoded: str), str)]
-		} else if case let .json(json) = $0, json.type == .array, let first = json.first {
+		} else if case let .json(json) = $0, json.type == .array, json.first != nil {
 			return json.map { j in let str = j.1["credential"].stringValue; return (Data(base64URLEncoded: str), str) }
 		} else {
 			throw WalletError(description: "Invalid credential")
