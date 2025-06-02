@@ -22,7 +22,8 @@ import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
 import WalletStorage
-@preconcurrency import SiopOpenID4VP
+import SiopOpenID4VP
+import struct SiopOpenID4VP.X509CertificateChainVerifier
 import eudi_lib_sdjwt_swift
 import JOSESwift
 import Logging
@@ -275,9 +276,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
-		guard let self else { return false }
-		let chainVerifier = eudi_lib_sdjwt_swift.X509CertificateChainVerifier()
-		let verified = try? chainVerifier.verifyCertificateChain(base64Certificates: certificates)
+		guard let self, let leaf = certificates.first else { return false }
+		let chainVerifier = X509CertificateChainVerifier()
+		let rootBase64Certificates = self.iaca?.compactMap { SecCertificateCopyData($0) as Data }.map { $0.base64EncodedString() } ?? []
+		let verified = try? await chainVerifier.verifyChain(rootBase64Certificates: rootBase64Certificates,intermediateBase64Certificates: Array(certificates.dropFirst()), leafBase64Certificate: leaf) //base64Certificates: certificates)
 		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
 		let b64certs = certificates; let data = b64certs.compactMap { Data(base64Encoded: $0) }
 		let certs = data.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
