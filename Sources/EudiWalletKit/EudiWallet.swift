@@ -207,6 +207,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await finalizeIssuing(issueOutcome: data.0, docType: docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 	}
 
+	/// Get default key options (batch-size and credential policy) for a document type
+	/// - Parameters:
+	///  - docType: Document type (optional)
+	/// - scope: Scope of the document (optional)
+	/// - identifier: Identifier of the document type (optional)
+	public func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
+		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: nil, disablePrompt: false, promptMessage: nil)
+		return try await openId4VCIService.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
+	}
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
 	///
 	/// The caller does not need to reload documents, storage manager collections are updated.
@@ -274,6 +283,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
+	/// When resolving an offer, defaultKeyOptions are now included
 	/// - Parameters:
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
@@ -411,15 +421,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Get a document's remaining credentials, available for presentation count
+	///
 	/// - Parameters:
-	/// 	- id: Document id
-	/// - Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
-	public func getRemainingCredentialsCount(id: String) async throws -> Int? {
+	///   - id: The unique identifier of the document to check usage counts for
+	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
+	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let secureAreaName = storage.getDocumentModel(id: id)?.secureAreaName
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
-		let res: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
-		return res
+		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
+		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }
 	}
+
 	/// Prepare Service Data Parameters
 	/// - Parameters:
 	///   - docType: docType of documents to present (optional)

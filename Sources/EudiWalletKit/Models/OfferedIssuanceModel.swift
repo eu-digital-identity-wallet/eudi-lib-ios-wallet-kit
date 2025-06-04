@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 import OpenID4VCI
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
@@ -43,13 +44,14 @@ public struct OfferedIssuanceModel: Sendable {
 /// Information about an offered document to issue
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, displayName: String, algValuesSupported: [String]) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, displayName: String, algValuesSupported: [String], defaultKeyOptions: KeyOptions) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct
 		self.scope = scope
 		self.displayName = displayName
 		self.algValuesSupported = algValuesSupported
+		self.defaultKeyOptions = defaultKeyOptions
 	}
 	/// Credential configuration identifier from VCI issuer
 	public let credentialConfigurationIdentifier: String
@@ -67,5 +69,7 @@ public struct OfferedDocModel: Sendable {
 	public var docTypeOrScope: String {
 		docType ?? scope
 	}
+	// default key options for the credential
+	public let defaultKeyOptions: KeyOptions
 }
 
