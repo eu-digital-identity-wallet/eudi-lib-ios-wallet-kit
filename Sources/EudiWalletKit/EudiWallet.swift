@@ -283,6 +283,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
+	/// When resolving an offer, defaultKeyOptions are now included
 	/// - Parameters:
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
@@ -420,9 +421,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Get a document's remaining credentials, available for presentation count
+	///
 	/// - Parameters:
-	/// 	- id: Document id
-	/// - Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
+	///   - id: The unique identifier of the document to check usage counts for
+	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let secureAreaName = storage.getDocumentModel(id: id)?.secureAreaName
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
