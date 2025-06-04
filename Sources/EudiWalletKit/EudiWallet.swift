@@ -212,7 +212,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///  - docType: Document type (optional)
 	/// - scope: Scope of the document (optional)
 	/// - identifier: Identifier of the document type (optional)
-	func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
+	public func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
 		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: nil, disablePrompt: false, promptMessage: nil)
 		return try await openId4VCIService.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
 	}
