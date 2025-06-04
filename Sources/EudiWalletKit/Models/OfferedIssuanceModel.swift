@@ -22,6 +22,13 @@ import OpenID4VCI
 ///
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)``
 public struct OfferedIssuanceModel: Sendable {
+	/// public initializer
+	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], txCodeSpec: TxCode? = nil) {
+		self.issuerName = issuerName
+		self.issuerLogoUrl = issuerLogoUrl
+		self.docModels = docModels
+		self.txCodeSpec = txCodeSpec
+	}
 	/// Issuer name
 	public let issuerName: String
 	/// Issuer logo URL
@@ -36,10 +43,22 @@ public struct OfferedIssuanceModel: Sendable {
 
 /// Information about an offered document to issue
 public struct OfferedDocModel: Sendable {
+	/// public initializer
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, displayName: String, algValuesSupported: [String], defaultKeyOptions: KeyOptions) {
+		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
+		self.docType = docType
+		self.vct = vct
+		self.scope = scope
+		self.displayName = displayName
+		self.algValuesSupported = algValuesSupported
+		self.defaultKeyOptions = defaultKeyOptions
+	}
 	/// Credential configuration identifier from VCI issuer
 	public let credentialConfigurationIdentifier: String
 	/// Document type
 	public let docType: String?
+	/// vct (for sdJwt credential offers)
+	public let vct: String?
 	/// Scope of the offer
 	public let scope: String
 	/// Display name for document type

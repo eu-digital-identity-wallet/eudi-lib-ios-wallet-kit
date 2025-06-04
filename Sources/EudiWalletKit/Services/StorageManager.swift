@@ -282,16 +282,20 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	///
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
-		let index = switch status { case .issued: docModels.firstIndex(where: { $0.id == id}); default: deferredDocuments.firstIndex(where: { $0.id == id})  }
+		let index = switch status {
+			case .issued: docModels.firstIndex(where: { $0.id == id});
+			case .pending: pendingDocuments.firstIndex(where: { $0.id == id});
+			default: deferredDocuments.firstIndex(where: { $0.id == id})
+			}
 		guard let index else { throw WalletError(description: "Document not found") }
 		do {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
 				_ = await MainActor.run { docModels.remove(at: index) }
 				await refreshPublishedVars()
-			} else if status == .deferred {
-				_ = await MainActor.run { deferredDocuments.remove(at: index) }
 			}
+			else if status == .pending { _ = await MainActor.run { pendingDocuments.remove(at: index) }}
+			else if status == .deferred { _ = await MainActor.run { deferredDocuments.remove(at: index) }}
 		} catch {
 			await setError(error)
 			throw error
@@ -306,6 +310,8 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			if status == .issued {
 				await MainActor.run { docModels = [] }
 				await refreshPublishedVars()
+			} else if status == .pending {
+				await MainActor.run { pendingDocuments.removeAll(keepingCapacity:false) }
 			} else if status == .deferred {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
 			}
