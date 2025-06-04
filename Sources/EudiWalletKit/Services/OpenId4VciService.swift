@@ -106,7 +106,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func getDefaultKeyOptions(batchCredentialIssuance: BatchCredentialIssuance?, policy: Policy?) -> KeyOptions {
-		let batchCredentialIssuanceSize = if let batchCredentialIssuance, let policyBatchSize = policy?.batchSize { min(policyBatchSize, batchCredentialIssuance.batchSize) } else if let batchCredentialIssuance { batchCredentialIssuance.batchSize } else if let batchSize = policy?.batchSize { batchSize } else { 1 }
+		var batchCredentialIssuanceSize = if let batchCredentialIssuance { batchCredentialIssuance.batchSize } else { 1 }
+		if let policyBatchSize = policy?.batchSize, policyBatchSize < batchCredentialIssuanceSize { batchCredentialIssuanceSize = policyBatchSize }
 		let credentialPolicy: CredentialPolicy = if let oneTimeUse = policy?.oneTimeUse { oneTimeUse ? .oneTimeUse : .rotateUse } else { .rotateUse }
 		return KeyOptions(credentialPolicy: credentialPolicy, batchSize: batchCredentialIssuanceSize)
 	}
