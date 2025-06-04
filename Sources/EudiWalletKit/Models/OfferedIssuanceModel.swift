@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import MdocDataModel18013
 import OpenID4VCI
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
@@ -49,5 +50,7 @@ public struct OfferedDocModel: Sendable {
 	public var docTypeOrScope: String {
 		docType ?? scope
 	}
+	// default key options for the credential
+	public let defaultKeyOptions: KeyOptions
 }
 

@@ -32,6 +32,25 @@ struct CredentialConfiguration: Codable, Sendable {
     let display: [DisplayMetadata]
     let claims: [Claim]
    	let format: DocDataFormat
+	var batchSize: Int?
+	var credentialPolicy: CredentialPolicy?
+	var defaultKeyOptions: KeyOptions { get { KeyOptions(credentialPolicy: credentialPolicy ?? .rotateUse, batchSize: batchSize ?? 1) } set { batchSize = newValue.batchSize; credentialPolicy = newValue.credentialPolicy } }
+
+	public init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, credentialSigningAlgValuesSupported: [String], issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, batchSize: Int? = nil, defaultKeyOptions: KeyOptions) {
+		self.configurationIdentifier = configurationIdentifier
+		self.credentialIssuerIdentifier = credentialIssuerIdentifier
+		self.docType = docType
+		self.vct = vct
+		self.scope = scope
+		//self.cryptographicBindingMethodsSupported = cryptographicBindingMethodsSupported
+		self.credentialSigningAlgValuesSupported = credentialSigningAlgValuesSupported
+		self.issuerDisplay = issuerDisplay
+		self.display = display
+		self.claims = claims
+		self.format = format
+		self.batchSize = batchSize
+		self.defaultKeyOptions = defaultKeyOptions
+	}
  }
 
 struct DeferredIssuanceModel: Codable, Sendable {

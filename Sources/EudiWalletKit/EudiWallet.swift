@@ -207,6 +207,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await finalizeIssuing(issueOutcome: data.0, docType: docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 	}
 
+	/// Get default key options (batch-size and credential policy) for a document type
+	/// - Parameters:
+	///  - docType: Document type (optional)
+	/// - scope: Scope of the document (optional)
+	/// - identifier: Identifier of the document type (optional)
+	func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
+		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: nil, disablePrompt: false, promptMessage: nil)
+		return try await openId4VCIService.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
+	}
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
 	///
 	/// The caller does not need to reload documents, storage manager collections are updated.
@@ -420,6 +429,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let res: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
 		return res
 	}
+
 	/// Prepare Service Data Parameters
 	/// - Parameters:
 	///   - docType: docType of documents to present (optional)
