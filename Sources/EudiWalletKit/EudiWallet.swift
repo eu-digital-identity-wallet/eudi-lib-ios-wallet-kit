@@ -423,11 +423,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	/// 	- id: Document id
 	/// - Returns: Remaining presentations count (if one time use policy was used to issue the document otherwise nil)
-	public func getRemainingCredentialsCount(id: String) async throws -> Int? {
+	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let secureAreaName = storage.getDocumentModel(id: id)?.secureAreaName
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
-		let res: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
-		return res
+		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
+		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }
 	}
 
 	/// Prepare Service Data Parameters
