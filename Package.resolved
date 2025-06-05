@@ -1,5 +1,5 @@
 {
-  "originHash" : "38629eb4b4b2b34f0f09c341228366a2f2835d1ed88195b712424d5a28583644",
+  "originHash" : "16fa24d578743b8ec64b4855170c5a9019173b8889ac115b3a71b69866ced6ad",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "e0bee675a9e210ce8b440fdf033aeb654498cdbb",
-        "version" : "0.6.1"
+        "revision" : "7bb3dc24aa2cbf6485b3982b1b77c736db7c8348",
+        "version" : "0.6.2"
       }
     },
     {
@@ -213,8 +213,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections.git",
       "state" : {
-        "revision" : "671108c96644956dddcd89dd59c203dcdb36cec7",
-        "version" : "1.1.4"
+        "revision" : "c1805596154bb3a265fd91b8ac0c4433b4348fb0",
+        "version" : "1.2.0"
       }
     },
     {
