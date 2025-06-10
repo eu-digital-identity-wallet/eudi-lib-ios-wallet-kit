@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import OpenID4VCI
+import Copyable
 
 /// Offered issue model contains information gathered by resolving an issue offer URL.
 ///
@@ -42,16 +43,18 @@ public struct OfferedIssuanceModel: Sendable {
 }
 
 /// Information about an offered document to issue
+@Copyable
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, displayName: String, algValuesSupported: [String], defaultKeyOptions: KeyOptions) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], keyOptions: KeyOptions) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct
 		self.scope = scope
+		self.identifier = identifier
 		self.displayName = displayName
 		self.algValuesSupported = algValuesSupported
-		self.defaultKeyOptions = defaultKeyOptions
+		self.keyOptions = keyOptions
 	}
 	/// Credential configuration identifier from VCI issuer
 	public let credentialConfigurationIdentifier: String
@@ -61,15 +64,17 @@ public struct OfferedDocModel: Sendable {
 	public let vct: String?
 	/// Scope of the offer
 	public let scope: String
+	/// issuer configuration identifier
+	public let identifier: String?
 	/// Display name for document type
 	public let displayName: String
 	/// Credential signing algorithm values supported
 	public let algValuesSupported: [String]
-	/// Doc type or scope
-	public var docTypeOrScope: String {
-		docType ?? scope
+	/// Doc type or vct or scope
+	public var docTypeOrVctOrScope: String {
+		docType ?? vct ?? scope
 	}
 	// default key options for the credential
-	public let defaultKeyOptions: KeyOptions
+	public let keyOptions: KeyOptions
 }
 
