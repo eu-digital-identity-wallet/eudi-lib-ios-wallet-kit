@@ -1,0 +1,48 @@
+{
+	"type": "vp_token",
+	"dcql_query": {
+	  "credentials": [
+		{
+		  "id": "query_0",
+		  "format": "vc+sd-jwt",
+		  "meta": {
+			"vct_values": [
+			  "urn:eu.europa.ec.eudi:pid:1"
+			]
+		  },
+		  "claims": [
+			{
+			  "path": [
+				"family_name"
+			  ]
+			},
+			{
+			  "path": [
+				"given_name"
+			  ]
+			},
+			{
+			  "path": [
+				"age_equal_or_over",
+				"18"
+			  ]
+			},
+			{
+			  "path": [
+				"address",
+				"postal_code"
+			  ]
+			},
+			{
+			  "path": [
+				"address",
+				"street_address"
+			  ]
+			}
+		  ]
+		}
+	  ]
+	},
+	"nonce": "8a6e2e60-2627-464e-92cf-26e8b0184d27",
+	"request_uri_method": "get"
+  }

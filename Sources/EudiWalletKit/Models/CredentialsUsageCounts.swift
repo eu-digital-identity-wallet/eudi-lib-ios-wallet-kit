@@ -15,16 +15,17 @@ limitations under the License.
 */
 
 import Foundation
-import OpenID4VCI
 
-enum AsWebOutcome: @unchecked Sendable {
-	case code(String)
-	case presentation_request(URL)
+public struct CredentialsUsageCounts: Codable, Sendable {
+    public let total: Int
+    public let remaining: Int
+    public var used: Int  { total - remaining }
+
+    public init(total: Int, remaining: Int) throws {
+        self.total = total
+        self.remaining = remaining
+		if total < remaining {
+			throw WalletError(description: "Total count cannot be less than remaining count")
+		}
+    }
 }
-
-enum AuthorizeRequestOutcome: @unchecked Sendable {
-	case authorized(AuthorizedRequest)
-	case presentation_request(URL)
-}
-
-

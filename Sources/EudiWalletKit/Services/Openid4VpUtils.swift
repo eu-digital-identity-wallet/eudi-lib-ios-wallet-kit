@@ -95,6 +95,37 @@ class Openid4VpUtils {
 		return Data(bytes).base64URLEncodedString()
 	}
 
+	static func parseDcql(_ dcql: DCQL, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
+		var inputDescriptorMap = [String: String]()
+		var requestItems = RequestItems()
+		var formatsRequested = [String: DocDataFormat]()
+		for credQuery in dcql.credentials {
+			let formatRequested: DocDataFormat = credQuery.dataFormat
+			guard let docType = credQuery.docType else { continue }
+			var nsItems: [String: [RequestItem]] = [:]
+			for claim in credQuery.claims ?? [] {
+				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
+				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
+				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
+			}
+			inputDescriptorMap[docType] = credQuery.id.value; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested
+		}
+		return (requestItems, formatsRequested, inputDescriptorMap)
+	}
+
+	/// parse claim-query and return (namespace, itemIdentifier) pair
+	static func parseClaim(_ claim: ClaimsQuery, _ docDataFormat: DocDataFormat) -> (String, RequestItem)? {
+		if docDataFormat == .cbor {
+			let ns = claim.path.component1().description
+			let itemIdentifier = claim.path.component2()?.head().description
+			return if let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], intentToRetain: claim.intentToRetain, isOptional: false)) } else { nil }
+		} else if docDataFormat == .sdjwt {
+			let elementPath = claim.path.value.map(\.description)
+			return ("", RequestItem(elementPath: elementPath, intentToRetain: false, isOptional: false))
+		}
+		return nil
+	}
+
 	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
 	/// dataFormats: map of document-id to data format
 	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
@@ -105,11 +136,10 @@ class Openid4VpUtils {
 			let formatRequested: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
 			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
 			let docType = filterValue ?? inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let id = idsToDocTypes.first { Openid4VpUtils.vctToDocTypeMatch($1, docType) && dataFormats[$0] == formatRequested }?.key ?? ""
 			let pathRx = formatRequested == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
 			var nsItems: [String: [RequestItem]] = [:]
 			for field in inputDescriptor.constraints.fields {
-				guard let pair =  Self.parseField(field, displayNames: docDisplayNames[id], pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
+				guard let pair =  Self.parseField(field, pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
 				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
 				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
 			}
@@ -118,16 +148,12 @@ class Openid4VpUtils {
 		return (requestItems, formatsRequested, inputDescriptorMap)
 	}
 
-	/// parse field and return (namespace, RequestItem) pair for CBOR format
-	static func parseField(_ field: Field, displayNames: [String: [String: String]]??, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
+	/// parse field and return (namespace, RequestItem) pair
+	static func parseField(_ field: Field, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
 		guard let path = field.paths.first else { return nil }
 		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
 		let elementPath = nsItemPair.1.components(separatedBy: ".")
-		let rootPathComponent = elementPath.first!
-		// displayNames for nested elements: todo
-		let rootDisplayName = displayNames??[nsItemPair.0]?[rootPathComponent] ?? rootPathComponent // currently only first level
-		let displayNames = [rootDisplayName] + Array(repeating: nil, count: elementPath.count-1)
-		return (nsItemPair.0, RequestItem(elementPath: elementPath, displayNames: displayNames, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
+		return (nsItemPair.0, RequestItem(elementPath: elementPath, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
 	}
 
 	/// parse path and return (namespace, itemIdentifier) pair for jwt format
@@ -156,7 +182,7 @@ class Openid4VpUtils {
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
 		let allPaths = try sdJwt.disclosedPaths()
 		let requestPaths = requestItems.map(\.elementPath)
-		let query = Set(allPaths.filter { requestPaths.contains($0.tokenArray) })
+		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.tokenArray) }) })
 		if query.isEmpty { throw WalletError(description: "No items to present found") }
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
@@ -205,3 +231,21 @@ extension CoseEcCurve {
 	}
 }
 
+
+extension CredentialQuery {
+	public var docType: String? {
+		let metaDocType = meta?.dictionaryObject?.first?.value
+		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
+		return docType
+	}
+
+	public var dataFormat: DocDataFormat {
+		format.format == "mso_mdoc"  ? .cbor : .sdjwt
+	}
+}
+
+extension DCQL {
+	public func findQuery(id: String) -> CredentialQuery? {
+		credentials.first { $0.id.value == id }
+	}
+}

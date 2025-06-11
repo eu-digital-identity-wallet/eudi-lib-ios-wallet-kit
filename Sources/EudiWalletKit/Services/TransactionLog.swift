@@ -65,13 +65,13 @@ public struct TransactionLog: Sendable, Codable {
 	}
 }
 
-public enum TransactionLogData {
+public enum TransactionLogData: Sendable {
 	case presentation(log: PresentationLogData)
 	case issuance //todo
 	case signing //todo
 }
 
-public struct PresentationLogData {
+public struct PresentationLogData: Sendable {
 	public let timestamp: Date
 	public let status: TransactionLog.Status
 	public let relyingParty: TransactionLog.RelyingParty
@@ -80,14 +80,15 @@ public struct PresentationLogData {
 	public init(_ transactionLog: TransactionLog, uiCulture: String?) {
 		timestamp = Date(timeIntervalSince1970: TimeInterval(transactionLog.timestamp))
 		status = transactionLog.status
-		relyingParty = transactionLog.relyingParty ?? TransactionLog.RelyingParty(name: "", isVerified: false, certificateChain: [], readerAuth: nil)
+		relyingParty = transactionLog.relyingParty ?? TransactionLog.RelyingParty(name: "Unidentified Relying Party", isVerified: false, certificateChain: [], readerAuth: nil)
 		documents = TransactionLogUtils.parseDocClaimsDecodables(transactionLog, uiCulture: uiCulture)
 	}
 }
 
 struct VpResponsePayload: Codable {
 	let verifiable_presentations: [String]
-	let presentation_submission: PresentationSubmission
+	let presentation_submission: PresentationSubmission? // if presentation definition query
+	let data_formats: [DocDataFormat]? // if dcql query
 	let transaction_data: [TransactionData]?
 }
 
