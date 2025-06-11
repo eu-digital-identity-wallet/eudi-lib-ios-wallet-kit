@@ -1,3 +1,41 @@
+## v0.12.2
+ ### Modified issueDocumentsByOfferUrl method
+ 
+ ```swift
+	/// Issue documents by offer URI.
+	/// - Parameters:
+	///   - offerUri: url with offer
+	///   - docTypes: offered doc models available to be issued. Contains key options (secure are name and other options)
+	///   - txCodeValue: Transaction code given to user (if available)
+	///   - promptMessage: prompt message for biometric authentication (optional)
+	/// - Returns: Array of issued and stored documents
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+ ```
+
+ Example usage:
+
+  ```swift
+ // When resolving an offer, key options are now included
+ let offer = try await wallet.resolveOfferUrlDocTypes(uriOffer: offerUrl)
+ for docModel in offer.docModels {
+	// use recommended key options or modify them
+	 let docTypes = offer.docModels.map { $0.copy(keyOptions: KeyOptions(credentialPolicy: .oneTimeUse, batchSize: 2))
+     // Issue with optimal settings
+     let newDocs = try await wallet.issueDocumentsByOfferUrl(offerUri: offerUrl, docTypes: docTypes, txCodeValue: txCode)
+ }
+ ```
+
+### `OfferedDocModel` struct enhancements
+ 
+ #### Added properties:
+ - `identifier: String?` - Issuer configuration identifier for the credential
+ - `keyOptions: KeyOptions` - Default key options (batch size and credential policy) recommended by the issuer
+ 
+ #### Updated computed property:
+ - `docTypeOrVctOrScope` renamed to `docTypeOrVctOrScope` - Now returns docType, vct, or scope in priority order
+ 
+
+
 ## v0.12.1
 
  ### `EudiWallet` added method: `public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts?`
@@ -22,18 +60,6 @@
  ```swift
  let keyOptions = try await wallet.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
  let document = try await wallet.issueDocument(docType: docType, scope: scope, identifier: identifier, keyOptions: keyOptions)
- ```
-
- ### `OfferedDocModel` struct enhancement
- Added `defaultKeyOptions` property to the `OfferedDocModel` struct. This property contains the default key options (batch size and credential policy) recommended by the issuer for the specific credential configuration. When processing credential offers, this property provides the key settings without requiring a separate call to `getDefaultKeyOptions`.
-
- ```swift
- // When resolving an offer, defaultKeyOptions are now included
- let offer = try await wallet.resolveOfferUrlDocTypes(uriOffer: offerUrl)
- for docModel in offer.docModels {
-     // Use the issuer's recommended key options
-     let keyOptions = docModel.defaultKeyOptions
- }
  ```
 
  ### `OfferedDocModel` removed method: `getRemainingCredentialsCount`
@@ -536,7 +562,7 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 - Refactor to support IssuerSigned CBOR structure [iOS] ([#53](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/53)) via [@phisakel](https://github.com/phisakel)a [@phisakel](https://github.com/phisakel)
 - Changelog.md update ([#51](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/51)) via [@phisakel](https://github.com/phisakel)
 - Vci offer fix for filtering resolved identifiers ([#50](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/50)) via [@phisakel](https://github.com/phisakel)
-- Support mdoc Authentication for OpenId4Vp ([#46](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/46)) via [@phisakel](https://github.com/phisakel)/phisakel)
+- Support mdoc Authentication for OpenId4Vp ([#46](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/46)) via [@phisakel](https://github.com/phisakel)
 - OpenID4VCI: Allow partial issuing when some documents fail to issue ([#48](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/48)) via [@phisakel](https://github.com/phisakel)
 - Issuing - Support for credential offer ([#45](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/45)) via [@phisakel](https://github.com/phisakel).com/phisakel)
 - Support OpenID4VCI credential offer (resolution of credential offer, issuing of specific doc types) ([#44](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/44)) via [@phisakel](https://github.com/phisakel)ithub.com/phisakel)
@@ -556,7 +582,7 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 - Check if iaca variable is nil, refactor to use multiple device private keys ([#23](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/23)) via [@phisakel](https://github.com/phisakel)
 - Update README.md ([#25](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/25)) via [@vkanellopoulos](https://github.com/vkanellopoulos)- Update SECURITY.md ([#22](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/22)) via [@vkanellopoulos](https://github.com/vkanellopoulos)- Use subjectDistinguishedName for openID4vp verifier, update packages ([#20](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/20)) via [@phisakel](https://github.com/phisakel)- Fix for verifier name ([#19](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/19)) via [@phisakel](https://github.com/phisakel)- Reader auth for openid4vp, readme overview ([#18](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/18)) via [@phisakel](https://github.com/phisakel)
 - SendResponse takes an onSuccess callback function ([#17](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/17)) via [@phisakel](https://github.com/phisakel)
-- Add BlueECC dependency and update eudi-lib-ios-siop-openid4vp-swift version ([#16](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/16)) via [@phisakel](https://github.com/phisakel)
+- Add BlueECC dependency and update eudi-lib-ios-siop-openid4vp version ([#16](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/16)) via [@phisakel](https://github.com/phisakel)
 - OpenID4VciRedirectUri public property in wallet kit ([#15](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/15)) via [@phisakel](https://github.com/phisakel)
 - Changes for Secure Enclave use ([#14](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/14)) via [@phisakel](https://github.com/phisakel)
 - Fixes after updating OpenID4VCI library ([#13](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/13)) via [@phisakel](https://github.com/phisakel)

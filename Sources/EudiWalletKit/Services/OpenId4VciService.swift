@@ -27,7 +27,7 @@ import SwiftCBOR
 import JOSESwift
 
 public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
-	let issueReq: IssueRequest
+	var issueReq: IssueRequest
 	let credentialIssuerURL: String
 	let uiCulture: String?
 	var bindingKeys: [BindingKey]!
@@ -68,6 +68,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return bindingKey
 	}
 
+	func createKeyBatch() async throws {
+		_ = try await issueReq.createKeyBatch()
+	}
+
 	static func removeOfferFromMetadata(offerUri: String) {
 		Self.metadataCache.removeValue(forKey: offerUri)
 	}
@@ -105,11 +109,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 
-	func getDefaultKeyOptions(batchCredentialIssuance: BatchCredentialIssuance?, policy: Policy?) -> KeyOptions {
-		var batchCredentialIssuanceSize = if let batchCredentialIssuance { batchCredentialIssuance.batchSize } else { 1 }
-		if let policyBatchSize = policy?.batchSize, policyBatchSize < batchCredentialIssuanceSize { batchCredentialIssuanceSize = policyBatchSize }
-		let credentialPolicy: CredentialPolicy = if let oneTimeUse = policy?.oneTimeUse { oneTimeUse ? .oneTimeUse : .rotateUse } else { .rotateUse }
-		return KeyOptions(credentialPolicy: credentialPolicy, batchSize: batchCredentialIssuanceSize)
+	func getDefaultKeyOptions(batchCredentialIssuance: BatchCredentialIssuance?) -> KeyOptions {
+		let batchCredentialIssuanceSize = if let batchCredentialIssuance { batchCredentialIssuance.batchSize } else { 1 }
+		return KeyOptions(credentialPolicy: .rotateUse, batchSize: batchCredentialIssuanceSize)
 	}
 
 	func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
@@ -201,10 +203,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	func getCredentialConfiguration(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, scope: String?, batchCredentialIssuance: BatchCredentialIssuance?) throws -> CredentialConfiguration {
 			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
 			logger.info("msoMdoc with scope \(scope), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: msoMdocConf.docType, vct: nil, scope: scope, credentialSigningAlgValuesSupported: msoMdocConf.proofTypesSupported?["jwt"]?.algorithms ?? [], issuerDisplay: issuerDisplay.map(\.displayMetadata), display: msoMdocConf.display.map(\.displayMetadata), claims: msoMdocConf.claims, format: .cbor, defaultKeyOptions: getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance, policy: msoMdocConf.policy))
+			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: msoMdocConf.docType, vct: nil, scope: scope, credentialSigningAlgValuesSupported: msoMdocConf.proofTypesSupported?["jwt"]?.algorithms ?? [], issuerDisplay: issuerDisplay.map(\.displayMetadata), display: msoMdocConf.display.map(\.displayMetadata), claims: msoMdocConf.claims, format: .cbor, defaultKeyOptions: getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance))
 		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, sdJwtVc.scope == scope || scope == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
 			logger.info("sdJwtVc with scope \(scope), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: scope, credentialSigningAlgValuesSupported: sdJwtVc.proofTypesSupported?["jwt"]?.algorithms ?? [], issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.display.map(\.displayMetadata), claims: sdJwtVc.claims, format: .sdjwt, defaultKeyOptions: getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance, policy: nil))
+			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: scope, credentialSigningAlgValuesSupported: sdJwtVc.proofTypesSupported?["jwt"]?.algorithms ?? [], issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.display.map(\.displayMetadata), claims: sdJwtVc.claims, format: .sdjwt, defaultKeyOptions: getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance))
 		}
 		logger.error("No credential for docType \(docType ?? scope ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.keys)")
 		throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? scope ?? identifier ?? "")")
@@ -212,8 +214,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func getCredentialOfferedModels(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], batchCredentialIssuance: BatchCredentialIssuance?) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
 			let credentialInfos = credentialsSupported.compactMap {
-				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let dko = getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance, policy: msoMdocCred.policy), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, vct: nil, scope: scope, displayName: msoMdocCred.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported, defaultKeyOptions: dko) { (identifier: $0.key, scope: scope, offered: offered) }
-				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let dko = getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance, policy: nil), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, vct: sdJwtVc.vct, scope: scope, displayName: sdJwtVc.display.map(\.displayMetadata).getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, defaultKeyOptions: dko) { (identifier: $0.key, scope: scope, offered: offered) }
+				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let dko = getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, vct: nil, scope: scope, identifier: $0.key.value, displayName: msoMdocCred.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported, keyOptions: dko) { (identifier: $0.key, scope: scope, offered: offered) }
+				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let dko = getDefaultKeyOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, vct: sdJwtVc.vct, scope: scope, identifier: $0.key.value, displayName: sdJwtVc.display.map(\.displayMetadata).getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, keyOptions: dko) { (identifier: $0.key, scope: scope, offered: offered) }
 				else { nil } }
 			return credentialInfos
 	}
@@ -292,9 +294,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		logger.info("Credential issued with format \(format ?? "unknown")")
 		let credData: [(Data?, String?)] = try credentials.flatMap {
 		if case let .string(str) = $0  {
-			// logger.info("Issued credential data:\n\(strBase64)")
+			// logger.info("Issued credential data:\n\(str)")
 			return [(Data(base64URLEncoded: str), str)]
 		} else if case let .json(json) = $0, json.type == .array, json.first != nil {
+			// logger.info("Issued credential data:\n\(json.first!.1["credential"].stringValue)")
 			return json.map { j in let str = j.1["credential"].stringValue; return (Data(base64URLEncoded: str), str) }
 		} else {
 			throw WalletError(description: "Invalid credential")
