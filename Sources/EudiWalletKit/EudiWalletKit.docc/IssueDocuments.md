@@ -14,22 +14,18 @@ When the document docType to be issued use the ``EudiWallet/issueDocument(docTyp
 
 __Important Notes__:
 
-- Currently, only mso_mdoc format is supported
 - For the 'SecureEnclave' secure area, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
 public/private key pair.
 
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
 ```swift
-wallet.openID4VciIssuerUrl = "https://issuer.eudiw.dev" 
-wallet.openID4VciClientId = "wallet-dev"
-wallet.openID4VciRedirectUri = "eudi-openid4ci://authorize/" 
 do {
-	let doc = try await userWallet.: EuPidModel.euPidDocType)
-	// document has been added to wallet storage, you can display it
+  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, keyOptions: KeyOptions(secureAreaName: "SecureEnclave", credentialPolicy: .oneTimeUse, batchSize: 5)
+  // document has been added to wallet storage, you can display it
 }
 catch {
-	// display error
+  // display error
 }
 ```
 
@@ -44,25 +40,31 @@ You can also issue a document by passing configuration `identifier` parameter th
 
 ### Resolving Credential offer
 
-The library provides the ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)`` method that resolves the credential offer URI.
-The method returns the resolved ``OfferedIssuanceModel`` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
+The library provides the `resolveOfferUrlDocTypes(uriOffer:)` method that resolves the credential offer URI.
+The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
 user.
 
 The following example shows how to resolve a credential offer:
 
 ```swift
  func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer)
-	}
+    return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer)
+  }
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
-
 The following example shows how to issue documents by offer URL:
-```swift
- let documents = try await walletController.issueDocumentsByOfferUrl(offerUri: uri,  docTypes: docOffers, txCodeValue: txCodeValue )
-```
+  ```swift
+ // When resolving an offer, key options are now included
+ let offer = try await wallet.resolveOfferUrlDocTypes(uriOffer: offerUrl)
+ for docModel in offer.docModels {
+	// use recommended key options or modify them
+	 let docTypes = offer.docModels.map { $0.copy(keyOptions: KeyOptions(credentialPolicy: .oneTimeUse, batchSize: 2))
+     // Issue with optimal settings
+     let newDocs = try await wallet.issueDocumentsByOfferUrl(offerUri: offerUrl, docTypes: docTypes, txCodeValue: txCode)
+ }
+ ```
 
 ### Authorization code flow
 
