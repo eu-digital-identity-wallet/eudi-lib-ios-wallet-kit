@@ -22,17 +22,7 @@ let wallet = try! EudiWallet(serviceName: "wallet_dev_ui",
 
 For each document type, the wallet developer has the flexibility to define specific key creation parameters, including the [secure area name](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securearea/name-1uugf), [curve type](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/coseeccurve), [key access control](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/keyaccesscontrol) and [key unlock policy](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/keyaccessprotection).
 
-Specifically:
 
-- The ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` has been extended to support an
-additional [keyOptions](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/keyoptions) optional parameter to specify the secure area name and other key options for the key creation. 
-- The ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` has been extended to support a `docTypeKeyOptions` to specify the secure area name and other key options for each doc type.
-
-```swift
-// For keychain saved keys, the iOS will automatically present a biometric or user PIN screen to authorize key usage for PID documents
-let docTypeKeyOptions: [EuPidModel.euPidDocType : KeyOptions(secureAreaName: "Software", accessControl: [.requireUserPresence])]
-let issuedDocs = try await wallet.issueDocumentsByOfferUrl(offerUri: uriOffered, docTypes: docIssueOffered.docModels, docTypeKeyOptions: docTypeKeyOptions)
-```
 ### Secure key usage on presentation
 
 During presentation with BLE proximity or OpenID4VP, the private key is used to create a device signature. The secure area is automatically used to sign the device response. An unlock key hook is provided via the [unlockKey](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/securearea/unlockkey(id:)-19q3g) method which is internally called to get the optional `unlockData`. 
