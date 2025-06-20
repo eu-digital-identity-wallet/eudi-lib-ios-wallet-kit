@@ -30,7 +30,6 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	var issueReq: IssueRequest
 	let credentialIssuerURL: String
 	let uiCulture: String?
-	var bindingKeys: [BindingKey]!
 	let logger: Logger
 	let config: OpenId4VCIConfig
 	static var metadataCache = [String: CredentialOffer]()
@@ -47,7 +46,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		self.config = config
 	}
 
-	func initSecurityKeys(algSupported: Set<String>) async throws {
+	func initSecurityKeys(algSupported: Set<String>) async throws -> [BindingKey] {
 		let crvType = issueReq.keyOptions?.curve ?? type(of: issueReq.secureArea).defaultEcCurve
 		let secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm = crvType.defaultSigningAlgorithm
 		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
@@ -56,7 +55,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 		let publicCoseKeys = try await issueReq.createKeyBatch()
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
-		bindingKeys = try publicCoseKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: secureAreaSigningAlg, unlockData: unlockData, index: $0.offset) }
+		let bindingKeys = try publicCoseKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: secureAreaSigningAlg, unlockData: unlockData, index: $0.offset) }
+		return bindingKeys
 	}
 
 	func createBindingKey(_ publicCoseKey: CoseKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int) throws -> BindingKey {
@@ -132,7 +132,6 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		guard let offer = Self.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		let credentialInfos = docTypeModels.compactMap { try? getCredentialConfiguration(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: $0.credentialConfigurationIdentifier, docType: $0.docType, scope: $0.scope, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance) }
 		guard credentialInfos.count > 0, credentialInfos.count == docTypeModels.count else { throw WalletError(description: "Missing Credential identifiers") }
-		try await initSecurityKeys(algSupported: Set(credentialInfos.flatMap { $0.credentialSigningAlgValuesSupported }))
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
@@ -142,7 +141,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return (authorizedOutcome, credentialInfos)
 	}
 
-	func issueDocumentByOfferUrl(offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, promptMessage: String? = nil) async throws -> IssuanceOutcome? {
+	func issueDocumentByOfferUrl(offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, bindingKeys: [BindingKey], promptMessage: String? = nil) async throws -> IssuanceOutcome? {
 		if case .presentation_request(let url) = authorizedOutcome, let authRequested {
 			logger.info("Dynamic issuance request with url: \(url)")
 			let uuid = UUID().uuidString
@@ -154,7 +153,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
 			logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
 			let issuer = try getIssuer(offer: offer)
-			let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration)
+			let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys)
 			// logger.info("Credential str:\n\(str)")
 			return res
 		} catch {
@@ -180,7 +179,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		if let authorizationServer = metaData.authorizationServers?.first {
 			let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
 			let configuration = try getCredentialConfiguration(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope, batchCredentialIssuance: metaData.batchCredentialIssuance)
-			try await initSecurityKeys(algSupported: Set(configuration.credentialSigningAlgValuesSupported))
+			let bindingKeys = try await initSecurityKeys(algSupported: Set(configuration.credentialSigningAlgValuesSupported))
 			let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.configurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
 			// Authorize with auth code flow
 			let issuer = try getIssuer(offer: offer)
@@ -193,7 +192,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				return (outcome, configuration.format)
 			}
 			guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
-			let outcome = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration)
+			let outcome = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys)
 			return (outcome, configuration.format)
 		} else {
 			throw WalletError(description: "Invalid authorization server")
@@ -259,7 +258,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 
-	private func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
+	private func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey]) async throws -> IssuanceOutcome {
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
 
@@ -323,8 +322,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(request: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil))).get()
-		try await initSecurityKeys(algSupported: Set(model.configuration.credentialSigningAlgValuesSupported))
-		let res = try await submissionUseCase(authorized, issuer: issuer, configuration: model.configuration)
+		let bindingKeys = try await initSecurityKeys(algSupported: Set(model.configuration.credentialSigningAlgValuesSupported))
+		let res = try await submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys)
 		Self.metadataCache.removeValue(forKey: model.metadataKey)
 		return res
 	}
