@@ -1,3 +1,17 @@
+## v0.12.4
+### `EudiWallet` property addition
+- Added `verifierRedirectUri: String?` property to `EudiWallet`.
+  - This property stores the OpenID4VP verifier redirect URI, used for redirectUri clients in OpenID4VP flows.
+ 
+### Fix to delete one-time credentials for presented documents only
+- Updated the logic to ensure that only one-time credentials for documents that have been presented are deleted.
+
+### Fix to `issueDocumentsByOfferUrl` crash
+- When multiple documents were issued many times the 'Fatal error: Unexpectedly found nil while unwrapping an Optional value' occurred.
+
+## v0.12.3
+ - Use exact versions for dependencies 
+
 ## v0.12.2
  ### Modified issueDocumentsByOfferUrl method
  
@@ -63,6 +77,7 @@
  ```
 
  ### `OfferedDocModel` removed method: `getRemainingCredentialsCount`
+
 
 ## v0.12.0
 
@@ -566,7 +581,7 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 - OpenID4VCI: Allow partial issuing when some documents fail to issue ([#48](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/48)) via [@phisakel](https://github.com/phisakel)
 - Issuing - Support for credential offer ([#45](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/45)) via [@phisakel](https://github.com/phisakel).com/phisakel)
 - Support OpenID4VCI credential offer (resolution of credential offer, issuing of specific doc types) ([#44](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/44)) via [@phisakel](https://github.com/phisakel)ithub.com/phisakel)
-- Chore: Update dependencies for udi-lib-ios-iso18013-data-transfer to … ([#43](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/43)) via [@phisakel](https://github.com/phisakel)isakel)
+- Chore: Update dependencies for udi-lib-ios-iso18013-data-transfer to … ([#43](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/43)) via [@phisakel](https://github.com/phisakel)
 - Return the QR code to the device engagement in string representation ([#42](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/42)) via [@akarabashov](https://github.com/akarabashov)](https://github.com/phisakel)
 - Centralization of sec workflows ([#21](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/21)) via [@christosservosNCIN](https://github.com/christosservosNCIN)
 - [fix] sdjwt case fix ([#36](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/36)) via [@dtsiflit](https://github.com/dtsiflit)
