@@ -48,6 +48,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
 	/// OpenID4VP verifier api URL (used for preregistered clients)
 	public var verifierApiUri: String?
+	/// OpenID4VP verifier redirect URI (used for redirectUri clients)
+	public var verifierRedirectUri: String?
 	/// OpenID4VP verifier legal name (used for preregistered clients)
 	public var verifierLegalName: String?
 	/// OpenID4VCI issuer URL
@@ -73,6 +75,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - trustedReaderCertificates: An array of trusted reader certificates. Optional.
 	///   - userAuthenticationRequired: A boolean indicating if user authentication is required when issuing or presenting a document. Defaults to `true`.
 	///   - verifierApiUri: The URI for the default verifier API. Optional.
+	///   - verifierRedirectUri: Verifier redirect URI. Optional.
 	///   - openID4VciIssuerUrl: The URL for the default OpenID4VCI issuer. Optional.
 	///   - openID4VciConfig: The configuration for OpenID4VCI. Optional.
 	///   - urlSession: The URL session to use for network requests. Optional.
@@ -494,7 +497,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				let bleSvc = try BlePresentationService(parameters: parameters)
 				return PresentationSession(presentationService: bleSvc, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 			case .openid4vp(let qrCode):
-				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri, openId4VpVerifierLegalName: self.verifierLegalName, urlSession: urlSession)
+				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri, openId4VpVerifierLegalName: self.verifierLegalName, openId4VpVerifierRedirectUri: self.verifierRedirectUri, urlSession: urlSession)
 				return PresentationSession(presentationService: openIdSvc, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 			default:
 				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
