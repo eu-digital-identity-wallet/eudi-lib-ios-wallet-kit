@@ -117,55 +117,60 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf())
 			switch await siopOpenId4Vp.authorize(url: openid4VPURI)  {
-			case .notSecured(data: _):
-				throw PresentationSession.makeError(str: "Not secure request received.")
+			case .notSecured(data: let rrd):
+				return try handleRequestData(rrd)
 			case .invalidResolution(error: let error, dispatchDetails: let details):
 				logger.error("Invalid resolution: \(error.localizedDescription)")
 				if let details { logger.error("Details: \(details)") }
 				throw PresentationSession.makeError(str: "Invalid resolution: \(error.localizedDescription)")
-			case let .jwt(request: resolvedRequestData):
-				self.resolvedRequestData = resolvedRequestData
-				switch resolvedRequestData {
-				case let .vpToken(vp):
-					if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv)  {
-						logger.info("Found jwks public key with curve \(crv)")
-						eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
-					}
-					let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
-					vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
-					mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
-					sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId,
-						responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
-					logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
-					var requestItems: RequestItems?; var deviceRequestBytes: Data?
-					switch vp.presentationQuery {
-						case let .byPresentationDefinition(pd):
-						presentationDefinition = pd
-						deviceRequestBytes = try? JSONEncoder().encode(pd)
-						let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(pd, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
-						formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
-						case let .byDigitalCredentialsQuery(dcql):
-						self.dcql = dcql
-						deviceRequestBytes = try? JSONEncoder().encode(dcql)
-						let (items, fmtsReq, imap) = try Openid4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
-						formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
-					}
-					self.transactionData = vp.transactionData
-					guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-					var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
-					logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
-					if let ln = resolvedRequestData.legalName { result.readerLegalName = ln }
-					if let readerCertificateIssuer {
-						result.readerAuthValidated = readerAuthValidated
-						result.certificateChain = certificateChain
-						result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
-						result.readerCertificateValidationMessage = readerCertificateValidationMessage
-					}
-					TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
-					return result
-				default: throw PresentationSession.makeError(str: "SiopAuthentication request received, not supported yet.")
-				}
+			case let .jwt(request: rrd):
+				return try handleRequestData(rrd)
 			}
+	}
+
+	func handleRequestData(_ rrd: ResolvedRequestData?) throws -> UserRequestInfo {
+		guard let rrd else { throw PresentationSession.makeError(str: "Unexpected error") }
+		self.resolvedRequestData = rrd
+		switch rrd {
+		case let .vpToken(vp):
+			if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv)  {
+				logger.info("Found jwks public key with curve \(crv)")
+				eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
+			}
+			let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
+			vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
+			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
+			sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId,
+				responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
+			logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
+			var requestItems: RequestItems?; var deviceRequestBytes: Data?
+			switch vp.presentationQuery {
+				case let .byPresentationDefinition(pd):
+				presentationDefinition = pd
+				deviceRequestBytes = try? JSONEncoder().encode(pd)
+				let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(pd, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
+				formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
+				case let .byDigitalCredentialsQuery(dcql):
+				self.dcql = dcql
+				deviceRequestBytes = try? JSONEncoder().encode(dcql)
+				let (items, fmtsReq, imap) = try Openid4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
+				formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
+			}
+			self.transactionData = vp.transactionData
+			guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
+			var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
+			logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
+			if let ln = rrd.legalName { result.readerLegalName = ln }
+			if let readerCertificateIssuer {
+				result.readerAuthValidated = readerAuthValidated
+				result.certificateChain = certificateChain
+				result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
+				result.readerCertificateValidationMessage = readerCertificateValidationMessage
+			}
+			TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
+			return result
+		default: throw PresentationSession.makeError(str: "SiopAuthentication request received, not supported yet.")
+		}
 	}
 
 	fileprivate func makeCborDocs() {
