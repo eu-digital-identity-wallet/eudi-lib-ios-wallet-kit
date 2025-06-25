@@ -116,20 +116,20 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public func receiveRequest() async throws -> UserRequestInfo {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf())
-			switch await siopOpenId4Vp.authorize(url: openid4VPURI)  {
-			case .notSecured(data: let rrd):
-				return try handleRequestData(rrd)
-			case .invalidResolution(error: let error, dispatchDetails: let details):
-				logger.error("Invalid resolution: \(error.localizedDescription)")
-				if let details { logger.error("Details: \(details)") }
-				throw PresentationSession.makeError(str: "Invalid resolution: \(error.localizedDescription)")
-			case let .jwt(request: rrd):
-				return try handleRequestData(rrd)
-			}
+		switch await siopOpenId4Vp.authorize(url: openid4VPURI)  {
+		case .notSecured(data: let rrd):
+			if case let .redirectUri(clientId: uri) = rrd.client, verifierRedirectUrl?.host() == uri.host() { return try handleRequestData(rrd) }
+			else { throw PresentationSession.makeError(str: "Not secured request") }
+		case .invalidResolution(error: let error, dispatchDetails: let details):
+			logger.error("Invalid resolution: \(error.localizedDescription)")
+			if let details { logger.error("Details: \(details)") }
+			throw PresentationSession.makeError(str: "Invalid resolution: \(error.localizedDescription)")
+		case let .jwt(request: rrd):
+			return try handleRequestData(rrd)
+		}
 	}
 
-	func handleRequestData(_ rrd: ResolvedRequestData?) throws -> UserRequestInfo {
-		guard let rrd else { throw PresentationSession.makeError(str: "Unexpected error") }
+	func handleRequestData(_ rrd: ResolvedRequestData) throws -> UserRequestInfo {
 		self.resolvedRequestData = rrd
 		switch rrd {
 		case let .vpToken(vp):
@@ -299,6 +299,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.certificateChain = data
 		return result
 	}
+	
+	var verifierRedirectUrl: URL? { if let openId4VpVerifierRedirectUri, let uri = URL(string: openId4VpVerifierRedirectUri) { uri } else { nil } }
 
 	/// OpenId4VP wallet configuration
 	func getWalletConf() -> SiopOpenId4VPConfiguration? {
@@ -311,9 +313,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 		}
-		if let verifierRedirectUri = openId4VpVerifierRedirectUri, let uri = URL(string: verifierRedirectUri) {
-			supportedClientIdSchemes.append(.redirectUri(clientId: uri))
-		}
+		if let verifierRedirectUrl { supportedClientIdSchemes.append(.redirectUri(clientId: verifierRedirectUrl)) }
 		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [], session: urlSession)
 		return res
 	}
