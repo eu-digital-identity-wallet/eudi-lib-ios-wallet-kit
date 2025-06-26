@@ -301,6 +301,7 @@ class Openid4VpUtils {
 		let header: JWSRegisteredFieldsHeader
 		if let mdocGeneratedNonce {
 			// According to ISO 18013-7, section B.4.3.3.2, set apu to base64url-encoded mdocGeneratedNonce
+			// The mdocGeneratedNonce is already base64url-encoded, so we use it directly
 			let apuData = mdocGeneratedNonce.data(using: .utf8)
 			header = MdocJWSHeaderImpl(algorithm: signAlg, agreementPartyUInfo: apuData)
 		} else {

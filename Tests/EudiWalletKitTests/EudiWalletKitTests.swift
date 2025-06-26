@@ -95,10 +95,12 @@ struct EudiWalletKitTests {
 	}
 
 	@Test func testMdocJWSHeaderImplIncludesApuField() throws {
-		let testNonce = "testNonce123"
-		let apuData = testNonce.data(using: .utf8)!
+		// Simulate the actual mdocGeneratedNonce which is base64url-encoded
+		let randomBytes = Data([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+		let mdocGeneratedNonce = randomBytes.base64URLEncodedString()
+		let apuData = mdocGeneratedNonce.data(using: .utf8)!
 		
-		// Create header with apu field
+		// Create header with apu field (as done in getSdJwtPresentation)
 		let header = MdocJWSHeaderImpl(
 			algorithm: .ES256,
 			agreementPartyUInfo: apuData
@@ -116,11 +118,12 @@ struct EudiWalletKitTests {
 		// Verify that the apu field is present in the encoded JSON
 		#expect(json["apu"] != nil, "apu field should be present in encoded JSON")
 		
-		// Decode the base64 apu field and verify it matches our test nonce
+		// The apu field in the JWT will be base64url-encoded by the JWT library
+		// So we expect the final JWT to contain the mdocGeneratedNonce value after decoding
 		if let apuBase64 = json["apu"] as? String {
 			let decodedApuData = Data(base64Encoded: apuBase64)
 			let decodedNonce = String(data: decodedApuData!, encoding: .utf8)
-			#expect(decodedNonce == testNonce, "Decoded apu should match original test nonce")
+			#expect(decodedNonce == mdocGeneratedNonce, "Decoded apu should match the original mdocGeneratedNonce")
 		}
 	}
 
