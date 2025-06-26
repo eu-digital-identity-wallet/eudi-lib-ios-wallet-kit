@@ -47,21 +47,84 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func initSecurityKeys(algSupported: Set<String>) async throws -> [BindingKey] {
-		let crvType = issueReq.keyOptions?.curve ?? type(of: issueReq.secureArea).defaultEcCurve
-		let secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm = crvType.defaultSigningAlgorithm
+		// Convert credential issuer supported algorithms to JWSAlgorithm types
 		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
-		guard !algTypes.isEmpty, let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue), algTypes.contains(algType) else {
-			throw WalletError(description: "Unable to find supported signing algorithm \(secureAreaSigningAlg)")
+		guard !algTypes.isEmpty else {
+			throw WalletError(description: "No valid signing algorithms found in credential metadata: \(algSupported)")
 		}
+		
+		// Find a compatible signing algorithm that both the secure area and credential issuer support
+		let selectedAlgorithm = try findCompatibleSigningAlgorithm(algSupported: algTypes)
+		
 		let publicCoseKeys = try await issueReq.createKeyBatch()
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
-		let bindingKeys = try publicCoseKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: secureAreaSigningAlg, unlockData: unlockData, index: $0.offset) }
+		let bindingKeys = try publicCoseKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset) }
 		return bindingKeys
+	}
+	
+	/// Find a signing algorithm that is supported by both the secure area and the credential issuer
+	private func findCompatibleSigningAlgorithm(algSupported: [JWSAlgorithm.AlgorithmType]) throws -> MdocDataModel18013.SigningAlgorithm {
+		// Define the secure area's capabilities - all standard curves and algorithms it can support
+		let secureAreaCapabilities: [MdocDataModel18013.SigningAlgorithm] = [.ES256, .ES384, .ES512, .EDDSA]
+		
+		// Check if user has specified a preferred curve in keyOptions
+		if let preferredCurve = issueReq.keyOptions?.curve {
+			let preferredAlgorithm = preferredCurve.defaultSigningAlgorithm
+			let preferredAlgType = mapToJWSAlgorithmType(preferredAlgorithm)
+			if algSupported.contains(preferredAlgType) {
+				return preferredAlgorithm
+			}
+		}
+		
+		// Otherwise, find the first compatible algorithm from the supported list
+		for algorithm in secureAreaCapabilities {
+			let algType = mapToJWSAlgorithmType(algorithm)
+			if algSupported.contains(algType) {
+				// Update the issueReq.keyOptions to use the correct curve for this algorithm
+				let compatibleCurve = getCompatibleCurve(for: algorithm)
+				updateKeyOptionsForAlgorithm(algorithm: algorithm, curve: compatibleCurve)
+				return algorithm
+			}
+		}
+		
+		throw WalletError(description: "Unable to find supported signing algorithm. Credential issuer supports: \(algSupported.map(\.rawValue)), secure area supports: \(secureAreaCapabilities.map(\.rawValue))")
+	}
+	
+	/// Get a compatible curve for the given signing algorithm
+	private func getCompatibleCurve(for algorithm: MdocDataModel18013.SigningAlgorithm) -> CoseEcCurve {
+		switch algorithm {
+		case .ES256: return .P256
+		case .ES384: return .P384
+		case .ES512: return .P521
+		case .EDDSA: return .ED25519
+		case .UNSET: fatalError("UNSET algorithm should not be used")
+		}
+	}
+	
+	/// Update the issueReq.keyOptions to use the appropriate curve for the selected algorithm
+	private func updateKeyOptionsForAlgorithm(algorithm: MdocDataModel18013.SigningAlgorithm, curve: CoseEcCurve) {
+		if issueReq.keyOptions == nil {
+			issueReq.keyOptions = KeyOptions(curve: curve, credentialPolicy: .rotateUse, batchSize: 1)
+		} else if issueReq.keyOptions?.curve == nil || issueReq.keyOptions?.curve != curve {
+			// Update the curve to match the selected algorithm
+			issueReq.keyOptions?.curve = curve
+		}
+	}
+	
+	/// Map MdocDataModel18013.SigningAlgorithm to JWSAlgorithm.AlgorithmType, handling casing differences
+	private func mapToJWSAlgorithmType(_ algorithm: MdocDataModel18013.SigningAlgorithm) -> JWSAlgorithm.AlgorithmType {
+		switch algorithm {
+		case .ES256: return .ES256
+		case .ES384: return .ES384
+		case .ES512: return .ES512
+		case .EDDSA: return .EdDSA  // Handle the casing difference: EDDSA -> EdDSA
+		case .UNSET: fatalError("UNSET algorithm should not be used")
+		}
 	}
 
 	func createBindingKey(_ publicCoseKey: CoseKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int) throws -> BindingKey {
 		let publicKey: SecKey = try publicCoseKey.toSecKey()
-		let algType = JWSAlgorithm.AlgorithmType(rawValue: secureAreaSigningAlg.rawValue)!
+		let algType = mapToJWSAlgorithmType(secureAreaSigningAlg)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, index: index, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
 		let bindingKey: BindingKey = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: config.client.id)
