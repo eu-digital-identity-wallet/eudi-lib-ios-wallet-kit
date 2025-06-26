@@ -230,7 +230,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
 					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 					let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
-					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
+					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData, mdocGeneratedNonce: mdocGeneratedNonce) else {
 						continue
 					}
 					inputToPresentations.append((inputDescrId, docId, VerifiablePresentation.generic(presented.serialisation)))

@@ -24,6 +24,7 @@ import WalletStorage
 import SwiftCBOR
 @testable import JOSESwift
 import eudi_lib_sdjwt_swift
+import JSONWebAlgorithms
 
 struct EudiWalletKitTests {
 
@@ -91,6 +92,36 @@ struct EudiWalletKitTests {
 		let ecdsaSignature = try P256.Signing.ECDSASignature(derRepresentation: signatureDataDer)
 		let keySign = try P256.Signing.PrivateKey(x963Representation: keyAgreement.x963Representation)
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
+	}
+
+	@Test func testMdocJWSHeaderImplIncludesApuField() throws {
+		let testNonce = "testNonce123"
+		let apuData = testNonce.data(using: .utf8)!
+		
+		// Create header with apu field
+		let header = MdocJWSHeaderImpl(
+			algorithm: .ES256,
+			agreementPartyUInfo: apuData
+		)
+		
+		// Verify the apu field is set correctly
+		#expect(header.agreementPartyUInfo == apuData, "agreementPartyUInfo should match the input data")
+		#expect(header.algorithm == .ES256, "Algorithm should be ES256")
+		
+		// Test JSON encoding to ensure apu field is included
+		let encoder = JSONEncoder()
+		let encodedData = try encoder.encode(header)
+		let json = try JSONSerialization.jsonObject(with: encodedData, options: []) as! [String: Any]
+		
+		// Verify that the apu field is present in the encoded JSON
+		#expect(json["apu"] != nil, "apu field should be present in encoded JSON")
+		
+		// Decode the base64 apu field and verify it matches our test nonce
+		if let apuBase64 = json["apu"] as? String {
+			let decodedApuData = Data(base64Encoded: apuBase64)
+			let decodedNonce = String(data: decodedApuData!, encoding: .utf8)
+			#expect(decodedNonce == testNonce, "Decoded apu should match original test nonce")
+		}
 	}
 
 

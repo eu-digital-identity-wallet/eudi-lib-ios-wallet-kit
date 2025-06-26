@@ -26,8 +26,110 @@ import eudi_lib_sdjwt_swift
 import WalletStorage
 import JSONWebSignature
 import JSONWebAlgorithms
+import JSONWebKey
 import SiopOpenID4VP
 import SwiftyJSON
+
+/// Custom JWS header implementation that includes the apu field for mDoc device authentication
+/// According to ISO 18013-7, section B.4.3.3.2, the mdoc shall set the apu JWT header parameter
+/// to the base64url-encoded-with-no-padding value of the mdocGeneratedNonce
+public struct MdocJWSHeaderImpl: JWSRegisteredFieldsHeader {
+	public var algorithm: SigningAlgorithm?
+	public var keyID: String?
+	public var jwkSetURL: String?
+	public var jwk: JWK?
+	public var x509URL: String?
+	public var x509CertificateChain: [String]?
+	public var x509CertificateSHA1Thumbprint: String?
+	public var x509CertificateSHA256Thumbprint: String?
+	public var type: String?
+	public var contentType: String?
+	public var critical: [String]?
+	public var base64EncodedUrlPayload: Bool?
+	public var agreementPartyUInfo: Data?
+	
+	public init(
+		algorithm: SigningAlgorithm? = nil,
+		keyID: String? = nil,
+		jwkSetURL: String? = nil,
+		jwk: JWK? = nil,
+		x509URL: String? = nil,
+		x509CertificateChain: [String]? = nil,
+		x509CertificateSHA1Thumbprint: String? = nil,
+		x509CertificateSHA256Thumbprint: String? = nil,
+		type: String? = nil,
+		contentType: String? = nil,
+		critical: [String]? = nil,
+		base64EncodedUrlPayload: Bool? = nil,
+		agreementPartyUInfo: Data? = nil
+	) {
+		self.algorithm = algorithm
+		self.keyID = keyID
+		self.jwkSetURL = jwkSetURL
+		self.jwk = jwk
+		self.x509URL = x509URL
+		self.x509CertificateChain = x509CertificateChain
+		self.x509CertificateSHA1Thumbprint = x509CertificateSHA1Thumbprint
+		self.x509CertificateSHA256Thumbprint = x509CertificateSHA256Thumbprint
+		self.type = type
+		self.contentType = contentType
+		self.critical = critical
+		self.base64EncodedUrlPayload = base64EncodedUrlPayload
+		self.agreementPartyUInfo = agreementPartyUInfo
+	}
+}
+
+extension MdocJWSHeaderImpl: Codable {
+	enum CodingKeys: String, CodingKey {
+		case algorithm = "alg"
+		case jwkSetURL = "jku"
+		case jwk
+		case keyID = "kid"
+		case x509URL = "x5u"
+		case x509CertificateChain = "x5c"
+		case x509CertificateSHA1Thumbprint = "x5t"
+		case x509CertificateSHA256Thumbprint = "x5t#S256"
+		case type = "typ"
+		case contentType = "cty"
+		case critical = "crit"
+		case base64EncodedUrlPayload = "b64"
+		case agreementPartyUInfo = "apu"
+	}
+
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encodeIfPresent(algorithm, forKey: .algorithm)
+		try container.encodeIfPresent(jwkSetURL, forKey: .jwkSetURL)
+		try container.encodeIfPresent(jwk, forKey: .jwk)
+		try container.encodeIfPresent(keyID, forKey: .keyID)
+		try container.encodeIfPresent(x509URL, forKey: .x509URL)
+		try container.encodeIfPresent(x509CertificateChain, forKey: .x509CertificateChain)
+		try container.encodeIfPresent(x509CertificateSHA1Thumbprint, forKey: .x509CertificateSHA1Thumbprint)
+		try container.encodeIfPresent(x509CertificateSHA256Thumbprint, forKey: .x509CertificateSHA256Thumbprint)
+		try container.encodeIfPresent(type, forKey: .type)
+		try container.encodeIfPresent(contentType, forKey: .contentType)
+		try container.encodeIfPresent(critical, forKey: .critical)
+		try container.encodeIfPresent(base64EncodedUrlPayload, forKey: .base64EncodedUrlPayload)
+		try container.encodeIfPresent(agreementPartyUInfo, forKey: .agreementPartyUInfo)
+	}
+
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		algorithm = try container.decodeIfPresent(SigningAlgorithm.self, forKey: .algorithm)
+		jwkSetURL = try container.decodeIfPresent(String.self, forKey: .jwkSetURL)
+		jwk = try container.decodeIfPresent(JWK.self, forKey: .jwk)
+		keyID = try container.decodeIfPresent(String.self, forKey: .keyID)
+		x509URL = try container.decodeIfPresent(String.self, forKey: .x509URL)
+		x509CertificateChain = try container.decodeIfPresent([String].self, forKey: .x509CertificateChain)
+		x509CertificateSHA1Thumbprint = try container.decodeIfPresent(String.self, forKey: .x509CertificateSHA1Thumbprint)
+		x509CertificateSHA256Thumbprint = try container.decodeIfPresent(String.self, forKey: .x509CertificateSHA256Thumbprint)
+		type = try container.decodeIfPresent(String.self, forKey: .type)
+		contentType = try container.decodeIfPresent(String.self, forKey: .contentType)
+		critical = try container.decodeIfPresent([String].self, forKey: .critical)
+		base64EncodedUrlPayload = try container.decodeIfPresent(Bool.self, forKey: .base64EncodedUrlPayload)
+		agreementPartyUInfo = try container.decodeIfPresent(Data.self, forKey: .agreementPartyUInfo)
+	}
+}
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *
@@ -179,7 +281,7 @@ class Openid4VpUtils {
 		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
 	}
 
-	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
+	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?, mdocGeneratedNonce: String?) async throws -> SignedSDJWT? {
 		let allPaths = try sdJwt.disclosedPaths()
 		let requestPaths = requestItems.map(\.elementPath)
 		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.tokenArray) }) })
@@ -195,7 +297,16 @@ class Openid4VpUtils {
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
 		}
-		let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), kbJwtPayload: JSON(payload))
+		// Create custom header with apu field for mDoc device authentication if mdocGeneratedNonce is provided
+		let header: JWSRegisteredFieldsHeader
+		if let mdocGeneratedNonce {
+			// According to ISO 18013-7, section B.4.3.3.2, set apu to base64url-encoded mdocGeneratedNonce
+			let apuData = mdocGeneratedNonce.data(using: .utf8)
+			header = MdocJWSHeaderImpl(algorithm: signAlg, agreementPartyUInfo: apuData)
+		} else {
+			header = DefaultJWSHeaderImpl(algorithm: signAlg)
+		}
+		let kbJwt: KBJWT = try KBJWT(header: header, kbJwtPayload: JSON(payload))
 		let holderPresentation = try await SDJWTIssuer.presentation(holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
 		return holderPresentation
 	}
