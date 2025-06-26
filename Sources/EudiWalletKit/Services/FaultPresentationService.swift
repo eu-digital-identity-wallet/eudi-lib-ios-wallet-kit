@@ -16,7 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 
 /// Fault presentation service. Used to communicate error state to the user
 public final class FaultPresentationService: @unchecked Sendable, PresentationService {

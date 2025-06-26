@@ -16,18 +16,18 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import MdocSecurity18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocSecurity18013
+@_implementationOnly import MdocDataTransfer18013
 import WalletStorage
-import LocalAuthentication
-import CryptoKit
+@_implementationOnly import LocalAuthentication
+@_implementationOnly import CryptoKit
 import OpenID4VCI
-import StatiumSwift
-import SwiftCBOR
-import Logging
+@_implementationOnly import StatiumSwift
+@_implementationOnly import SwiftCBOR
+@_implementationOnly import Logging
 // ios specific imports
 #if canImport(UIKit)
-import FileLogging
+@_implementationOnly import FileLogging
 import UIKit
 #endif
 

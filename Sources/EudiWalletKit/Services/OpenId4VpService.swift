@@ -17,17 +17,17 @@ Created on 04/10/2023
 */
 
 import Foundation
-import SwiftCBOR
+@_implementationOnly import SwiftCBOR
 import MdocDataModel18013
-import MdocSecurity18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocSecurity18013
+@_implementationOnly import MdocDataTransfer18013
 import WalletStorage
 import SiopOpenID4VP
 import struct SiopOpenID4VP.X509CertificateChainVerifier
 import eudi_lib_sdjwt_swift
-import JOSESwift
-import Logging
-import X509
+@_implementationOnly import JOSESwift
+@_implementationOnly import Logging
+@_implementationOnly import X509
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP specification

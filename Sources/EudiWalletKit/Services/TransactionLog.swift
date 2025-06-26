@@ -1,6 +1,6 @@
 import Foundation
-import Logging
-import XCGLogger
+@_implementationOnly import Logging
+@_implementationOnly import XCGLogger
 import MdocDataModel18013
 import SiopOpenID4VP
 import Copyable

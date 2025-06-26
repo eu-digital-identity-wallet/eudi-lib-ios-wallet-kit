@@ -15,13 +15,13 @@
  */
 
 import Foundation
-import SwiftCBOR
+@_implementationOnly import SwiftCBOR
 import MdocDataModel18013
 import WalletStorage
-import Logging
-import CryptoKit
+@_implementationOnly import Logging
+@_implementationOnly import CryptoKit
 import eudi_lib_sdjwt_swift
-import SwiftyJSON
+@_implementationOnly import SwiftyJSON
 import OpenID4VCI
 
 /// Storage manager. Provides services and view models

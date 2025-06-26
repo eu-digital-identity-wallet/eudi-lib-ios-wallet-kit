@@ -16,7 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
 
 public struct DocPresentInfo: Sendable {

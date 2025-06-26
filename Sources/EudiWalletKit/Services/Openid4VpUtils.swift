@@ -15,19 +15,19 @@
  */
 
 import Foundation
-import SwiftCBOR
-import CryptoKit
-import Logging
-import PresentationExchange
+@_implementationOnly import SwiftCBOR
+@_implementationOnly import CryptoKit
+@_implementationOnly import Logging
+@_implementationOnly import PresentationExchange
 import MdocDataModel18013
-import MdocSecurity18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocSecurity18013
+@_implementationOnly import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
 import WalletStorage
-import JSONWebSignature
-import JSONWebAlgorithms
+@_implementationOnly import JSONWebSignature
+@_implementationOnly import JSONWebAlgorithms
 import SiopOpenID4VP
-import SwiftyJSON
+@_implementationOnly import SwiftyJSON
 /**
  *  Utility class to generate the session transcript for the OpenID4VP protocol.
  *

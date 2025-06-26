@@ -16,11 +16,11 @@ limitations under the License.
 
 import Foundation
 import SwiftUI
-import Logging
+@_implementationOnly import Logging
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 import WalletStorage
-import LocalAuthentication
+@_implementationOnly import LocalAuthentication
 
 /// Presentation session
 ///

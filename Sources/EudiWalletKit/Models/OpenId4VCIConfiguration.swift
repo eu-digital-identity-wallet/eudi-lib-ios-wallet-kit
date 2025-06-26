@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import Foundation
-import JOSESwift
+@_implementationOnly import JOSESwift
 import OpenID4VCI
 
 public struct OpenId4VCIConfiguration {

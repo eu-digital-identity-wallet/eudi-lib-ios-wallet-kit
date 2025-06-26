@@ -16,7 +16,7 @@
 
 import Foundation
 import MdocDataModel18013
-import StatiumSwift
+@_implementationOnly import StatiumSwift
 
 public actor DocumentStatusService {
 	let statusIdentifier: StatusIdentifier

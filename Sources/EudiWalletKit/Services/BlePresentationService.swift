@@ -16,7 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
 

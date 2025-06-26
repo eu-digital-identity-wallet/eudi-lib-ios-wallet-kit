@@ -1,8 +1,8 @@
 import Foundation
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 import WalletStorage
-import SwiftCBOR
+@_implementationOnly import SwiftCBOR
 
 class TransactionLogUtils {
 

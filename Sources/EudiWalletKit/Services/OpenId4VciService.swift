@@ -16,15 +16,14 @@
 
 import Foundation
 import OpenID4VCI
-import JOSESwift
+@_implementationOnly import JOSESwift
 import MdocDataModel18013
-import AuthenticationServices
-import Logging
-import CryptoKit
-import Security
+@_implementationOnly import AuthenticationServices
+@_implementationOnly import Logging
+@_implementationOnly import CryptoKit
+@_implementationOnly import Security
 import WalletStorage
-import SwiftCBOR
-import JOSESwift
+@_implementationOnly import SwiftCBOR
 
 public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	var issueReq: IssueRequest

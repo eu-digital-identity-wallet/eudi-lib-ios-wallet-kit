@@ -16,7 +16,7 @@ limitations under the License.
 
 import Foundation
 import MdocDataModel18013
-import MdocDataTransfer18013
+@_implementationOnly import MdocDataTransfer18013
 
 /// [Doc Types to [Namespace to Items]] dictionary
 public typealias RequestItems = MdocDataTransfer18013.RequestItems

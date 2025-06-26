@@ -18,10 +18,10 @@ Created on 09/11/2023
 import Foundation
 import OpenID4VCI
 import MdocDataModel18013
-import MdocSecurity18013
+@_implementationOnly import MdocSecurity18013
 import WalletStorage
-import SwiftCBOR
-import SwiftyJSON
+@_implementationOnly import SwiftCBOR
+@_implementationOnly import SwiftyJSON
 import eudi_lib_sdjwt_swift
 
 extension String {
