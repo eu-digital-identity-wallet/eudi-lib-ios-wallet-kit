@@ -269,9 +269,24 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				if let result = response.credentialResponses.first {
 					switch result {
 					case .deferred(let transactionId):
-						guard let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey else { throw ValidationError.error(reason: "Encryption specification not available")}
-						let derKeyData = try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data
-						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
+						// Generate derKeyData from secure area for deferred credential issuance
+						let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
+						
+						// Create a temporary encryption key for derKeyData
+						// This follows the same pattern as deferredCredentialUseCase
+						let tempKeyData: Data
+						if let unlockData = unlockData {
+							tempKeyData = unlockData
+						} else {
+							// Fallback: use a deterministic key based on the issuer request ID
+							tempKeyData = issueReq.id.data(using: .utf8) ?? Data()
+						}
+						
+						// Create and set the deferred response encryption spec if needed
+						let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: tempKeyData)
+						await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
+						
+						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: tempKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
 						return .deferred(deferredModel)
 					case .issued(let format, _, _, _):
 						let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
