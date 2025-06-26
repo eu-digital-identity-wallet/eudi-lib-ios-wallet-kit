@@ -93,5 +93,32 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
+	@Test func testAlgorithmMappingForEdDSA() throws {
+		// Test the SecureAreaSigner algorithm mapping for EdDSA
+		let eddsaAlgorithm = MdocDataModel18013.SigningAlgorithm.EDDSA
+		
+		// Test JSONWebAlgorithms mapping (should work)
+		let jsonWebAlg = try SecureAreaSigner.getSigningAlgorithm(eddsaAlgorithm)
+		#expect(jsonWebAlg == .EdDSA, "EDDSA should map to EdDSA in JSONWebAlgorithms")
+		
+		// Test JOSESwift mapping (should throw error since JOSESwift doesn't support EdDSA)
+		#expect(throws: WalletError.self) {
+			try SecureAreaSigner.getSignatureAlgorithm(eddsaAlgorithm)
+		}
+	}
+	
+	@Test func testAlgorithmMappingForES256() throws {
+		// Test the SecureAreaSigner algorithm mapping for ES256
+		let es256Algorithm = MdocDataModel18013.SigningAlgorithm.ES256
+		
+		// Test JSONWebAlgorithms mapping
+		let jsonWebAlg = try SecureAreaSigner.getSigningAlgorithm(es256Algorithm)
+		#expect(jsonWebAlg == .ES256, "ES256 should map correctly in JSONWebAlgorithms")
+		
+		// Test JOSESwift mapping
+		let joseAlg = try SecureAreaSigner.getSignatureAlgorithm(es256Algorithm)
+		#expect(joseAlg == .ES256, "ES256 should map correctly in JOSESwift")
+	}
+
 
 	}
