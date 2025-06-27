@@ -24,6 +24,7 @@ import MdocDataTransfer18013
 import WalletStorage
 import SiopOpenID4VP
 import struct SiopOpenID4VP.X509CertificateChainVerifier
+import protocol SiopOpenID4VP.Networking
 import eudi_lib_sdjwt_swift
 import JOSESwift
 import Logging
@@ -74,12 +75,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var mdocGeneratedNonce: String!
 	var sessionTranscript: SessionTranscript!
 	var eReaderPub: CoseKey?
-	var urlSession: URLSession
+	var networking: Networking
 	var unlockData: [String: Data]!
 	public var transactionLog: TransactionLog
 	public var flow: FlowType
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, openId4VpVerifierRedirectUri: String?, urlSession: URLSession) throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, openId4VpVerifierRedirectUri: String?, networking: Networking) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = parameters.toInitializeTransferInfo()
 		dataFormats = objs.dataFormats; docs = objs.documentObjects; privateKeyObjects = objs.privateKeyObjects
@@ -95,7 +96,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
 		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
 		self.openId4VpVerifierRedirectUri = openId4VpVerifierRedirectUri
-		self.urlSession = urlSession
+		self.networking = networking
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
@@ -299,7 +300,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.certificateChain = data
 		return result
 	}
-	
+
 	var verifierRedirectUrl: URL? { if let openId4VpVerifierRedirectUri, let uri = URL(string: openId4VpVerifierRedirectUri) { uri } else { nil } }
 
 	/// OpenId4VP wallet configuration
@@ -314,7 +315,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 		}
 		if let verifierRedirectUrl { supportedClientIdSchemes.append(.redirectUri(clientId: verifierRedirectUrl)) }
-		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [], session: urlSession)
+		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [], session: networking)
 		return res
 	}
 
@@ -329,3 +330,18 @@ extension VerifiablePresentation {
 	}
 }
 
+struct OpenID4VPNetworking: Networking {
+	let networking: any NetworkingProtocol
+
+	init(networking: any NetworkingProtocol) {
+		self.networking = networking
+	}
+
+	func data(from url: URL) async throws -> (Data, URLResponse) {
+		try await networking.data(from: url)
+	}
+
+	func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+		try await networking.data(for: request)
+	}
+}

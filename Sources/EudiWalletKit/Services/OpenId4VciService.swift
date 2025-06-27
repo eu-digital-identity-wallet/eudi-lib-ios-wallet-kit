@@ -33,15 +33,15 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	let logger: Logger
 	let config: OpenId4VCIConfig
 	static var metadataCache = [String: CredentialOffer]()
-	var urlSession: URLSession
+	var networking: Networking
 	var authRequested: AuthorizationRequested?
 	var keyBatchSize: Int { issueReq.keyOptions?.batchSize ?? 1 }
 
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, urlSession: URLSession) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, networking: Networking) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.uiCulture = uiCulture
-		self.urlSession = urlSession
+		self.networking = networking
 		logger = Logger(label: "OpenId4VCI")
 		self.config = config
 	}
@@ -95,7 +95,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
 	public func resolveOfferDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: urlSession), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: networking), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networking)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networking), oauthFetcher: Fetcher(session: networking))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
 			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
@@ -121,11 +121,11 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func getIssuer(offer: CredentialOffer) throws -> Issuer {
-		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: urlSession), tokenPoster: Poster(session: urlSession), requesterPoster: Poster(session: urlSession), deferredRequesterPoster: Poster(session: urlSession), notificationPoster: Poster(session: urlSession))
+		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking))
 	}
 
 	func getIssuerForDeferred(data: DeferredIssuanceModel) throws -> Issuer {
-		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: urlSession), config: config)
+		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: networking), config: config)
 	}
 
 	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?) async throws -> (AuthorizeRequestOutcome, [CredentialConfiguration]) {
@@ -165,7 +165,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func getIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
-		let issuerMetadata = try await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: urlSession)).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: config.issuerMetadataPolicy)
+		let issuerMetadata = try await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networking)).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: config.issuerMetadataPolicy)
 		switch issuerMetadata {
 		case .success(let metaData):
 			return (credentialIssuerIdentifier, metaData)
@@ -177,7 +177,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	func issueByDocType(_ docType: String?, scope: String?, identifier: String?, promptMessage: String? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
 		let (credentialIssuerIdentifier, metaData) = try await getIssuerMetadata()
 		if let authorizationServer = metaData.authorizationServers?.first {
-			let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: urlSession), oauthFetcher: Fetcher(session: urlSession)).resolve(url: authorizationServer)
+			let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networking), oauthFetcher: Fetcher(session: networking)).resolve(url: authorizationServer)
 			let configuration = try getCredentialConfiguration(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: identifier, docType: docType, scope: scope, batchCredentialIssuance: metaData.batchCredentialIssuance)
 			let bindingKeys = try await initSecurityKeys(algSupported: Set(configuration.credentialSigningAlgValuesSupported))
 			let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.configurationIdentifier], grants: nil, authorizationServerMetadata: try authServerMetadata.get())
@@ -435,4 +435,18 @@ public enum OpenId4VCIError: LocalizedError {
 	}
 }
 
+struct OpenID4VCINetworking: Networking {
+	let networking: any NetworkingProtocol
 
+	init(networking: any NetworkingProtocol) {
+		self.networking = networking
+	}
+
+	func data(from url: URL) async throws -> (Data, URLResponse) {
+		try await networking.data(from: url)
+	}
+
+	func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+		try await networking.data(for: request)
+	}
+}

@@ -1,3 +1,27 @@
+## v0.12.6
+
+### Networking abstraction and protocol improvements
+
+#### Breaking Changes:
+- **EudiWallet initialization parameter change**: The `urlSession` parameter has been replaced with `networking` parameter
+  - Old: `urlSession: URLSession? = nil`
+  - New: `networking: (any NetworkingProtocol)? = nil`
+  - This allows for custom networking implementations while maintaining URLSession compatibility
+
+#### New NetworkingProtocol
+- Added `NetworkingProtocol` that abstracts network operations
+  - Provides `data(from url: URL)` and `data(for request: URLRequest)` methods
+  - `URLSession` conforms to `NetworkingProtocol` by default for backward compatibility
+
+#### Internal networking improvements
+- Split networking into separate VCI and VP clients:
+  - `networkingVci: OpenID4VCINetworking` - For OpenID4VCI operations
+  - `networkingVp: OpenID4VPNetworking` - For OpenID4VP operations
+- Both networking clients wrap the provided `NetworkingProtocol` implementation
+
+## v0.12.5
+-- Fixed redirect_uri clientId scheme handling
+
 ## v0.12.4
 ### `EudiWallet` property addition
 - Added `verifierRedirectUri: String?` property to `EudiWallet`.
@@ -190,7 +214,7 @@ let presentationData = await wallet.parseTransactionLog(transaction)
 ```
 
 ## v0.10.5
-- Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.9.0)
+- Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp/releases/tag/v0.9.0)
 - Updated OpenID4VCI library to version [0.12.3](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.12.3)
 
 ## v0.10.4
@@ -450,16 +474,16 @@ The flow is supported by existing methods:
 ## v0.4.9## v0.4.4
 ### Openid4VP fixes and updatesking change - docModels contains not-nil items (SwiftUI breaks with nil items)
 
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.1
+- Update eudi-lib-ios-siop-openid4vp to version 0.1.1
 - Fix openid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
 - Add `readerLegalName` property to PresentationSession
 
 ## v0.4.8- PresentationSession / func sendResponse: itemsToSend dictionary is keyed by docId (and not docType)
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+- Update eudi-lib-ios-siop-openid4vp to version 0.1.0
 - Added wallet configuration parameter `public var verifierLegalName: String?` (used for Openid4VP preregistered clients)
  data
 ## v0.4.7
-###Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+###Update eudi-lib-ios-siop-openid4vp to version 0.1.0
 
 ## v0.4.6
 ### Update openid4vci to version 0.1.2
