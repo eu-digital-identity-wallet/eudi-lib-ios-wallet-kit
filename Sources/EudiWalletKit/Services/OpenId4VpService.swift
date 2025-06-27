@@ -262,7 +262,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { ts in ts.first!.2 }))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
-		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf())
+		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
 		let result: DispatchOutcome = try await siopOpenId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
