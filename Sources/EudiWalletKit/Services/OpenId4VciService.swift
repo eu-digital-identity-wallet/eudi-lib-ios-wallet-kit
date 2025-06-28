@@ -269,8 +269,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				if let result = response.credentialResponses.first {
 					switch result {
 					case .deferred(let transactionId):
-						guard let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey else { throw ValidationError.error(reason: "Encryption specification not available")}
-						let derKeyData = try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data
+						let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey { try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data } else { nil }
 						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
 						return .deferred(deferredModel)
 					case .issued(let format, _, _, _):
@@ -328,10 +327,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return res
 	}
 
-	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, derKeyData: Data, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
+	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, derKeyData: Data?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
-		let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData)
-		await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
+		if let derKeyData {
+			let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData)
+			await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
+		}
 		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
 		switch deferredRequestResponse {
 		case .success(let response):
