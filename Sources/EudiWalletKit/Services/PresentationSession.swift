@@ -97,6 +97,10 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
 		readerLegalName = request.readerLegalName
+		if disclosedDocuments.count == 0 {
+			// todo: localize message with resources
+			throw Self.makeError(str: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information.")
+		}
 		status = .requestReceived
 	}
 
