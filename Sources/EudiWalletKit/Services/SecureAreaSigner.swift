@@ -44,6 +44,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
 		case .ES512: return .ES512
+		case .EDDSA: throw WalletError(description: "EdDSA is not supported by JOSESwift, use JSONWebAlgorithms instead.")
 		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
 		}
 	}
@@ -53,6 +54,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
 		case .ES512: return .ES512
+		case .EDDSA: return .EdDSA
 		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
 		}
 	}
