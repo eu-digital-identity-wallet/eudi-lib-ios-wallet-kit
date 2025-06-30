@@ -450,10 +450,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - id: The unique identifier of the document to check usage counts for
 	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
-		let secureAreaName = storage.getDocumentModel(id: id)?.secureAreaName
-		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
-		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
-		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }
+		return try await storage.getCredentialsUsageCount(id: id)
 	}
 
 	/// Prepare Service Data Parameters

@@ -97,12 +97,11 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
 		readerLegalName = request.readerLegalName
-		if disclosedDocuments.count == 0 {
-			// todo: localize message with resources
-			throw Self.makeError(str: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information.")
-		}
+		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr) }
 		status = .requestReceived
 	}
+	
+	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
 	public static func makeError(str: String) -> NSError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
@@ -119,7 +118,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
-	public func startQrEngagement() async {
+	public func startQrEngagement() async throws {
+		if docIdToPresentInfo.count == 0 { await setError(NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: Self.NotAvailableStr])); return }
 		do {
 			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
 			await MainActor.run {

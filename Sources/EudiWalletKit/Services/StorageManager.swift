@@ -193,6 +193,8 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		let docs = if let documents { documents } else { try? await storageService.loadDocuments(status: .issued) }
 		let dictValues = await docModels.filter { $0.docType != nil}.asyncCompactMap { m -> (String, DocPresentInfo)? in
 			guard let doc = docs?.first(where: { $0.id == m.id }), let dki = DocKeyInfo(from: doc.docKeyInfo) else { return nil }
+			let bValid = (try? await hasAnyCredential(id: m.id)) ?? false
+			guard bValid else { return nil }
 			let docTypedData: DocTypedData? = switch m.docDataFormat {
 				case .cbor: if let iss = IssuerSigned(data: doc.data.bytes) { .msoMdoc(iss) } else { nil }
 				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
@@ -202,6 +204,18 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			return (m.id, presentInfo)
 		}
 		return Dictionary(uniqueKeysWithValues: dictValues)
+	}
+
+	public func hasAnyCredential(id: String) async throws -> Bool {
+		let uc = try await getCredentialsUsageCount(id: id)
+		return uc == nil || uc!.remaining > 0
+	}
+
+	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
+		let secureAreaName = getDocumentModel(id: id)?.secureAreaName
+		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
+		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
+		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }
 	}
 
 	/// Load documents from storage
