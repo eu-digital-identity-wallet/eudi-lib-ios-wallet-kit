@@ -86,13 +86,13 @@ class TransactionLogUtils {
 
 	static func parseCBORDocClaimsDecodable(id: String, docType: String, issuerSigned: IssuerSigned, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
 		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: Data(issuerSigned.encode(options: CBOROptions())), docKeyInfo: nil, createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
-		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture)
+		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil, isValid: true)
 	}
 
 	static func parseSdJwtDocClaimsDecodable(id: String, docType: String, sdJwtSerialized: String, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
 		guard let sdJwtData = sdJwtSerialized.data(using: .utf8) else { return nil }
 		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: nil, createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
-		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture)
+		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil, isValid: true)
 	}
 
 }
