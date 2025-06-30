@@ -19,6 +19,14 @@
   - `networkingVp: OpenID4VPNetworking` - For OpenID4VP operations
 - Both networking clients wrap the provided `NetworkingProtocol` implementation
 
+### Bug Fixes
+- Fix for issue #187 
+- Fix for issue #190 
+- Fix for issue #195
+- Fix for issue: Attestation with 0 instances still triggers share flow
+- Fix for issue: Expiration date shown despite no available attestations
+- Fix for issue: When there is no matching attestation for BLE transfer, the QR code is still displayed.
+
 ## v0.12.5
 -- Fixed redirect_uri clientId scheme handling
 
