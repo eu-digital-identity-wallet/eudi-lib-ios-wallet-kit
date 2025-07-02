@@ -10,7 +10,7 @@ If ``EudiWallet/userAuthenticationRequired`` is true, user authentication is req
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` method.
+When the document docType to be issued use the ``EudiWallet/issueDocument(docTypeIdentifier:keyOptions:promptMessage:)`` method.
 
 __Important Notes__:
 
@@ -21,21 +21,21 @@ The following example shows how to issue an EUDI Personal ID document using Open
 
 ```swift
 do {
-  let doc = try await userWallet.issueDocument(docType: EuPidModel.euPidDocType, keyOptions: KeyOptions(secureAreaName: "SecureEnclave", credentialPolicy: .oneTimeUse, batchSize: 5)
-  // document has been added to wallet storage, you can display it
+	let keyOptions = try await wallet.getDefaultKeyOptions(.msoMdoc("org.iso.18013.5.1.mDL"))
+	let doc = try await userWallet.issueDocument(.msoMdoc("org.iso.18013.5.1.mDL"), keyOptions: keyOptions
 }
 catch {
   // display error
 }
 ```
 
-You can also issue a document by passing configuration `identifier` parameter the `identifier`. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
+You can also issue a document by passing a `configurationIdentifier` case. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
 
 ```swift
   // get current issuer metadata
   let configuration = try await wallet.getIssuerMetadata()
   ...
-  let doc = try await userWallet.issueDocument(identifier: "eu.europa.ec.eudi.pid_vc_sd_jwt")
+  let doc = try await userWallet.issueDocument(.configurationIdentifier("eu.europa.ec.eudi.pid_vc_sd_jwt"))
 ```
 
 ### Resolving Credential offer

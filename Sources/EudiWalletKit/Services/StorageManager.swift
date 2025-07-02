@@ -112,6 +112,15 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		}
 	}
 
+	/// Set usage count for a document (for caching/logging purposes)
+	/// - Parameters:
+	///   - usageCount: The usage count information
+	///   - id: The document identifier
+	public func setUsageCount(_ usageCount: CredentialsUsageCounts?, id: String) {
+		var docModel = docModels.first(where: { $0.id == id })
+		docModel?.credentialsUsageCounts = usageCount
+	}
+
 	/// Converts a `WalletStorage.Document` to an `DocClaimsDecodable` model using an optional `MdocModelFactory`.
 	///
 	/// - Parameters:

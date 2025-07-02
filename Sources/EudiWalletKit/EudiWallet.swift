@@ -54,7 +54,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// OpenID4VP verifier legal name (used for preregistered clients)
 	public var verifierLegalName: String?
 	/// OpenID4VCI issuer URL
-	public var openID4VciIssuerUrl: String?
+	public var openID4VciIssuerUrl: String? {
+		didSet { Task { await OpenId4VCIService.clearCachedOfferMetadata(); await OpenId4VCIService.clearIssuerMetadataCache() } }
+	}
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public var uiCulture: String?
 	/// OpenID4VCI issuer parameters
@@ -130,7 +132,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	public func getdefaultOpenId4VCIService() async throws -> OpenId4VCIService {
-		return try await prepareIssuing(id: "-", docType: "", displayName: nil, keyOptions: nil, disablePrompt: true, promptMessage: nil)
+		return try await prepareIssuing(id: "-", docTypeIdentifier: .msoMdoc(docType: ""), displayName: nil, keyOptions: nil, disablePrompt: true, promptMessage: nil)
 	}
 
 	private static func validateServiceParams(serviceName: String? = nil) throws {
@@ -183,11 +185,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - docType: document type
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: (Issue request key pair, vci service, unique id)
-	func prepareIssuing(id: String, docType: String?, displayName: String?, keyOptions: KeyOptions?, disablePrompt: Bool, promptMessage: String?) async throws -> OpenId4VCIService {
+	func prepareIssuing(id: String, docTypeIdentifier: DocTypeIdentifier, displayName: String?, keyOptions: KeyOptions?, disablePrompt: Bool, promptMessage: String?) async throws -> OpenId4VCIService {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
 		let issueReq = try await Self.authorizedAction(action: {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
-		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docType ?? "", comment: "")))
+		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docTypeIdentifier.docTypeOrVct ?? docTypeIdentifier.value, comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig.toOpenId4VCIConfig(), networking: networkingVci)
 		return openId4VCIService
@@ -203,24 +205,24 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	/// Issue a document with the given docType using OpenId4Vci protocol
+	/// Issue a document using OpenId4Vci protocol
 	///
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
 	///  - Parameters:
-	///   - docType: Document type
+	///   - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
-	@discardableResult public func issueDocument(docType: String?, scope: String?, identifier: String?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
-		let usedKeyOptions = try await validateKeyOptions(docType: docType, scope: scope, identifier: identifier, keyOptions: keyOptions)
-		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docType: docType, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: false, promptMessage: promptMessage)
-		let data = try await openId4VCIService.issueDocument(docType: docType, scope: scope, identifier: identifier, promptMessage: promptMessage)
-		return try await finalizeIssuing(issueOutcome: data.0, docType: docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+	@discardableResult public func issueDocument(docTypeIdentifier: DocTypeIdentifier, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+		let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: keyOptions)
+		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: false, promptMessage: promptMessage)
+		let data = try await openId4VCIService.issueDocument(docTypeIdentifier: docTypeIdentifier, promptMessage: promptMessage)
+		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 	}
 
-	func validateKeyOptions(docType: String?, scope: String?, identifier: String?, keyOptions: KeyOptions?) async throws -> KeyOptions {
+	func validateKeyOptions(docTypeIdentifier: DocTypeIdentifier, keyOptions: KeyOptions?) async throws -> KeyOptions {
 		let dvci = try await getdefaultOpenId4VCIService()
-		let defaultOptions = try await dvci.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
+		let defaultOptions = try await dvci.getDefaultKeyOptions(docTypeIdentifier)
 		var usedKeyOptions = keyOptions ?? defaultOptions
 		if let keyOptions, defaultOptions.batchSize < keyOptions.batchSize {
 			logger.warning("Key options batch size \(keyOptions.batchSize) is larger than the default batch size \(defaultOptions.batchSize). Using the default batch size.")
@@ -231,12 +233,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Get default key options (batch-size and credential policy) for a document type
 	/// - Parameters:
-	///  - docType: Document type (optional)
-	/// - scope: Scope of the document (optional)
-	/// - identifier: Identifier of the document type (optional)
-	public func getDefaultKeyOptions(_ docType: String?, scope: String?, identifier: String?) async throws -> KeyOptions {
+	///  - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
+	public func getDefaultKeyOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> KeyOptions {
 		let openId4VCIService = try await getdefaultOpenId4VCIService()
-		return try await openId4VCIService.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
+		return try await openId4VCIService.getDefaultKeyOptions(docTypeIdentifier)
 	}
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
 	///
@@ -259,9 +259,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		guard pendingDoc.status == .pending else { throw WalletError(description: "Invalid document status") }
-		let usedKeyOptions = try await validateKeyOptions(docType: pendingDoc.docType, scope: nil, identifier: nil, keyOptions: keyOptions)
-		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docType: pendingDoc.docType, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: true, promptMessage: nil)
+		guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw WalletError(description: "Invalid document status") }
+		let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: keyOptions)
+		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
 		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
@@ -327,18 +327,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		var documents = [WalletStorage.Document]()
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
-			let usedKeyOptions = try await validateKeyOptions(docType: docTypeModel.docType, scope: docTypeModel.scope, identifier: docTypeModel.identifier, keyOptions: docTypeModel.keyOptions)
-			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docType: i > 0 ? "" : docTypes.map(\.docTypeOrVctOrScope).joined(separator: ", "), displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: usedKeyOptions, disablePrompt: i > 0, promptMessage: promptMessage))
+			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
+			let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: docTypeModel.keyOptions)
+			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: usedKeyOptions, disablePrompt: i > 0, promptMessage: promptMessage))
 		}
 		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
-
 		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
-			guard let offer = await OpenId4VCIService.metadataCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+			guard let offer = await OpenId4VCIService.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 			let bindingKeys = try await openId4VCIService.initSecurityKeys(algSupported: Set(credentialInfos[i].credentialSigningAlgValuesSupported))
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, promptMessage: promptMessage) else { continue }
-			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVctOrScope, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
+			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
-		await OpenId4VCIService.removeOfferFromMetadata(offerUri: offerUri)
 		return documents
 	}
 
@@ -450,7 +449,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - id: The unique identifier of the document to check usage counts for
 	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
-		return try await storage.getCredentialsUsageCount(id: id)
+		let uc = try await storage.getCredentialsUsageCount(id: id)
+		storage.setUsageCount(uc, id: id)
+		return uc
 	}
 
 	/// Prepare Service Data Parameters
@@ -543,7 +544,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Get document status
 	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
 		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
-		return try await actor.getStatus()
+		let status = try await actor.getStatus()
+		return status
 	}
 
 	/// Executes an authorized action with optional fallback and dismissal handling.

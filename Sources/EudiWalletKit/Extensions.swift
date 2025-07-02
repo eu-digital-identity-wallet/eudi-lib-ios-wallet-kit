@@ -107,6 +107,12 @@ extension WalletStorage.Document {
 		}
 		return nil
 	}
+
+	public var docTypeIdentifier: DocTypeIdentifier? {
+		if docDataFormat == .cbor, let docType = docType { return .msoMdoc(docType: docType) }
+		else if docDataFormat == .sdjwt, let vct = docType { return .sdJwt(vct: vct) }
+		return nil
+	}
 }
 
 extension MdocDataModel18013.CoseKeyPrivate {
