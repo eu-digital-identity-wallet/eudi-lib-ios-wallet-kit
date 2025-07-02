@@ -1,15 +1,20 @@
 ## v0.12.7
 
-### Networking abstraction and protocol improvements
+#### DPoP updates
+- Library `eudi-lib-ios-openid4vci-swift` has been updated to version 0.15.1
+- DPoP constructor is always passed.
 
 #### Performance Improvements:
 - **Issuer metadata caching**: Added caching to `OpenId4VCIService.getIssuerMetadata` to improve performance by storing successful issuer metadata results in memory and avoiding redundant network requests during the same session. The cache is automatically cleared after changing issuerUrl.
 
+#### Bug fixes: 
+ - When the `getCredentialsUsageCount` method is called, if the remaining count is 0, the `validUntil` property of the credential is now correctly set to `nil`.
+
 #### Breaking Changes:
 
-The `getDefaultKeyOptions` method signature has been updated to accept a single `DocTypeIdentifier` parameter instead of separate `docType`, `scope`, and `identifier` parameters for improved type safety and API consistency.
-This method queries the issuer to retrieve the recommended key configuration for a specific document type identifier.
-The returned KeyOptions can be used when issuing documents.
+The `getDefaultKeyOptions` and `issueDocument` method signatures have been updated to accept a single `DocTypeIdentifier` parameter instead of separate `docType`, `scope`, and `identifier` parameters for improved type safety and API consistency.
+The `getDefaultKeyOptions` method queries the issuer to retrieve the recommended key configuration for a specific document type identifier.
+The returned KeyOptions can be used when issuing documents with `issueDocument`.
 
 #### Before:
 ```swift
@@ -30,6 +35,7 @@ let document = try await wallet.issueDocument(.configurationIdentifier("eu.europ
 ```
 
 ## v0.12.6
+### Networking abstraction and protocol improvements
 
 - **EudiWallet initialization parameter change**: The `urlSession` parameter has been replaced with `networking` parameter
   - Old: `urlSession: URLSession? = nil`

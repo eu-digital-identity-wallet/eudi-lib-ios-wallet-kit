@@ -449,7 +449,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - id: The unique identifier of the document to check usage counts for
 	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
-		return try await storage.getCredentialsUsageCount(id: id)
+		let uc = try await storage.getCredentialsUsageCount(id: id)
+		storage.setUsageCount(uc, id: id)
+		return uc
 	}
 
 	/// Prepare Service Data Parameters
@@ -542,7 +544,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Get document status
 	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
 		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
-		return try await actor.getStatus()
+		let status = try await actor.getStatus()
+		return status
 	}
 
 	/// Executes an authorized action with optional fallback and dismissal handling.

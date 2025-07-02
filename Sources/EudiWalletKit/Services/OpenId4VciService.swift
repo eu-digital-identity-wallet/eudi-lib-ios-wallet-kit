@@ -126,7 +126,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func getIssuer(offer: CredentialOffer) throws -> Issuer {
-		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking))
+		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), dpopConstructor: try OpenId4VCIConfiguration.makeDPoPConstructor(algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported))
+
 	}
 
 	func getIssuerForDeferred(data: DeferredIssuanceModel) throws -> Issuer {

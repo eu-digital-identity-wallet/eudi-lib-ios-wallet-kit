@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import JOSESwift
 import OpenID4VCI
+import MdocSecurity18013
 
 public struct OpenId4VCIConfiguration {
 	public let client: Client
@@ -35,10 +36,21 @@ public struct OpenId4VCIConfiguration {
 }
 
 extension OpenId4VCIConfiguration {
-	static func makedPoPConstructor(useDPoP: Bool) throws -> DPoPConstructorType? {
-		guard useDPoP else { return nil }
-		let alg = JWSAlgorithm(.ES256)
-		let privateKey = try KeyController.generateECDHPrivateKey()
+
+	static var supportedDPoPAlgorithms: Set<JWSAlgorithm> {
+		[JWSAlgorithm(.ES256), JWSAlgorithm(.ES384), JWSAlgorithm(.ES512)]
+	}
+
+	static func makeDPoPConstructor(algorithms: [JWSAlgorithm]?) throws -> DPoPConstructorType? {
+		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
+		let setCommonJwsAlgorithmNames = Set(algorithms.map(\.name)).intersection(Self.supportedDPoPAlgorithms.map(\.name))
+		guard let algName = setCommonJwsAlgorithmNames.first else {
+			throw WalletError(description: "No supported DPoP algorithm found in the provided algorithms. Supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
+		}
+		let alg = JWSAlgorithm(name: algName)
+		// supported bit sizes are 256, 384, or 521.
+		let bits: Int = switch alg.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; default: throw WalletError(description: "Unsupported DPoP algorithm: \(alg.name)") }
+		let privateKey = try SecKey.createRandomKey(type: SecKey.KeyType.ellipticCurve, bits: bits)
 		let publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": alg.name, "use": "sig", "kid": UUID().uuidString])
 		let privateKeyProxy: SigningKeyProxy = .secKey(privateKey)
@@ -46,6 +58,6 @@ extension OpenId4VCIConfiguration {
 	}
 
 	func toOpenId4VCIConfig() -> OpenId4VCIConfig {
-		OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, dPoPConstructor: try? Self.makedPoPConstructor(useDPoP: useDPoP))
+		OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR)
 	}
 }
