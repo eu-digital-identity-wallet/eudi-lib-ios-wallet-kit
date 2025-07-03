@@ -66,9 +66,10 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	private func refreshDocModels(_ docs: [WalletStorage.Document], uiCulture: String?, docStatus: WalletStorage.DocumentStatus) async {
 		switch docStatus {
 		case .issued:
-			let models = await docs.asyncCompactMap {
-				let isValid = (try? await hasAnyCredential(id: $0.id)) ?? false
-				return Self.toClaimsModel(doc:$0, uiCulture: uiCulture, modelFactory: modelFactory, isValid: isValid)
+			let models = await docs.asyncCompactMap { d -> (any DocClaimsDecodable)? in
+				let mdoc = Self.toClaimsModel(doc:d, uiCulture: uiCulture, modelFactory: modelFactory)
+				if var mdoc = mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
+				return mdoc
 			}
 			await MainActor.run { docModels = models }
 		case .deferred:
@@ -89,10 +90,11 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	@discardableResult func appendDocModel(_ doc: WalletStorage.Document, uiCulture: String?) async -> (any DocClaimsDecodable)? {
 		switch doc.status {
 		case .issued:
-			let isValid = (try? await hasAnyCredential(id: doc.id)) ?? false
-			let mdoc: (any DocClaimsDecodable)? = Self.toClaimsModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory, isValid: isValid)
-			if let mdoc { await MainActor.run { docModels.append(mdoc) } }
-			else { logger.error("Could not decode claims of \(doc.docType ?? "")") }
+			let mdoc: (any DocClaimsDecodable)? = Self.toClaimsModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
+			if var mdoc {
+				mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: doc.id)
+				await MainActor.run { docModels.append(mdoc) }
+			} else { logger.error("Could not decode claims of \(doc.docType ?? "")") }
 			return mdoc
 		case .deferred:
 			await MainActor.run { deferredDocuments.append(doc) }
@@ -128,14 +130,14 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	///   - modelFactory: An optional factory conforming to `MdocModelFactory` to create the model. Defaults to `nil`.
 	///
 	/// - Returns: An optional `DocClaimsDecodable` model created from the given document.
-	public static func toClaimsModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil, isValid: Bool) -> (any DocClaimsDecodable)? {
+	public static func toClaimsModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		switch doc.docDataFormat {
-		case .cbor:	toCborMdocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory, isValid: isValid)
-		case .sdjwt: toSdJwtDocModel(doc: doc, uiCulture: uiCulture, isValid: isValid)
+		case .cbor:	toCborMdocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
+		case .sdjwt: toSdJwtDocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
 		}
 	}
 
-	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil, isValid: Bool) -> (any DocClaimsDecodable)? {
+	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		guard let (d, _, _, _) = doc.getDataForTransfer() else { return nil }
 		// guard let str = D dd = Data(base64Encoded: d.1.bytes)  else { return nil }
 		guard let iss = IssuerSigned(data: d.1.bytes) else { logger.error("Could not decode IssuerSigned"); return nil }
@@ -143,19 +145,19 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		let docKeyInfo = DocKeyInfo(from: doc.docKeyInfo)
 		let md = docMetadata?.getMetadata(uiCulture: uiCulture)
 		let cmd = md?.claimMetadata?.convertToCborClaimMetadata(uiCulture)
-		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: isValid ? iss.validUntil : nil, statusIdentifier: iss.issuerAuth.statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+		var retModel: (any DocClaimsDecodable)? = modelFactory?.makeClaimsDecodableFromCbor(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		if retModel == nil {
 			let defModel: (any DocClaimsDecodable)? = switch doc.docType {
-			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier,  validFrom: iss.validFrom, validUntil: isValid ? iss.validUntil : nil, statusIdentifier: iss.issuerAuth.statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
-			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: isValid ? iss.validUntil : nil, statusIdentifier: iss.issuerAuth.statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+			case EuPidModel.euPidDocType: EuPidModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier,  validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: isValid ? iss.validUntil : nil, statusIdentifier: iss.issuerAuth.statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, secureAreaName: docKeyInfo?.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		}
 		return retModel
 	}
 
-	public static func toSdJwtDocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil, isValid: Bool) -> (any DocClaimsDecodable)? {
+	public static func toSdJwtDocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		var docClaims = [DocClaim]()
 		let docMetadata: DocMetadata? = DocMetadata(from: doc.metadata)
 		let docKeyInfo = DocKeyInfo(from: doc.docKeyInfo)
@@ -167,7 +169,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		let validFrom: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.issuedAt})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let validUntil: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.expirationTime})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let statusIdentifier: StatusIdentifier? = if let sd = recreatedClaims.json["status"].dictionary, let sld = sd["status_list"]?.dictionary, let uri = sld["uri"]?.string, let idx = sld["idx"]?.int32 { StatusIdentifier(idx: Int(idx), uriString: uri) } else { nil }
-		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: isValid ? validUntil : nil, statusIdentifier: statusIdentifier, secureAreaName: docKeyInfo?.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, secureAreaName: docKeyInfo?.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
 	}
 
 	public static func getHashingAlgorithm(doc: WalletStorage.Document) -> String? {
@@ -224,9 +226,12 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		return uc == nil || uc!.remaining > 0
 	}
 
-	@available(*, deprecated, message: "Use credentialsUsageCount property of the DocClaimDecodable model instead")
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let secureAreaName = getDocumentModel(id: id)?.secureAreaName
+		return try await Self.getCredentialsUsageCount(id: id, secureAreaName: secureAreaName)
+	}
+
+	public static func getCredentialsUsageCount(id: String, secureAreaName: String?) async throws -> CredentialsUsageCounts? {
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
 		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
 		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }

@@ -448,6 +448,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - id: The unique identifier of the document to check usage counts for
 	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
+	@available(*, deprecated, message: "Use credentialsUsageCount property of the DocClaimDecodable model instead")
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let uc = try await storage.getCredentialsUsageCount(id: id)
 		storage.setUsageCount(uc, id: id)

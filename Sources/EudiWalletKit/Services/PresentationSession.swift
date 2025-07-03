@@ -54,7 +54,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, storageManager: StorageManager, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, storageManager: StorageManager? = nil, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
 		self.storageManager = storageManager
 		self.storageService = storageService

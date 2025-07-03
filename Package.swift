@@ -15,6 +15,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
 		.package(url: "https://github.com/crspybits/swift-log-file", from: "0.1.0"),
+		.package(url: "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git", branch: "main"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.7.2"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.6.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.6.2"),
@@ -29,6 +30,7 @@ let package = Package(
 		.target(
 			name: "EudiWalletKit",
 			dependencies: [
+				.product(name: "MdocDataModel18013", package: "eudi-lib-ios-iso18013-data-model"),
 				.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "SiopOpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
