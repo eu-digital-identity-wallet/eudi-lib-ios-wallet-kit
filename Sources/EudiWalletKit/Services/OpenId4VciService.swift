@@ -37,12 +37,14 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	var networking: Networking
 	var authRequested: AuthorizationRequested?
 	var keyBatchSize: Int { issueReq.keyOptions?.batchSize ?? 1 }
+	let cacheIssuerMetadata: Bool
 
-	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, networking: Networking) {
+	init(issueRequest: IssueRequest, credentialIssuerURL: String, uiCulture: String?, config: OpenId4VCIConfig, cacheIssuerMetadata: Bool, networking: Networking) {
 		self.issueReq = issueRequest
 		self.credentialIssuerURL = credentialIssuerURL
 		self.uiCulture = uiCulture
 		self.networking = networking
+		self.cacheIssuerMetadata = cacheIssuerMetadata
 		logger = Logger(label: "OpenId4VCI")
 		self.config = config
 	}
@@ -99,19 +101,13 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	///   - uriOffer: Uri of the offer (from a QR or a deep link)
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
-	public func resolveOfferDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: networking), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networking)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networking), oauthFetcher: Fetcher(session: networking))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
-		switch result {
-		case .success(let offer):
-			let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
-			Self.credentialOfferCache[uriOffer] = offer
-			let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
-			let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: "")
-			let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
-			return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
-		case .failure(let error):
-			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
-		}
+	public func resolveOfferDocTypes(uriOffer: String, offer: CredentialOffer) async throws -> OfferedIssuanceModel {
+		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
+		Self.credentialOfferCache[uriOffer] = offer
+		let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
+		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: "")
+		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
+		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
 	}
 
 	func getDefaultKeyOptions(batchCredentialIssuance: BatchCredentialIssuance?) -> KeyOptions {
@@ -119,10 +115,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return KeyOptions(credentialPolicy: .rotateUse, batchSize: batchCredentialIssuanceSize)
 	}
 
-	func getDefaultKeyOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> KeyOptions {
-		let (credentialIssuerIdentifier, metaData) = try await getIssuerMetadata()
-		let credentialConfiguration = try getCredentialConfiguration(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: docTypeIdentifier.configurationIdentifier, docType: docTypeIdentifier.docType, vct: docTypeIdentifier.vct, batchCredentialIssuance: metaData.batchCredentialIssuance)
-		return credentialConfiguration.defaultKeyOptions
+	func getMetadataDefaultKeyOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> KeyOptions {
+		let (_, metaData) = try await getIssuerMetadata()
+		return KeyOptions(credentialPolicy: .rotateUse, batchSize: metaData.batchCredentialIssuance?.batchSize ?? 1)
 	}
 
 	func getIssuer(offer: CredentialOffer) throws -> Issuer {
@@ -171,7 +166,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func getIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
 		// Check cache first
-		if let cachedResult = Self.issuerMetadataCache[credentialIssuerURL] {
+		if cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[credentialIssuerURL] {
 			return cachedResult
 		}
 		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
@@ -179,8 +174,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
-			// Cache the successful result
-			Self.issuerMetadataCache[credentialIssuerURL] = result
+			if cacheIssuerMetadata { Self.issuerMetadataCache[credentialIssuerURL] = result }
 			return result
 		case .failure(let error):
 			throw WalletError(description: "Failed to resolve issuer metadata: \(error.localizedDescription)")
