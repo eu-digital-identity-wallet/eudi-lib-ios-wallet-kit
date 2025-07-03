@@ -224,6 +224,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		return uc == nil || uc!.remaining > 0
 	}
 
+	@available(*, deprecated, message: "Use credentialsUsageCount property of the DocClaimDecodable model instead")
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let secureAreaName = getDocumentModel(id: id)?.secureAreaName
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)

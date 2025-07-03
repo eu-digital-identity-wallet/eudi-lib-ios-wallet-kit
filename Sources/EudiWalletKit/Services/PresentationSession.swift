@@ -27,6 +27,7 @@ import LocalAuthentication
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
+	var storageManager: StorageManager!
 	var storageService: (any DataStorageService)!
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
@@ -53,8 +54,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, storageManager: StorageManager, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
+		self.storageManager = storageManager
 		self.storageService = storageService
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.documentKeyIndexes = documentKeyIndexes
@@ -100,7 +102,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr) }
 		status = .requestReceived
 	}
-	
+
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
 	public static func makeError(str: String) -> NSError {
@@ -160,6 +162,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			if newKeyBatchInfo.credentialPolicy == .oneTimeUse {
 				try await storageService?.deleteDocumentCredential(id: id, index: keyIndex)
 				try await secureArea.deleteKeyBatch(id: id, startIndex: keyIndex, batchSize: 1)
+				let remaining: Int? = newKeyBatchInfo.usedCounts.count { $0 == 0 }
+				let uc = remaining.map { try! CredentialsUsageCounts(total: newKeyBatchInfo.usedCounts.count, remaining: $0) }
+				storageManager?.setUsageCount(uc, id: id)
 			}
 		}
 	}
