@@ -1,3 +1,17 @@
+## v0.12.8
+
+### Changes:
+- `DocClaimsDecodable` has a new property `var credentialsUsageCounts: CredentialsUsageCounts?`
+This property provides information about the number of remaining presentations available for a document, based on its credential policy. It is useful for documents issued with a one-time use policy, where it returns the number of remaining presentations available. For documents with a rotate-use policy, it returns nil as there's no usage limit. 
+- Deprecated `getCredentialsUsageCount` method in `EudiWallet`. Use the new `credentialsUsageCounts` property instead.
+
+#### Performance Improvements:
+- **Configurable metadata caching**: Added `cacheIssuerMetadata: Bool` parameter to `OpenId4VCIConfiguration` (defaults to `true`). This flag controls whether issuer metadata should be cached in memory during the session.
+
+### Bug Fixes:
+- `DocClaimsDecodable` models are backed by classes instead of structs to ensure proper reference semantics. This allows the `credentialsUsageCounts` property to be updated correctly without requiring a full reload of the document claims.
+- Fixed issue with getting issuer metadata from wrong server when a url offer is used with different server than the default one.
+
 ## v0.12.7
 
 #### DPoP updates
