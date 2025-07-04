@@ -55,7 +55,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var verifierLegalName: String?
 	/// OpenID4VCI issuer URL
 	public var openID4VciIssuerUrl: String? {
-		didSet { Task { await OpenId4VCIService.clearCachedOfferMetadata(); await OpenId4VCIService.clearIssuerMetadataCache() } }
+		didSet { Task { if oldValue != openID4VciIssuerUrl || openID4VciIssuerUrl == nil { await OpenId4VCIService.clearCachedOfferMetadata(); await OpenId4VCIService.clearIssuerMetadataCache() } } }
 	}
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public var uiCulture: String?
@@ -191,7 +191,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docTypeIdentifier.docTypeOrVct ?? docTypeIdentifier.value, comment: "")))
 		guard let issueReq else { throw LAError(.userCancel)}
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig.toOpenId4VCIConfig(), networking: networkingVci)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig.toOpenId4VCIConfig(), cacheIssuerMetadata: openID4VciConfig.cacheIssuerMetadata, networking: networkingVci)
 		return openId4VCIService
 	}
 
@@ -220,9 +220,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
 	}
 
-	func validateKeyOptions(docTypeIdentifier: DocTypeIdentifier, keyOptions: KeyOptions?) async throws -> KeyOptions {
+	func validateKeyOptions(docTypeIdentifier: DocTypeIdentifier, keyOptions: KeyOptions?, offer: CredentialOffer? = nil) async throws -> KeyOptions {
 		let dvci = try await getdefaultOpenId4VCIService()
-		let defaultOptions = try await dvci.getDefaultKeyOptions(docTypeIdentifier)
+		let defaultOptions: KeyOptions
+		if let offer  {
+			// get the metadata from the offer based on the docTypeIdentifier
+			let batchCredentialIssuance = offer.credentialIssuerMetadata.batchCredentialIssuance
+			return KeyOptions(credentialPolicy: .rotateUse, batchSize: batchCredentialIssuance?.batchSize ?? 1)
+		} else {
+			defaultOptions = try await dvci.getMetadataDefaultKeyOptions(docTypeIdentifier)
+		}
 		var usedKeyOptions = keyOptions ?? defaultOptions
 		if let keyOptions, defaultOptions.batchSize < keyOptions.batchSize {
 			logger.warning("Key options batch size \(keyOptions.batchSize) is larger than the default batch size \(defaultOptions.batchSize). Using the default batch size.")
@@ -236,7 +243,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///  - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
 	public func getDefaultKeyOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> KeyOptions {
 		let openId4VCIService = try await getdefaultOpenId4VCIService()
-		return try await openId4VCIService.getDefaultKeyOptions(docTypeIdentifier)
+		return try await openId4VCIService.getMetadataDefaultKeyOptions(docTypeIdentifier)
 	}
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
 	///
@@ -246,7 +253,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status") }
 		let issueReq = try IssueRequest(id: deferredDoc.id, keyOptions: keyOptions)
-		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig.toOpenId4VCIConfig(), networking: networkingVci)
+		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig.toOpenId4VCIConfig(), cacheIssuerMetadata: false, networking: networkingVci)
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_, _) = data else { return deferredDoc }
 		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
@@ -311,8 +318,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		let dvci = try await getdefaultOpenId4VCIService()
-		return try await dvci.resolveOfferDocTypes(uriOffer: uriOffer)
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: networkingVci), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networkingVci)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networkingVci), oauthFetcher: Fetcher(session: networkingVci))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
+		switch result {
+		case .success(let offer):
+			let urlString = offer.credentialIssuerIdentifier.url.scheme! + "://" + offer.credentialIssuerIdentifier.url.host!
+			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
+			self.openID4VciIssuerUrl = credentialIssuerIdentifier.url.absoluteString
+			let dvci = try await getdefaultOpenId4VCIService()
+			return try await dvci.resolveOfferDocTypes(uriOffer: uriOffer, offer: offer)
+		case .failure(let error):
+			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
+		}
 	}
 
 	/// Issue documents by offer URI.
@@ -324,16 +340,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
 		if docTypes.isEmpty { return [] }
+		guard let offer = await OpenId4VCIService.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		var documents = [WalletStorage.Document]()
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
-			let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: docTypeModel.keyOptions)
+			let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: docTypeModel.keyOptions, offer: offer)
 			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: usedKeyOptions, disablePrompt: i > 0, promptMessage: promptMessage))
 		}
 		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
 		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
-			guard let offer = await OpenId4VCIService.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 			let bindingKeys = try await openId4VCIService.initSecurityKeys(algSupported: Set(credentialInfos[i].credentialSigningAlgValuesSupported))
 			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, promptMessage: promptMessage) else { continue }
 			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
@@ -448,6 +464,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - id: The unique identifier of the document to check usage counts for
 	/// - Returns: A `CredentialsUsageCounts` object containing total and remaining presentation counts  if the document uses a one-time use policy, or `nil` if the document uses a rotate-use          policy (unlimited presentations)
+	@available(*, deprecated, message: "Use credentialsUsageCount property of the DocClaimDecodable model instead")
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let uc = try await storage.getCredentialsUsageCount(id: id)
 		storage.setUsageCount(uc, id: id)
@@ -496,15 +513,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			switch flow {
 			case .ble:
 				let bleSvc = try BlePresentationService(parameters: parameters)
-				return PresentationSession(presentationService: bleSvc, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
+				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 			case .openid4vp(let qrCode):
 				let openIdSvc = try OpenId4VpService(parameters: parameters, qrCode: qrCode, openId4VpVerifierApiUri: self.verifierApiUri, openId4VpVerifierLegalName: self.verifierLegalName, openId4VpVerifierRedirectUri: self.verifierRedirectUri, networking: networkingVp)
-				return PresentationSession(presentationService: openIdSvc, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
+				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 			default:
-				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
+				return PresentationSession(presentationService: FaultPresentationService(error: PresentationSession.makeError(str: "Use beginPresentation(service:)")), storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 			}
 		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error), storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
+			return PresentationSession(presentationService: FaultPresentationService(error: error), storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 		}
 	}
 
@@ -518,9 +535,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		do {
 			let (parameters, documents) = try await prepareServiceDataParameters()
 			let docIdToPresentInfo = try await storage.getDocIdsToPresentInfo(documents: documents)
-			return PresentationSession(presentationService: service, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo,  documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? self.transactionLogger)
+			return PresentationSession(presentationService: service, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo,  documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: userAuthenticationRequired, transactionLogger: sessionTransactionLogger ?? self.transactionLogger)
 		} catch {
-			return PresentationSession(presentationService: FaultPresentationService(error: error), storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
+			return PresentationSession(presentationService: FaultPresentationService(error: error), storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: sessionTransactionLogger ?? transactionLogger)
 		}
 	}
 

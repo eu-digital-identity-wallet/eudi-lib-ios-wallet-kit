@@ -25,13 +25,15 @@ public struct OpenId4VCIConfiguration {
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	public let usePAR: Bool
 	public let useDPoP: Bool
+	public let cacheIssuerMetadata: Bool
 
-	public init(client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDPoP: Bool = false) {
+	public init(client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDPoP: Bool = false, cacheIssuerMetadata: Bool = true) {
 		self.client = client ?? .public(id: "wallet-dev")
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.usePAR = usePAR
 		self.useDPoP = useDPoP
+		self.cacheIssuerMetadata = cacheIssuerMetadata
 	}
 }
 
