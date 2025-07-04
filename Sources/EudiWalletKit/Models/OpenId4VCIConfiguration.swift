@@ -45,11 +45,13 @@ extension OpenId4VCIConfiguration {
 
 	static func makeDPoPConstructor(algorithms: [JWSAlgorithm]?) throws -> DPoPConstructorType? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
-		let setCommonJwsAlgorithmNames = Set(algorithms.map(\.name)).intersection(Self.supportedDPoPAlgorithms.map(\.name))
+		logger.info("Creating DPoP constructor for algorithms \(algorithms.map(\.name))")
+		let setCommonJwsAlgorithmNames = Array(Set(algorithms.map(\.name)).intersection(Self.supportedDPoPAlgorithms.map(\.name))).sorted()
 		guard let algName = setCommonJwsAlgorithmNames.first else {
 			throw WalletError(description: "No supported DPoP algorithm found in the provided algorithms. Supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
 		}
 		let alg = JWSAlgorithm(name: algName)
+		logger.info("Signing algorithm for DPoP constructor to be used is: \(alg.name)")
 		// supported bit sizes are 256, 384, or 521.
 		let bits: Int = switch alg.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; default: throw WalletError(description: "Unsupported DPoP algorithm: \(alg.name)") }
 		let privateKey = try SecKey.createRandomKey(type: SecKey.KeyType.ellipticCurve, bits: bits)
