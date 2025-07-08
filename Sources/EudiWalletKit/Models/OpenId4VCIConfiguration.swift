@@ -24,7 +24,6 @@ public struct OpenId4VCIConfiguration {
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	public let usePAR: Bool
-	public let useDPoP: Bool
 	public let cacheIssuerMetadata: Bool
 
 	public init(client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDPoP: Bool = false, cacheIssuerMetadata: Bool = true) {
@@ -32,7 +31,6 @@ public struct OpenId4VCIConfiguration {
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.usePAR = usePAR
-		self.useDPoP = useDPoP
 		self.cacheIssuerMetadata = cacheIssuerMetadata
 	}
 }
@@ -45,10 +43,9 @@ extension OpenId4VCIConfiguration {
 
 	static func makeDPoPConstructor(algorithms: [JWSAlgorithm]?) throws -> DPoPConstructorType? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
-		logger.info("Creating DPoP constructor for algorithms \(algorithms.map(\.name))")
 		let setCommonJwsAlgorithmNames = Array(Set(algorithms.map(\.name)).intersection(Self.supportedDPoPAlgorithms.map(\.name))).sorted()
 		guard let algName = setCommonJwsAlgorithmNames.first else {
-			throw WalletError(description: "No supported DPoP algorithm found in the provided algorithms. Supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
+			throw WalletError(description: "No supported DPoP algorithm found in the provided algorithms \(algorithms.map(\.name)). Supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
 		}
 		let alg = JWSAlgorithm(name: algName)
 		logger.info("Signing algorithm for DPoP constructor to be used is: \(alg.name)")

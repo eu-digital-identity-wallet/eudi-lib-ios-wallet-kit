@@ -129,7 +129,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: networking), config: config)
 	}
 
-	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?) async throws -> (AuthorizeRequestOutcome, [CredentialConfiguration]) {
+	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration]) {
 		guard let offer = Self.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
 		let credentialInfos = docTypeModels.compactMap { try? getCredentialConfiguration(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: $0.credentialConfigurationIdentifier, docType: $0.vct, vct: $0.vct, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance) }
 		guard credentialInfos.count > 0, credentialInfos.count == docTypeModels.count else { throw WalletError(description: "Missing Credential identifiers") }
@@ -139,10 +139,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		let issuer = try getIssuer(offer: offer)
 		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: config.client, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
-		return (authorizedOutcome, credentialInfos)
+		return (authorizedOutcome, issuer, credentialInfos)
 	}
 
-	func issueDocumentByOfferUrl(offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, bindingKeys: [BindingKey], promptMessage: String? = nil) async throws -> IssuanceOutcome? {
+	func issueDocumentByOfferUrl(issuer: Issuer, offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, bindingKeys: [BindingKey], promptMessage: String? = nil) async throws -> IssuanceOutcome? {
 		if case .presentation_request(let url) = authorizedOutcome, let authRequested {
 			logger.info("Dynamic issuance request with url: \(url)")
 			let uuid = UUID().uuidString
@@ -153,7 +153,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		do {
 			let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
 			logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
-			let issuer = try getIssuer(offer: offer)
+			//let issuer = try getIssuer(offer: offer)
 			let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys)
 			// logger.info("Credential str:\n\(str)")
 			return res
@@ -250,13 +250,15 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	private func handleAuthorizationCode(issuer: Issuer, request: AuthorizationRequestPrepared, authorizationCode: String) async throws -> AuthorizedRequest {
-		let unAuthorized = await issuer.handleAuthorizationCode(request: request, authorizationCode: .authorizationCode(authorizationCode: authorizationCode))
+		let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
+		let unAuthorized = await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
 		switch unAuthorized {
 		case .success(let request):
-			let authorizedRequest = await issuer.authorizeWithAuthorizationCode(request: request)
+			let authorizedRequest = await issuer.authorizeWithAuthorizationCode(request: request, authorizationDetailsInTokenRequest: .doNotInclude)
 			if case let .success(authorized) = authorizedRequest {
 				let at = authorized.accessToken
 				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
+				_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
 				return authorized
 			}
 			throw WalletError(description: "Failed to get access token")
@@ -381,7 +383,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 					nillableContinuation?.resume(returning: .presentation_request(url))
 					nillableContinuation = nil
 				} else if let code = url.getQueryStringParameter("code") {
-					self.logger.info("Dynamic issuance url: \(url)")
+					self.logger.info("Authorization code: \(code)")
 					nillableContinuation?.resume(returning: .code(code))
 					nillableContinuation = nil
 				} else {

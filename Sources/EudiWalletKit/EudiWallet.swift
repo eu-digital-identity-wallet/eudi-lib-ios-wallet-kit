@@ -224,10 +224,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let dvci = try await getdefaultOpenId4VCIService()
 		let defaultOptions: KeyOptions
 		if let offer  {
-			// get the metadata from the offer based on the docTypeIdentifier
 			let batchCredentialIssuance = offer.credentialIssuerMetadata.batchCredentialIssuance
-			return KeyOptions(credentialPolicy: .rotateUse, batchSize: batchCredentialIssuance?.batchSize ?? 1)
+			defaultOptions = KeyOptions(credentialPolicy: .rotateUse, batchSize: batchCredentialIssuance?.batchSize ?? 1)
 		} else {
+			// get the metadata from the offer based on the docTypeIdentifier
 			defaultOptions = try await dvci.getMetadataDefaultKeyOptions(docTypeIdentifier)
 		}
 		var usedKeyOptions = keyOptions ?? defaultOptions
@@ -348,10 +348,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: docTypeModel.keyOptions, offer: offer)
 			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), keyOptions: usedKeyOptions, disablePrompt: i > 0, promptMessage: promptMessage))
 		}
-		let (auth, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
+		let (auth, issuer, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
 		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
 			let bindingKeys = try await openId4VCIService.initSecurityKeys(algSupported: Set(credentialInfos[i].credentialSigningAlgValuesSupported))
-			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, promptMessage: promptMessage) else { continue }
+			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, promptMessage: promptMessage) else { continue }
 			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
 		}
 		return documents

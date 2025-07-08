@@ -1,3 +1,11 @@
+## v0.13.0
+- Fixed failure to issue documents with credential offer when the authorization server defined in the offer uses DPoP.
+- Fixed credential offer issuance to use batch size passed to `issueDocumentsByOfferUrl`.
+
+## v0.12.9
+- Updated [eudi-lib-sdjwt-swift](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift) library to version v0.7.2
+- Updated dPoP constructor logic and added RS256 algorithm
+
 ## v0.12.8
 
 ### Changes:
