@@ -53,7 +53,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		// Convert credential issuer supported algorithms to JWSAlgorithm types
 		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
 		guard !algTypes.isEmpty else {
-			throw WalletError(description: "No valid signing algorithms found in credential metadata: \(algSupported)")
+			throw PresentationSession.makeError(str: "No valid signing algorithms found in credential metadata: \(algSupported)")
 		}
 		// Find a compatible signing algorithm that both the secure area and credential issuer support
 		let selectedAlgorithm = try findCompatibleSigningAlgorithm(algSupported: algTypes)
@@ -65,7 +65,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func createBindingKey(_ publicCoseKey: CoseKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int) throws -> BindingKey {
 		let publicKey: SecKey = try publicCoseKey.toSecKey()
-		guard let algType = Self.mapToJWSAlgorithmType(secureAreaSigningAlg) else { throw WalletError(description: "Unsupported secure area signing algorithm: \(secureAreaSigningAlg)") }
+		guard let algType = Self.mapToJWSAlgorithmType(secureAreaSigningAlg) else {
+			throw PresentationSession.makeError(str: "Unsupported secure area signing algorithm: \(secureAreaSigningAlg)")
+		}
 		let publicKeyJWK = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": JWSAlgorithm(algType).name, "use": "sig", "kid": UUID().uuidString])
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, index: index, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
 		let bindingKey: BindingKey = .jwk(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: config.client.id)
@@ -130,14 +132,20 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration]) {
-		guard let offer = Self.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+		guard let offer = Self.credentialOfferCache[offerUri] else {
+			throw PresentationSession.makeError(str: "offerUri \(offerUri) not resolved. resolveOfferDocTypes must be called first")
+		}
 		let credentialInfos = docTypeModels.compactMap { try? getCredentialConfiguration(credentialIssuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: offer.credentialIssuerMetadata.display, credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported, identifier: $0.credentialConfigurationIdentifier, docType: $0.vct, vct: $0.vct, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance) }
-		guard credentialInfos.count > 0, credentialInfos.count == docTypeModels.count else { throw WalletError(description: "Missing Credential identifiers") }
+		guard credentialInfos.count > 0, credentialInfos.count == docTypeModels.count else {
+			throw PresentationSession.makeError(str: "Missing Credential identifiers - expected: \(docTypeModels.count), found: \(credentialInfos.count)")
+		}
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		let txCodeSpec: TxCode? = code?.txCode
 		let preAuthorizedCode: String? = code?.preAuthorizedCode
 		let issuer = try getIssuer(offer: offer)
-		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil { throw WalletError(description: "A transaction code is required for this offer") }
+		if preAuthorizedCode != nil && txCodeSpec != nil && txCodeValue == nil {
+			throw PresentationSession.makeError(str: "A transaction code is required for this offer")
+		}
 		let authorizedOutcome = if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) { AuthorizeRequestOutcome.authorized(try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: config.client, transactionCode: txCodeValue).get()) } else { try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer) }
 		return (authorizedOutcome, issuer, credentialInfos)
 	}
@@ -149,7 +157,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			Self.credentialOfferCache[uuid] = offer
 			return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: authRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: authRequested.pkceVerifier.codeVerifierMethod ))
 		}
-		guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
+		guard case .authorized(let authorized) = authorizedOutcome else {
+			throw PresentationSession.makeError(str: "Invalid authorized request outcome")
+		}
 		do {
 			let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
 			logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
@@ -177,7 +187,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			if cacheIssuerMetadata { Self.issuerMetadataCache[credentialIssuerURL] = result }
 			return result
 		case .failure(let error):
-			throw WalletError(description: "Failed to resolve issuer metadata: \(error.localizedDescription)")
+			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(error.localizedDescription)")
 		}
 	}
 
@@ -198,11 +208,13 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				let outcome = IssuanceOutcome.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: authRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: authRequested.pkceVerifier.codeVerifierMethod ))
 				return (outcome, configuration.format)
 			}
-			guard case .authorized(let authorized) = authorizedOutcome else { throw WalletError(description: "Invalid authorized request outcome") }
+			guard case .authorized(let authorized) = authorizedOutcome else {
+				throw PresentationSession.makeError(str: "Invalid authorized request outcome")
+			}
 			let outcome = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys)
 			return (outcome, configuration.format)
 		} else {
-			throw WalletError(description: "Invalid authorization server")
+			throw PresentationSession.makeError(str: "Invalid authorization server - no authorization server found")
 		}
 	}
 
@@ -244,9 +256,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				return .presentation_request(url)
 			}
 		} else if case let .failure(failure) = parPlaced {
-			throw WalletError(description: "Authorization error: \(failure.localizedDescription)")
+			throw PresentationSession.makeError(str: "Authorization error: \(failure.localizedDescription)")
 		}
-		throw WalletError(description: "Failed to get push authorization code request")
+		throw PresentationSession.makeError(str: "Failed to get push authorization code request")
 	}
 
 	private func handleAuthorizationCode(issuer: Issuer, request: AuthorizationRequestPrepared, authorizationCode: String) async throws -> AuthorizedRequest {
@@ -261,9 +273,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
 				return authorized
 			}
-			throw WalletError(description: "Failed to get access token")
+			throw PresentationSession.makeError(str: "Failed to get access token")
 		case .failure(let error):
-			throw WalletError(description: error.localizedDescription)
+			throw PresentationSession.makeError(str: "Authorization code handling failed: \(error.localizedDescription)")
 		}
 	}
 
@@ -286,14 +298,15 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 						return try handleCredentialResponse(credentials: credentials, format: format, configuration: configuration)
 					}
 				} else {
-					throw WalletError(description: "No credential response results available")
+					throw PresentationSession.makeError(str: "No credential response results available")
 				}
 			case .invalidProof:
-				throw WalletError(description: "Although providing a proof with c_nonce the proof is still invalid")
+				throw PresentationSession.makeError(str: "Although providing a proof with c_nonce the proof is still invalid")
 			case .failed(let error):
-				throw WalletError(description: error.localizedDescription)
+				throw PresentationSession.makeError(str: error.localizedDescription)
 			}
-		case .failure(let error): throw WalletError(description: error.localizedDescription)
+		case .failure(let error):
+			throw PresentationSession.makeError(str: "Credential submission use case failed: \(error.localizedDescription)")
 		}
 	}
 
@@ -307,7 +320,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			// logger.info("Issued credential data:\n\(json.first!.1["credential"].stringValue)")
 			return json.map { j in let str = j.1["credential"].stringValue; return (Data(base64URLEncoded: str), str) }
 		} else {
-			throw WalletError(description: "Invalid credential")
+			throw PresentationSession.makeError(str: "Invalid credential")
 		} }
 		return .issued(credData, configuration)
 	}
@@ -321,11 +334,19 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
-		guard case .presentation_request_url(_) = model.pendingReason else { throw WalletError(description: "Unknown pending reason: \(model.pendingReason)") }
-		guard let webUrl else { throw WalletError(description: "Web URL not specified") }
+		guard case .presentation_request_url(_) = model.pendingReason else {
+			throw PresentationSession.makeError(str: "Unknown pending reason: \(model.pendingReason)")
+		}
+		guard let webUrl else {
+			throw PresentationSession.makeError(str: "Web URL not specified")
+		}
 		let asWeb = try await loginUserAndGetAuthCode(authorizationCodeURL: webUrl)
-		guard case .code(let authorizationCode) = asWeb else { throw WalletError(description: "Pending issuance not authorized") }
-		guard let offer = Self.credentialOfferCache[model.metadataKey] else { throw WalletError(description: "Pending issuance cannot be completed") }
+		guard case .code(let authorizationCode) = asWeb else {
+			throw PresentationSession.makeError(str: "Pending issuance not authorized")
+		}
+		guard let offer = Self.credentialOfferCache[model.metadataKey] else {
+			throw PresentationSession.makeError(str: "Pending issuance cannot be completed")
+		}
 		let issuer = try getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
@@ -352,10 +373,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
 				return .deferred(deferredModel)
 			case .errored(_, let errorDescription):
-				throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")")
+				throw PresentationSession.makeError(str: "\(errorDescription ?? "Something went wrong with your deferred request response")")
 			}
 		case .failure(let error):
-			throw WalletError(description: error.localizedDescription)
+			throw PresentationSession.makeError(str: error.localizedDescription)
 		}
 	}
 
@@ -425,7 +446,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 				return algorithm
 			}
 		}
-		throw WalletError(description: "Unable to find supported signing algorithm. Credential issuer supports: \(algSupported.map(\.rawValue)), secure area supports: \(secureAreasSupportedAlgorithms.map(\.rawValue))")
+		throw PresentationSession.makeError(str: "Unable to find supported signing algorithm. Credential issuer supports: \(algSupported.map(\.rawValue)), secure area supports: \(secureAreasSupportedAlgorithms.map(\.rawValue))")
 	}
 
 	/// Get a compatible curve for the given signing algorithm

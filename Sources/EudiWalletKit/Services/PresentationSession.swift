@@ -99,21 +99,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
 		readerLegalName = request.readerLegalName
-		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr) }
+		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document") }
 		status = .requestReceived
 	}
 
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
-	public static func makeError(str: String) -> NSError {
+	public static func makeError(str: String, localizationKey: String? = nil) -> WalletError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
-		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: str])
-	}
-
-	public static func makeError(code: MdocDataTransfer18013.ErrorCode, str: String? = nil) -> NSError {
-		let message = str ?? code.description
-		logger.error(Logger.Message(unicodeScalarLiteral: message))
-		return NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
+		return WalletError(description: str, localizationKey: localizationKey)
 	}
 
 	/// Start QR engagement to be presented to verifier
@@ -121,20 +115,20 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async throws {
-		if docIdToPresentInfo.count == 0 { await setError(NSError(domain: "\(PresentationSession.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: Self.NotAvailableStr])); return }
+		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document"); return }
 		do {
 			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
 			await MainActor.run {
 				deviceEngagement = data
 				status = .qrEngagementReady
 			}
-		} catch { await setError(error) }
+		} catch { await setError(error.localizedDescription) }
 	}
 
 	@MainActor
-	func setError(_ error: Error) {
+	func setError(_ description: String, localizationKey: String? = nil) {
 		status = .error
-		uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo)
+		uiError = WalletError(description: description, localizationKey: localizationKey)
 	}
 
 	/// Receive request from verifer
@@ -149,7 +143,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			try await decodeRequest(request)
 			return request
 		} catch {
-			await setError(error)
+			await setError(error.localizedDescription)
 			return nil
 		}
 	}
@@ -172,7 +166,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 /// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
-	///   - itemsToSend: Data to send organized into a hierarcy of doc.types and namespaces
+	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
 		do {
@@ -183,7 +177,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys))
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
-			await setError(error)
+			await setError(error.localizedDescription)
 			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
 			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
 		}

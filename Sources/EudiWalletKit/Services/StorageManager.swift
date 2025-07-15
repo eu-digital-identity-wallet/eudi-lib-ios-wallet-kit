@@ -355,7 +355,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	}
 
 	func setError(_ error: Error) async {
-		await MainActor.run { uiError = WalletError(description: error.localizedDescription, userInfo: (error as NSError).userInfo) }
+		await MainActor.run { uiError = WalletError(description: error.localizedDescription) }
 	}
 
 }
