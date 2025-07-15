@@ -1,8 +1,8 @@
-## v0.13.0
+## v0.13.2
 
 ### Error Handling Improvements:
 - **Improved WalletError structure**: Refactored `WalletError` from enum to struct with localization support for better error handling consistency.
-- **Enhanced error logging**: Added comprehensive `logger.error` statements before all `throw` statements across the wallet codebase to improve debugging capabilities and error traceability.
+- **Enhanced error logging**: Added `logger.error` statements before all `throw` statements across the wallet codebase to improve debugging capabilities.
 
 ## v0.12.9
 - Updated [eudi-lib-sdjwt-swift](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift) library to version v0.7.2
