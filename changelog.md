@@ -1,8 +1,15 @@
 ## v0.13.2
 
 ### Error Handling Improvements:
-- **Improved WalletError structure**: Refactored `WalletError` from enum to struct with localization support for better error handling consistency.
+- **Improved WalletError structure**: Refactored `WalletError` from enum to struct with property to support localization: `public let localizationKey: String?`.
 - **Enhanced error logging**: Added `logger.error` statements before all `throw` statements across the wallet codebase to improve debugging capabilities.
+
+## v0.13.1
+- Fix for presentations based on DCQL query
+
+## v0.13.0
+- Fixed failure to issue documents with credential offer when the authorization server defined in the offer uses DPoP.
+- Fixed credential offer issuance to use batch size passed to `issueDocumentsByOfferUrl`.
 
 ## v0.12.9
 - Updated [eudi-lib-sdjwt-swift](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift) library to version v0.7.2
