@@ -190,7 +190,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let issueReq = try await Self.authorizedAction(action: {
 			return try await beginIssueDocument(id: id, keyOptions: keyOptions)
 		}, disabled: !userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docTypeIdentifier.docTypeOrVct ?? docTypeIdentifier.value, comment: "")))
-		guard let issueReq else { throw LAError(.userCancel)}
+		guard let issueReq else {
+			logger.error("User cancelled authentication")
+			throw LAError(.userCancel)
+		}
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: openID4VciIssuerUrl, uiCulture: uiCulture, config: openID4VciConfig.toOpenId4VCIConfig(), cacheIssuerMetadata: openID4VciConfig.cacheIssuerMetadata, networking: networkingVci)
 		return openId4VCIService
 	}
@@ -201,7 +204,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let issuerMetadata = try await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networkingVci)).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 			case .success(let metaData): return metaData
-			case .failure: throw WalletError(description: "Failed to retrieve issuer metadata")
+			case .failure(let error):
+				throw PresentationSession.makeError(str: "Failed to retrieve issuer metadata: \(error.localizedDescription)")
 		}
 	}
 
@@ -251,7 +255,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter deferredDoc: A stored document with deferred status
 	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status") }
+		guard deferredDoc.status == .deferred else {
+			throw PresentationSession.makeError(str: "Invalid document status for deferred issuance: \(deferredDoc.status)")
+		}
 		let issueReq = try IssueRequest(id: deferredDoc.id, keyOptions: keyOptions)
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig.toOpenId4VCIConfig(), cacheIssuerMetadata: false, networking: networkingVci)
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
@@ -266,7 +272,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw WalletError(description: "Invalid document status") }
+		guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else {
+			throw PresentationSession.makeError(str: "Invalid document status for pending issuance: \(pendingDoc.status)")
+		}
 		let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: keyOptions)
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
@@ -283,7 +291,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 1, credentialPolicy: issueReq.credentialPolicy)
 		switch issueOutcome {
 		case .issued(let dataPair, let cc):
-			guard dataPair.first != nil else { throw WalletError(description: "Empty issued data array") }
+			guard dataPair.first != nil else {
+				throw PresentationSession.makeError(str: "Empty issued data array")
+			}
 			dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 			docMetadata = cc.convertToDocMetadata()
 			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope
@@ -327,7 +337,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let dvci = try await getdefaultOpenId4VCIService()
 			return try await dvci.resolveOfferDocTypes(uriOffer: uriOffer, offer: offer)
 		case .failure(let error):
-			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)")
+			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
 	}
 
@@ -340,7 +350,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
 		if docTypes.isEmpty { return [] }
-		guard let offer = await OpenId4VCIService.credentialOfferCache[offerUri] else { throw WalletError(description: "offerUri not resolved. resolveOfferDocTypes must be called first")}
+		guard let offer = await OpenId4VCIService.credentialOfferCache[offerUri] else {
+			throw PresentationSession.makeError(str: "Offer URI not resolved: \(offerUri)")
+		}
 		var documents = [WalletStorage.Document]()
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
@@ -455,7 +467,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			try await storage.loadDocuments(status: .issued, uiCulture: uiCulture)
 		} catch {
 			await storage.setError(error)
-			throw WalletError(description: error.localizedDescription)
+			throw PresentationSession.makeError(str: error.localizedDescription)
 		}
 	}
 
@@ -477,7 +489,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: An ``InitializeTransferData`` instance that can be used to initialize a presentation service
 	public func prepareServiceDataParameters(format: DocDataFormat? = nil) async throws -> (InitializeTransferData, [WalletStorage.Document]) {
 		var parameters: InitializeTransferData
-		guard var docs = try await storage.storageService.loadDocuments(status: .issued), docs.count > 0 else { throw WalletError(description: "No documents found") }
+		guard var docs = try await storage.storageService.loadDocuments(status: .issued), docs.count > 0 else {
+			throw PresentationSession.makeError(str: PresentationSession.NotAvailableStr, localizationKey: "request_data_no_document")
+		}
 		if let format { docs = docs.filter { $0.docDataFormat == format } }
 		let idsToDocData = docs.compactMap { $0.getDataForTransfer() }
 		var docKeyInfos = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.docKeyInfo))
@@ -492,7 +506,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			documentKeyIndexes[doc0.id] = doc?.keyIndex
 		}
 		docData = docData.filter { docKeyInfos[$0.key] != nil }
-		guard idsToDocData.count > 0 else { throw WalletError(description: "Documents decode error") }
+		guard idsToDocData.count > 0 else {
+			throw PresentationSession.makeError(str: "Documents decode error - no valid document data found")
+		}
 		let docMetadata = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.metadata))
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.filter({$0.docType != nil}).map { ($0.id, $0.docType!) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(uiCulture)) })
@@ -611,7 +627,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				}
 			}
 		} else if let error {
-			throw WalletError(description: error.localizedDescription)
+			throw PresentationSession.makeError(str: error.localizedDescription)
 		}
 		return nil
 	}
