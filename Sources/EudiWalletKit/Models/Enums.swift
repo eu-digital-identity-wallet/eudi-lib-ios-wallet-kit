@@ -17,14 +17,55 @@ limitations under the License.
 import Foundation
 import OpenID4VCI
 
-enum AsWebOutcome {
+enum AsWebOutcome: @unchecked Sendable {
 	case code(String)
 	case presentation_request(URL)
 }
 
-enum AuthorizeRequestOutcome {
+enum AuthorizeRequestOutcome: @unchecked Sendable {
 	case authorized(AuthorizedRequest)
 	case presentation_request(URL)
 }
 
+public enum DocTypeIdentifier: Sendable, Hashable, Codable {
+	case msoMdoc(docType: String)
+	case sdJwt(vct: String)
+	case identifier(String)
+
+	/// Extract docType for msoMdoc credentials
+	public var docType: String? {
+		switch self {
+		case .msoMdoc(let docType): return docType
+		case .sdJwt, .identifier: return nil
+		}
+	}
+
+	/// Extract vct for SD-JWT credentials
+	public var vct: String? {
+		switch self {
+		case .sdJwt(let vct): return vct
+		case .msoMdoc, .identifier: return nil
+		}
+	}
+
+	public var docTypeOrVct: String? {
+		docType ?? vct
+	}
+	/// Extract identifier for credential configuration identifiers
+	public var configurationIdentifier: String? {
+		switch self {
+		case .identifier(let id): return id
+		case .msoMdoc, .sdJwt: return nil
+		}
+	}
+
+	/// Get the primary identifier value regardless of type
+	public var value: String {
+		switch self {
+		case .msoMdoc(let docType): return docType
+		case .sdJwt(let vct): return vct
+		case .identifier(let id): return id
+		}
+	}
+}
 

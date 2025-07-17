@@ -45,7 +45,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		if bleServerTransfer.unlockData == nil {
 			var unlockData = [String: Data]()
-			for (id, key) in bleServerTransfer.devicePrivateKeys {
+			for (id, key) in bleServerTransfer.privateKeyObjects {
 				let ud = try await key.secureArea.unlockKey(id: id)
 				if let ud { unlockData[id] = ud }
 			}
@@ -67,8 +67,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	}
 
 	public func unlockKey(id: String) async throws -> Data? {
-		if let devicePrivateKey = bleServerTransfer.devicePrivateKeys[id] {
-			return try await devicePrivateKey.secureArea.unlockKey(id: id)
+		if let dpo = bleServerTransfer.privateKeyObjects[id] {
+			return try await dpo.secureArea.unlockKey(id: id)
 		}
 		return nil
 	}
@@ -77,7 +77,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws  {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend)
 		handleSelected = nil
 		TransactionLogUtils.setCborTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
@@ -90,13 +90,11 @@ extension BlePresentationService: MdocOfflineDelegate {
 	/// - Parameter newStatus: New status
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
 		status = if let st = TransferStatus(rawValue: newStatus.rawValue) { st } else { .error }
-				switch newStatus {
-				case .qrEngagementReady:
-						if let qrCode = self.bleServerTransfer.qrCodePayload {
-							deviceEngagement = qrCode
-						}
+		switch newStatus {
+		case .qrEngagementReady:
+			if let qrCode = self.bleServerTransfer.qrCodePayload { deviceEngagement = qrCode }
 		default: break
-				}
+		}
 	}
 	/// Transfer finished with error
 	/// - Parameter error: The error description
