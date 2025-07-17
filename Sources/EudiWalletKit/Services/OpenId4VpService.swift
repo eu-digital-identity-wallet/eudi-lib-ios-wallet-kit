@@ -65,7 +65,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var siopOpenId4Vp: SiopOpenID4VP!
 	var openId4VpVerifierApiUri: String?
 	var openId4VpVerifierLegalName: String?
-	var openId4VpVerifierRedirectUri: String?
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
@@ -80,7 +79,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var flow: FlowType
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, openId4VpVerifierRedirectUri: String?, networking: Networking) throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, networking: Networking) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = parameters.toInitializeTransferInfo()
 		dataFormats = objs.dataFormats; docs = objs.documentObjects; privateKeyObjects = objs.privateKeyObjects
@@ -95,7 +94,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openid4VPlink = openid4VPlink
 		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
 		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
-		self.openId4VpVerifierRedirectUri = openId4VpVerifierRedirectUri
 		self.networking = networking
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
@@ -119,7 +117,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		siopOpenId4Vp = SiopOpenID4VP(walletConfiguration: getWalletConf())
 		switch await siopOpenId4Vp.authorize(url: openid4VPURI)  {
 		case .notSecured(data: let rrd):
-			if case let .redirectUri(clientId: uri) = rrd.client, verifierRedirectUrl?.host() == uri.host() { return try handleRequestData(rrd) }
+			if case .redirectUri = rrd.client { return try handleRequestData(rrd) }
 			else { throw PresentationSession.makeError(str: "Not secured request") }
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.localizedDescription)")
@@ -301,8 +299,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return result
 	}
 
-	var verifierRedirectUrl: URL? { if let openId4VpVerifierRedirectUri, let uri = URL(string: openId4VpVerifierRedirectUri) { uri } else { nil } }
-
 	/// OpenId4VP wallet configuration
 	func getWalletConf() -> SiopOpenId4VPConfiguration? {
 		guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
@@ -314,7 +310,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 		}
-		if let verifierRedirectUrl { supportedClientIdSchemes.append(.redirectUri(clientId: verifierRedirectUrl)) }
+		supportedClientIdSchemes.append(.redirectUri) // add redirect uri scheme
 		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, signingKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [], session: networking)
 		return res
 	}
