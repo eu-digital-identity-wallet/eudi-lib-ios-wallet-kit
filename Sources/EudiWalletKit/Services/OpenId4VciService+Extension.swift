@@ -66,6 +66,10 @@ extension OpenId4VCIService {
 		
 		let authReqParams = convertAuthorizedRequestToParam(authorizedRequest: authorized)
 		
+		if let cnonce = authReqParams?.cNonce as? String {
+			UserDefaults.standard.set(cnonce, forKey: "wteNonce")
+		}
+		
 		for i in 0..<batchCount {
 			try await initSecurityKeys(algSupported: Set(model.configuration.algValuesSupported), docID: issueRequestsIds[i])
 		}
