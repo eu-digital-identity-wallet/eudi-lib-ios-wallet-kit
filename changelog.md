@@ -1,3 +1,11 @@
+## v0.13.3
+
+### OpenID4VCI - Draft 16 Algorithm Support:
+- **Enhanced credential metadata parsing**: Added support for IANA COSE algorithm integer values in `credential_signing_alg_values_supported` according to OpenID for Verifiable Credential Issuance Draft 16.
+- **Backward compatibility**: Maintains full compatibility with existing string algorithm names (ES256, ES384, ES512, EdDSA).
+- **IANA COSE algorithm mapping**: Supports integer algorithm identifiers (-7 for ES256, -34 for ES384, -36 for ES512, -8 for EdDSA).
+- **Robust algorithm handling**: Mixed format support allows both string and integer algorithm formats in the same credential metadata.
+
 ## v0.13.2
 
 ### Error Handling Improvements:

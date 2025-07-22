@@ -67,7 +67,7 @@ It is based on the following specifications:
 - Presentation Exchange v2.0.0 - Published
 - OpenID4VP – Draft 24
 - SIOPv2 – Draft 13
-- OpenID4VCI – Draft 15
+- OpenID4VCI – Draft 15 & Draft 16 (IANA COSE algorithm support)
 
 ### Disclaimer
 The released software is a initial development release version: 

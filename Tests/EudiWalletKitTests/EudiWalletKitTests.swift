@@ -93,5 +93,82 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
+	@Test("Algorithm conversion supports string names", arguments: [
+		("ES256", JWSAlgorithm.AlgorithmType.ES256),
+		("ES384", JWSAlgorithm.AlgorithmType.ES384),
+		("ES512", JWSAlgorithm.AlgorithmType.ES512),
+		("EdDSA", JWSAlgorithm.AlgorithmType.EdDSA)
+	])
+	func testStringAlgorithmConversion(input: String, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == expected, "String algorithm '\(input)' should convert to \(expected)")
+	}
+
+	@Test("Algorithm conversion supports IANA COSE integer values", arguments: [
+		("-7", JWSAlgorithm.AlgorithmType.ES256),   // ECDSA w/ SHA-256
+		("-34", JWSAlgorithm.AlgorithmType.ES384),  // ECDSA w/ SHA-384
+		("-36", JWSAlgorithm.AlgorithmType.ES512),  // ECDSA w/ SHA-512
+		("-8", JWSAlgorithm.AlgorithmType.EdDSA)    // EdDSA signature algorithms
+	])
+	func testCOSEIntegerAlgorithmConversion(input: String, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == expected, "COSE integer '\(input)' should convert to \(expected)")
+	}
+
+	@Test("Algorithm conversion returns nil for invalid values", arguments: [
+		"invalid-algorithm",
+		"999",
+		"-999",
+		"",
+		"RS256"  // Not supported by this implementation
+	])
+	func testInvalidAlgorithmConversion(input: String) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == nil, "Invalid algorithm '\(input)' should return nil")
+	}
+
+	@Test("Direct COSE algorithm conversion", arguments: [
+		(-7, JWSAlgorithm.AlgorithmType.ES256),
+		(-34, JWSAlgorithm.AlgorithmType.ES384),
+		(-36, JWSAlgorithm.AlgorithmType.ES512),
+		(-8, JWSAlgorithm.AlgorithmType.EdDSA)
+	])
+	func testDirectCOSEAlgorithmConversion(input: Int, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.coseAlgorithmToJWSAlgorithmType(input)
+		#expect(result == expected, "COSE algorithm \(input) should convert to \(expected)")
+	}
+
+	@Test("Direct COSE algorithm conversion returns nil for unsupported values", arguments: [
+		-1, -2, -3, -4, -5, -6, -9, -10, 1, 2, 3, 999, -999
+	])
+	func testUnsupportedCOSEAlgorithmConversion(input: Int) throws {
+		let result = OpenId4VCIService.coseAlgorithmToJWSAlgorithmType(input)
+		#expect(result == nil, "Unsupported COSE algorithm \(input) should return nil")
+	}
+
+	@Test("Integration test: Mixed algorithm formats in credential metadata")
+	func testMixedAlgorithmFormatsIntegration() throws {
+		// Simulate credential metadata with both string and COSE integer formats
+		let mixedAlgorithms: Set<String> = ["ES256", "-34", "EdDSA", "-7"]
+		let convertedAlgorithms = mixedAlgorithms.compactMap { OpenId4VCIService.convertToJWSAlgorithmType($0) }
+		
+		// Should successfully convert all 4 algorithms (even though ES256 appears twice)
+		#expect(convertedAlgorithms.count == 4, "Should convert all 4 algorithm values")
+		
+		// Check that all expected algorithms are present
+		let expectedAlgorithms: Set<JWSAlgorithm.AlgorithmType> = [.ES256, .ES384, .EdDSA]
+		let actualAlgorithms = Set(convertedAlgorithms)
+		
+		#expect(actualAlgorithms == expectedAlgorithms, "Should contain ES256, ES384, and EdDSA")
+	}
+
+	@Test("Error handling: Empty algorithm set should be handled gracefully")
+	func testEmptyAlgorithmSet() throws {
+		let emptyAlgorithms: Set<String> = []
+		let convertedAlgorithms = emptyAlgorithms.compactMap { OpenId4VCIService.convertToJWSAlgorithmType($0) }
+		
+		#expect(convertedAlgorithms.isEmpty, "Empty input should result in empty output")
+	}
+
 
 	}
