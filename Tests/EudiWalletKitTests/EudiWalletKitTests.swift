@@ -146,5 +146,29 @@ struct EudiWalletKitTests {
 		#expect(result == nil, "Unsupported COSE algorithm \(input) should return nil")
 	}
 
+	@Test("Integration test: Mixed algorithm formats in credential metadata")
+	func testMixedAlgorithmFormatsIntegration() throws {
+		// Simulate credential metadata with both string and COSE integer formats
+		let mixedAlgorithms: Set<String> = ["ES256", "-34", "EdDSA", "-7"]
+		let convertedAlgorithms = mixedAlgorithms.compactMap { OpenId4VCIService.convertToJWSAlgorithmType($0) }
+		
+		// Should successfully convert all 4 algorithms (even though ES256 appears twice)
+		#expect(convertedAlgorithms.count == 4, "Should convert all 4 algorithm values")
+		
+		// Check that all expected algorithms are present
+		let expectedAlgorithms: Set<JWSAlgorithm.AlgorithmType> = [.ES256, .ES384, .EdDSA]
+		let actualAlgorithms = Set(convertedAlgorithms)
+		
+		#expect(actualAlgorithms == expectedAlgorithms, "Should contain ES256, ES384, and EdDSA")
+	}
+
+	@Test("Error handling: Empty algorithm set should be handled gracefully")
+	func testEmptyAlgorithmSet() throws {
+		let emptyAlgorithms: Set<String> = []
+		let convertedAlgorithms = emptyAlgorithms.compactMap { OpenId4VCIService.convertToJWSAlgorithmType($0) }
+		
+		#expect(convertedAlgorithms.isEmpty, "Empty input should result in empty output")
+	}
+
 
 	}
