@@ -93,5 +93,58 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
+	@Test("Algorithm conversion supports string names", arguments: [
+		("ES256", JWSAlgorithm.AlgorithmType.ES256),
+		("ES384", JWSAlgorithm.AlgorithmType.ES384),
+		("ES512", JWSAlgorithm.AlgorithmType.ES512),
+		("EdDSA", JWSAlgorithm.AlgorithmType.EdDSA)
+	])
+	func testStringAlgorithmConversion(input: String, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == expected, "String algorithm '\(input)' should convert to \(expected)")
+	}
+
+	@Test("Algorithm conversion supports IANA COSE integer values", arguments: [
+		("-7", JWSAlgorithm.AlgorithmType.ES256),   // ECDSA w/ SHA-256
+		("-34", JWSAlgorithm.AlgorithmType.ES384),  // ECDSA w/ SHA-384
+		("-36", JWSAlgorithm.AlgorithmType.ES512),  // ECDSA w/ SHA-512
+		("-8", JWSAlgorithm.AlgorithmType.EdDSA)    // EdDSA signature algorithms
+	])
+	func testCOSEIntegerAlgorithmConversion(input: String, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == expected, "COSE integer '\(input)' should convert to \(expected)")
+	}
+
+	@Test("Algorithm conversion returns nil for invalid values", arguments: [
+		"invalid-algorithm",
+		"999",
+		"-999",
+		"",
+		"RS256"  // Not supported by this implementation
+	])
+	func testInvalidAlgorithmConversion(input: String) throws {
+		let result = OpenId4VCIService.convertToJWSAlgorithmType(input)
+		#expect(result == nil, "Invalid algorithm '\(input)' should return nil")
+	}
+
+	@Test("Direct COSE algorithm conversion", arguments: [
+		(-7, JWSAlgorithm.AlgorithmType.ES256),
+		(-34, JWSAlgorithm.AlgorithmType.ES384),
+		(-36, JWSAlgorithm.AlgorithmType.ES512),
+		(-8, JWSAlgorithm.AlgorithmType.EdDSA)
+	])
+	func testDirectCOSEAlgorithmConversion(input: Int, expected: JWSAlgorithm.AlgorithmType) throws {
+		let result = OpenId4VCIService.coseAlgorithmToJWSAlgorithmType(input)
+		#expect(result == expected, "COSE algorithm \(input) should convert to \(expected)")
+	}
+
+	@Test("Direct COSE algorithm conversion returns nil for unsupported values", arguments: [
+		-1, -2, -3, -4, -5, -6, -9, -10, 1, 2, 3, 999, -999
+	])
+	func testUnsupportedCOSEAlgorithmConversion(input: Int) throws {
+		let result = OpenId4VCIService.coseAlgorithmToJWSAlgorithmType(input)
+		#expect(result == nil, "Unsupported COSE algorithm \(input) should return nil")
+	}
+
 
 	}

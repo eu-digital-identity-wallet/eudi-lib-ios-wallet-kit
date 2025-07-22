@@ -50,8 +50,8 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func initSecurityKeys(algSupported: Set<String>) async throws -> [BindingKey] {
-		// Convert credential issuer supported algorithms to JWSAlgorithm types
-		let algTypes = algSupported.compactMap { JWSAlgorithm.AlgorithmType(rawValue: $0) }
+		// Convert credential issuer supported algorithms to JWSAlgorithm types, supporting both string names and IANA COSE integer values
+		let algTypes = algSupported.compactMap { Self.convertToJWSAlgorithmType($0) }
 		guard !algTypes.isEmpty else {
 			throw PresentationSession.makeError(str: "No valid signing algorithms found in credential metadata: \(algSupported)")
 		}
@@ -471,6 +471,34 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		switch algorithm {
 		case .ES256: .ES256; case .ES384: .ES384; case .ES512: .ES512; case .EDDSA: .EdDSA  // Handle the casing difference: EDDSA -> EdDSA
 		default: nil
+		}
+	}
+
+	/// Convert algorithm value (string name or IANA COSE integer) to JWSAlgorithm.AlgorithmType
+	/// Supports both string algorithm names (e.g., "ES256", "EdDSA") and IANA COSE integer values (e.g., "-7", "-8")
+	static func convertToJWSAlgorithmType(_ value: String) -> JWSAlgorithm.AlgorithmType? {
+		// First try as string algorithm name
+		if let algorithmType = JWSAlgorithm.AlgorithmType(rawValue: value) {
+			return algorithmType
+		}
+		
+		// Try as IANA COSE integer value
+		if let intValue = Int(value) {
+			return coseAlgorithmToJWSAlgorithmType(intValue)
+		}
+		
+		return nil
+	}
+
+	/// Convert IANA COSE algorithm integer to JWSAlgorithm.AlgorithmType
+	/// Based on IANA COSE algorithms registry: https://www.iana.org/assignments/cose/cose.xhtml#algorithms
+	static func coseAlgorithmToJWSAlgorithmType(_ coseAlgorithm: Int) -> JWSAlgorithm.AlgorithmType? {
+		switch coseAlgorithm {
+		case -7: return .ES256    // ECDSA w/ SHA-256
+		case -34: return .ES384   // ECDSA w/ SHA-384
+		case -36: return .ES512   // ECDSA w/ SHA-512
+		case -8: return .EdDSA    // EdDSA signature algorithms
+		default: return nil
 		}
 	}
 
