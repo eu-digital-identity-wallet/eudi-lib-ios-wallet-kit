@@ -93,5 +93,19 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
-
+@Test("URL reconstruction preserves port numbers")
+	func testUrlReconstructionWithPort() throws {
+		// Test URL without port
+		let urlWithoutPort = try #require(URL(string: "https://example.com/path"))
+		let reconstructedWithoutPort = urlWithoutPort.getBaseUrl()
+		#expect(reconstructedWithoutPort == "https://example.com")
+		// Test URL with standard HTTPS port (should not include port)
+		let urlWithStandardPort = try #require(URL(string: "https://example.com:443/path"))
+		let reconstructedWithStandardPort = urlWithStandardPort.getBaseUrl()
+		#expect(reconstructedWithStandardPort == "https://example.com:443")
+		// Test HTTP URL with custom port
+		let httpUrlWithPort = try #require(URL(string: "http://localhost:3000/api"))
+		let reconstructedHttpWithPort = httpUrlWithPort.getBaseUrl()
+		#expect(reconstructedHttpWithPort == "http://localhost:3000")
 	}
+}

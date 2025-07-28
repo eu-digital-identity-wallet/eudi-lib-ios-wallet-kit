@@ -194,6 +194,14 @@ extension DocMetadata {
 	}
 }
 
+extension URL {
+	func getBaseUrl() -> String {
+		var urlString = scheme! + "://" + host!
+		if let port = port { urlString += ":\(port)" }
+		return urlString
+	}
+}
+
 extension JSON {
 	func getDataValue(name: String) -> (DocDataValue, String)? {
 		switch type {
