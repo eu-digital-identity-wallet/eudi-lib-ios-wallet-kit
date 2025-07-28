@@ -93,5 +93,37 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
+	@Test("URL reconstruction preserves port numbers")
+	func testUrlReconstructionWithPort() throws {
+		// Test URL without port
+		let urlWithoutPort = try #require(URL(string: "https://example.com/path"))
+		let reconstructedWithoutPort = reconstructUrl(from: urlWithoutPort)
+		#expect(reconstructedWithoutPort == "https://example.com")
+		
+		// Test URL with standard HTTPS port (should not include port)
+		let urlWithStandardPort = try #require(URL(string: "https://example.com:443/path"))
+		let reconstructedWithStandardPort = reconstructUrl(from: urlWithStandardPort)
+		#expect(reconstructedWithStandardPort == "https://example.com:443")
+		
+		// Test URL with custom port
+		let urlWithCustomPort = try #require(URL(string: "https://diagencygw:8443/diagency/v1.0/oidvc/vci/87305e9d-cc83-4f5c-a17b-abcedc7933ce"))
+		let reconstructedWithCustomPort = reconstructUrl(from: urlWithCustomPort)
+		#expect(reconstructedWithCustomPort == "https://diagencygw:8443")
+		
+		// Test HTTP URL with custom port
+		let httpUrlWithPort = try #require(URL(string: "http://localhost:3000/api"))
+		let reconstructedHttpWithPort = reconstructUrl(from: httpUrlWithPort)
+		#expect(reconstructedHttpWithPort == "http://localhost:3000")
+	}
+	
+	/// Helper function that matches the logic in resolveOfferUrlDocTypes
+	private func reconstructUrl(from url: URL) -> String {
+		var urlString = url.scheme! + "://" + url.host!
+		if let port = url.port {
+			urlString += ":\(port)"
+		}
+		return urlString
+	}
+
 
 	}

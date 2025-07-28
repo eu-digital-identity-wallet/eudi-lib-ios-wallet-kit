@@ -328,7 +328,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: networkingVci), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networkingVci)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networkingVci), oauthFetcher: Fetcher(session: networkingVci))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
-			let urlString = offer.credentialIssuerIdentifier.url.scheme! + "://" + offer.credentialIssuerIdentifier.url.host!
+			let url = offer.credentialIssuerIdentifier.url
+			var urlString = url.scheme! + "://" + url.host!
+			if let port = url.port {
+				urlString += ":\(port)"
+			}
 			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
 			self.openID4VciIssuerUrl = credentialIssuerIdentifier.url.absoluteString
 			let dvci = try await getdefaultOpenId4VCIService()
