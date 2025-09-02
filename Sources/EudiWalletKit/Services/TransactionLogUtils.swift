@@ -52,15 +52,7 @@ class TransactionLogUtils {
 			let decoder = JSONDecoder()
 			do {
 				let vpResponse = try decoder.decode(VpResponsePayload.self, from: raw)
-				if let ps = vpResponse.presentation_submission {
-					for m in ps.descriptorMap.enumerated() {
-						let presentedStr = vpResponse.verifiable_presentations[m.offset]
-						let dataFormat: DocDataFormat = if (m.element.toJSON()["format"] as? String) == "mso_mdoc" { .cbor } else { .sdjwt }
-						let metadata = transactionLog.docMetadata?[m.offset]
-						if let dcc = parseDocClaimDecodable(presentedStr, dataFormat: dataFormat, metadata: metadata, uiCulture: uiCulture) {  res.append(dcc) }
-
-					}
-				} else if let df = vpResponse.data_formats {
+				if let df = vpResponse.data_formats {
 					for m in df.enumerated() {
 						let presentedStr = vpResponse.verifiable_presentations[m.offset]
 						let metadata = transactionLog.docMetadata?[m.offset]

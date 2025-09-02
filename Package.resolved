@@ -1,5 +1,5 @@
 {
-  "originHash" : "c33c57906a0c8aa66212002118ba65d60651967b285504cd0a82f34958f9db38",
+  "originHash" : "424c7dc7eca447b175e1ac9e3ce3aad92b1e8e080ed32d6e76b6b2bbfdbcdc27",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "15e525cfff2da9b7429285346248e2c67ba0bd12",
         "version" : "1.2.4"
-      }
-    },
-    {
-      "identity" : "chronometer",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/KittyMac/Chronometer.git",
-      "state" : {
-        "revision" : "d21b89e5cb5929b5175bdb3ad710a52cbf497eaa",
-        "version" : "0.1.12"
       }
     },
     {
@@ -65,21 +56,12 @@
       }
     },
     {
-      "identity" : "eudi-lib-ios-presentation-exchange-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-presentation-exchange-swift.git",
-      "state" : {
-        "revision" : "3c0e80bc212bf3f68de2781b38565235dca83b23",
-        "version" : "0.4.0"
-      }
-    },
-    {
       "identity" : "eudi-lib-ios-siop-openid4vp-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "b322b0d7c910614c31a1ce2513b1529b8485b515",
-        "version" : "0.15.1"
+        "revision" : "69ffe8ab60ed62bd812c3201df7cca7583463b9e",
+        "version" : "0.9.1"
       }
     },
     {
@@ -110,15 +92,6 @@
       }
     },
     {
-      "identity" : "hitch",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/KittyMac/Hitch.git",
-      "state" : {
-        "revision" : "d6c147a1d70992db39a141cb5bf9cf8fbb776250",
-        "version" : "0.4.148"
-      }
-    },
-    {
       "identity" : "jose-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/beatt83/jose-swift.git",
@@ -137,24 +110,6 @@
       }
     },
     {
-      "identity" : "jsonschema.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kylef/JSONSchema.swift",
-      "state" : {
-        "revision" : "d14de4b2d9205068c9db89c00d097ca43c897000",
-        "version" : "0.6.0"
-      }
-    },
-    {
-      "identity" : "pathkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kylef/PathKit.git",
-      "state" : {
-        "revision" : "3bfd2737b700b9a36565a8c94f4ad2b050a5e574",
-        "version" : "1.0.1"
-      }
-    },
-    {
       "identity" : "secp256k1.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/GigaBitcoin/secp256k1.swift.git",
@@ -164,39 +119,12 @@
       }
     },
     {
-      "identity" : "sextant",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/KittyMac/Sextant.git",
-      "state" : {
-        "revision" : "74b947a80df5c8c776262546832e370afe2341f6",
-        "version" : "0.4.35"
-      }
-    },
-    {
-      "identity" : "spanker",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/KittyMac/Spanker.git",
-      "state" : {
-        "revision" : "dc24d4860c64c41f8def204ba28db841b9099336",
-        "version" : "0.2.50"
-      }
-    },
-    {
-      "identity" : "spectre",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kylef/Spectre.git",
-      "state" : {
-        "revision" : "26cc5e9ae0947092c7139ef7ba612e34646086c7",
-        "version" : "0.10.1"
-      }
-    },
-    {
       "identity" : "swift-asn1",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "a54383ada6cecde007d374f58f864e29370ba5c3",
-        "version" : "1.3.2"
+        "revision" : "f70225981241859eb4aa1a18a75531d26637c8cc",
+        "version" : "1.4.0"
       }
     },
     {
@@ -204,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "999fd70c7803da89f3904d635a6815a2a7cd7585",
-        "version" : "1.10.0"
+        "revision" : "20c451f1ad8e344e61ddbb34ef196653d4b73ea6",
+        "version" : "1.13.0"
       }
     },
     {

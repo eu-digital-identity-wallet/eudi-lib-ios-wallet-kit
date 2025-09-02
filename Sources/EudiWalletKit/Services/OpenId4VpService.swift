@@ -59,7 +59,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var dauthMethod: DeviceAuthMethod
 	var privateKeyObjects: [String: CoseKeyPrivate]!
 	var logger = Logger(label: "OpenId4VpService")
-	var presentationDefinition: PresentationDefinition?
+	// Presentation Exchange removed; keep only DCQL
 	var dcql: DCQL?
 	var resolvedRequestData: ResolvedRequestData?
 	var siopOpenId4Vp: SiopOpenID4VP!
@@ -143,13 +143,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
 			logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 			var requestItems: RequestItems?; var deviceRequestBytes: Data?
-			switch vp.presentationQuery {
-				case let .byPresentationDefinition(pd):
-				presentationDefinition = pd
-				deviceRequestBytes = try? JSONEncoder().encode(pd)
-				let (items, fmtsReq, imap) = try Openid4VpUtils.parsePresentationDefinition(pd, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
-				formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
-				case let .byDigitalCredentialsQuery(dcql):
+			// Only DCQL supported now
+			if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 				self.dcql = dcql
 				deviceRequestBytes = try? JSONEncoder().encode(dcql)
 				let (items, fmtsReq, imap) = try Openid4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
@@ -190,20 +185,20 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws {
-		guard presentationDefinition != nil || dcql != nil, let resolved = resolvedRequestData else {
+		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
 		guard userAccepted, itemsToSend.count > 0 else {
-			try await SendVpTokens(nil, presentationDefinition, dcql, resolved, onSuccess)
+			try await SendVpTokens(nil, dcql, resolved, onSuccess)
 			return
 		}
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
 		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
-		if dcql == nil, formatsRequested.allSatisfy({ (_, value: DocDataFormat) in value == .cbor }) {
+		if formatsRequested.allSatisfy({ (_, value: DocDataFormat) in value == .cbor }) {
 			let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend)
-			let inputId = presentationDefinition?.inputDescriptors.first!.id ?? dcql?.credentials.first?.id.value ?? ""
-			try await SendVpTokens([(inputId, nil, vpToken.0)], presentationDefinition, dcql, resolved, onSuccess)
+			let inputId = dcql?.credentials.first?.id.value ?? ""
+			try await SendVpTokens([(inputId, nil, vpToken.0)], dcql, resolved, onSuccess)
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: vpToken.1, dataFormat: .cbor, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: vpToken.2, transactionLog: &transactionLog)
 		} else {
 			let parser = CompactParser()
@@ -235,7 +230,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					inputToPresentations.append((inputDescrId, docId, VerifiablePresentation.generic(presented.serialisation)))
 				}
 			}
-			try await SendVpTokens(inputToPresentations, presentationDefinition, dcql, resolved, onSuccess)
+			try await SendVpTokens(inputToPresentations, dcql, resolved, onSuccess)
 		}
 	}
 	/// Filter document accordind to the raw format value
@@ -249,15 +244,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///   - onSuccess: Callback function to be called on success
 	///
 	/// - Throws: PresentationSessionError if the presentation submission is not accepted
-	fileprivate func SendVpTokens(_ vpTokens: [(String, String?, VerifiablePresentation)]?, _ pd: PresentationDefinition?, _ dcql: DCQL?, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
-		let presentationSubmission: PresentationSubmission? = if let vpTokens, let pd { PresentationSubmission(id: UUID().uuidString, definitionID: pd.id, descriptorMap: vpTokens.enumerated().map { i,v in
-			 let descr = pd.inputDescriptors.first(where: { $0.id == v.0 })!
-			 return DescriptorMap(id: descr.id, format: descr.formatContainer?.formats.first?["designation"].string ?? "", path: vpTokens.count == 1 ? "$" : "$[\(i)]")
-			}) } else { nil }
-		let consent: ClientConsent = if let vpTokens, let presentationSubmission {
-			.vpToken(vpContent: .presentationExchange(verifiablePresentations: vpTokens.map(\.2), presentationSubmission: presentationSubmission))
-		} else if let vpTokens, dcql != nil {
-			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { ts in ts.first!.2 }))
+	fileprivate func SendVpTokens(_ vpTokens: [(String, String?, VerifiablePresentation)]?, _ dcql: DCQL?, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
+		let consent: ClientConsent = if let vpTokens, dcql != nil {
+			// Group by DCQL query id -> array of VPs (new VPContent requirement)
+			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { $0.map { $0.2 } }))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
 		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
@@ -269,12 +259,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			logger.info("Dispatch rejected, reason: \(reason)")
 			throw PresentationSession.makeError(str: reason)
 		}
-		if let vpTokens, presentationSubmission != nil || dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
+		if let vpTokens, dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
 			let docIds = vpTokens.compactMap { $0.1 }
 			let data_formats: [DocDataFormat]? = if let dcql, case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent { vp.keys.map { dcql.findQuery(id: $0.value)!.dataFormat} } else { nil }
 			let responseMetadata: [Data?] = docIds.map { docMetadata[$0].flatMap { $0 } }
-			let vpTokenValues: [String]? = if case let .vpToken(vpContent) = consent, case .presentationExchange(_,_) = vpContent {  vpTokens.map { $0.2.getString() } } else if case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent {  vp.values.map {$0.getString() } } else  { nil }
-			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues!, presentation_submission: presentationSubmission, data_formats: data_formats, transaction_data: transactionData)
+			let vpTokenValues: [String]? = if case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent {  vp.values.flatMap { $0.map { $0.getString() } } } else  { nil }
+			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues!, data_formats: data_formats, transaction_data: transactionData)
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, transactionLog: &transactionLog)
 		} else if case let .negative(message) = consent {
 			transactionLog = transactionLog.copy(status: .failed, errorMessage: message)
@@ -311,7 +301,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 		}
 		supportedClientIdSchemes.append(.redirectUri) // add redirect uri scheme
-		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), signingKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [],  jarConfiguration: .encryptionOption, vpConfiguration: .default(), session: networking, jarmConfiguration: .default())
+		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [],  jarConfiguration: .encryptionOption, vpConfiguration: .default(), session: networking, responseEncryptionConfiguration: .default())
 		return res
 	}
 

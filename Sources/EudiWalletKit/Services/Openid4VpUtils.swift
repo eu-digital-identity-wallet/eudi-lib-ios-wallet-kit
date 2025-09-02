@@ -18,14 +18,13 @@ import Foundation
 import SwiftCBOR
 import CryptoKit
 import Logging
-import PresentationExchange
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
 import WalletStorage
 import JSONWebSignature
-import JSONWebAlgorithms
+@preconcurrency import JSONWebAlgorithms
 import SiopOpenID4VP
 import SwiftyJSON
 /**
@@ -126,58 +125,7 @@ class Openid4VpUtils {
 		return nil
 	}
 
-	/// Parse mDoc request from presentation definition (Presentation Exchange 2.0.0 protocol)
-	/// dataFormats: map of document-id to data format
-	static func parsePresentationDefinition(_ presentationDefinition: PresentationDefinition, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
-		var inputDescriptorMap = [String: String]()
-		var requestItems = RequestItems()
-		var formatsRequested = [String: DocDataFormat]()
-		for inputDescriptor in presentationDefinition.inputDescriptors {
-			let formatRequested: DocDataFormat = inputDescriptor.formatContainer?.formats.contains(where: { $0["designation"].string?.lowercased() == "mso_mdoc" }) ?? false ? .cbor : .sdjwt
-			let filterValue = inputDescriptor.constraints.fields.first { $0.filter?["const"].string != nil }?.filter?["const"].string
-			let docType = filterValue ?? inputDescriptor.id.trimmingCharacters(in: .whitespacesAndNewlines)
-			let pathRx = formatRequested == .cbor ? Openid4VpUtils.pathNsItemRx : Openid4VpUtils.pathItemRx
-			var nsItems: [String: [RequestItem]] = [:]
-			for field in inputDescriptor.constraints.fields {
-				guard let pair =  Self.parseField(field, pathRx: pathRx, regexParts: formatRequested == .cbor ? 2 : 1) else { continue }
-				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
-				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
-			}
-			if !nsItems.isEmpty { inputDescriptorMap[docType] = inputDescriptor.id; requestItems[docType] = nsItems; formatsRequested[docType] = formatRequested }
-		}
-		return (requestItems, formatsRequested, inputDescriptorMap)
-	}
-
-	/// parse field and return (namespace, RequestItem) pair
-	static func parseField(_ field: Field, pathRx: NSRegularExpression, regexParts: Int) -> (String, RequestItem)? {
-		guard let path = field.paths.first else { return nil }
-		guard let nsItemPair = regexParts == 2 ? parsePath2(path, pathRx: pathRx) : parsePath1(path, pathRx: pathRx) else { return nil }
-		let elementPath = nsItemPair.1.components(separatedBy: ".")
-		return (nsItemPair.0, RequestItem(elementPath: elementPath, intentToRetain: field.intentToRetain ?? false, isOptional: field.optional ?? false))
-	}
-
-	/// parse path and return (namespace, itemIdentifier) pair for jwt format
-	static func parsePath1(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
-		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
-		let r2 = match.range(at: 1)
-		let r2l = path.index(path.startIndex, offsetBy: r2.location)
-		let r2r = path.index(r2l, offsetBy: r2.length)
-		let fieldName = String(path[r2l..<r2r])
-		// take parent only for now
-		return ("", fieldName)
-	}
-
-	/// parse path and return (namespace, itemIdentifier) pair
-	static func parsePath2(_ path: String, pathRx: NSRegularExpression) -> (String, String)? {
-		guard let match = pathRx.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)) else { return nil }
-		let r1 = match.range(at:1);
-		let r1l = path.index(path.startIndex, offsetBy: r1.location)
-		let r1r = path.index(r1l, offsetBy: r1.length)
-		let r2 = match.range(at: 2)
-		let r2l = path.index(path.startIndex, offsetBy: r2.location)
-		let r2r = path.index(r2l, offsetBy: r2.length)
-		return (String(path[r1l..<r1r]), String(path[r2l..<r2r]))
-	}
+	// Presentation Exchange parsing removed
 
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
 		let allPaths = try sdJwt.disclosedPaths()
@@ -191,7 +139,11 @@ class Openid4VpUtils {
     	var payload = [Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: Int(Date().timeIntervalSince1970.rounded()), Keys.sdHash.rawValue: sdHash] as [String : Any]
 		  // Process transaction data hashes if available
 		if let transactionData, !transactionData.isEmpty {
-			let transactionDataHashes = transactionData.map { sha256Hash($0.value) }
+			let transactionDataHashes = transactionData.map { td -> String in
+				switch td {
+				case .sdJwtVc(let v): return sha256Hash(v)
+				}
+			}
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
 		}
@@ -234,7 +186,7 @@ extension CoseEcCurve {
 
 extension CredentialQuery {
 	public var docType: String? {
-		let metaDocType = meta?.dictionaryObject?.first?.value
+		let metaDocType = meta.dictionaryObject?.first?.value
 		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
 		return docType
 	}
