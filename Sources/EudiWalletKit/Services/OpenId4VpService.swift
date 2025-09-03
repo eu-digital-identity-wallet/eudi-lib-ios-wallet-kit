@@ -179,7 +179,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return (VerifiablePresentation.generic(vpTokenStr), vpTokenData, resp.responseMetadata)
 	}
 
-/// Send response via openid4vp
+	/// Send response via openid4vp
 	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
@@ -195,58 +195,52 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
 		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
-		if formatsRequested.allSatisfy({ (_, value: DocDataFormat) in value == .cbor }) {
-			let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend)
-			let inputId = dcql?.credentials.first?.id.value ?? ""
-			try await SendVpTokens([(inputId, nil, vpToken.0)], dcql, resolved, onSuccess)
-			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: vpToken.1, dataFormat: .cbor, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: vpToken.2, transactionLog: &transactionLog)
-		} else {
-			let parser = CompactParser()
-			let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
-			docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
-			// tuples of inputDescriptor-id, docId and verifiable presentation
-			// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
-			var inputToPresentations = [(String, String?, VerifiablePresentation)]()
-			// support sd-jwt documents
-			for (docId, nsItems) in itemsToSend {
-				guard let docType = idsToDocTypes[docId], let inputDescrId = inputDescriptorMap[docType] else { continue }
-				if dataFormats[docId] == .cbor {
-					if docsCbor == nil { makeCborDocs() }
-					let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
-					let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
-					inputToPresentations.append((inputDescrId, docId, vpToken.0))
-				} else if dataFormats[docId] == .sdjwt {
-					let docSigned = docsSdJwt[docId]; let dpk = privateKeyObjects[docId]
-					guard let docSigned, let dpk, let items = nsItems.first?.value else { continue }
-					let unlockData = try await dpk.secureArea.unlockKey(id: docId)
-					let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
-					let dsa = keyInfo.crv.defaultSigningAlgorithm
-					let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
-					let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-					let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
-					guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
-						continue
-					}
-					inputToPresentations.append((inputDescrId, docId, VerifiablePresentation.generic(presented.serialisation)))
+		let parser = CompactParser()
+		let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
+		docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
+		// tuples of inputDescriptor-id, docId and verifiable presentation
+		// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
+		var inputToPresentations = [(String, String?, VerifiablePresentation)]()
+		// support sd-jwt documents
+		for (docId, nsItems) in itemsToSend {
+			guard let docType = idsToDocTypes[docId], let inputDescrId = inputDescriptorMap[docType] else { continue }
+			if dataFormats[docId] == .cbor {
+				if docsCbor == nil { makeCborDocs() }
+				let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
+				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
+				inputToPresentations.append((inputDescrId, docId, vpToken.0))
+			} else if dataFormats[docId] == .sdjwt {
+				let docSigned = docsSdJwt[docId]; let dpk = privateKeyObjects[docId]
+				guard let docSigned, let dpk, let items = nsItems.first?.value else { continue }
+				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
+				let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
+				let dsa = keyInfo.crv.defaultSigningAlgorithm
+				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
+				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
+				let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
+				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
+					continue
 				}
+				inputToPresentations.append((inputDescrId, docId, VerifiablePresentation.generic(presented.serialisation)))
 			}
-			try await SendVpTokens(inputToPresentations, dcql, resolved, onSuccess)
 		}
+		try await SendVpTokens(inputToPresentations, dcql, resolved, onSuccess)
+
 	}
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
 	/// Send the verifiable presentation tokens to the verifier
 	/// - Parameters:
-	///   - vpTokens: tuples of inputDescriptor-id, docId and verifiable presentation
-	///   - pd: input presentation definition
+	///   - vpTokens: tuples of query-id, docId and verifiable presentation
+	///   - dcql: DCQL query
 	///   - resolved: Resolved request data
 	///   - onSuccess: Callback function to be called on success
 	///
 	/// - Throws: PresentationSessionError if the presentation submission is not accepted
 	fileprivate func SendVpTokens(_ vpTokens: [(String, String?, VerifiablePresentation)]?, _ dcql: DCQL?, _ resolved: ResolvedRequestData, _ onSuccess: ((URL?) -> Void)?) async throws {
 		let consent: ClientConsent = if let vpTokens, dcql != nil {
-			// Group by DCQL query id -> array of VPs (new VPContent requirement)
+			// Group by DCQL query id -> array of VPs
 			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { $0.map { $0.2 } }))
 		} else { .negative(message: "Rejected") }
 		// Generate a direct post authorisation response
