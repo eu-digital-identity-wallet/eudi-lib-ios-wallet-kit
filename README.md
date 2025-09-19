@@ -41,23 +41,27 @@ The library provides the following functionality:
     - [x] Using iOS Secure Enclave for generating/storing documents' keypair
     - [x] Enforcing device user authentication when retrieving documents' private keys
 - Document issuance
-    - [x] Support for OpenId4VCI document issuance
+    - [x] Support
+      for [OpenId4VCI (draft 15)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html)
+      document issuance
         - [x] Authorization Code Flow
         - [x] Pre-authorization Code Flow
         - [x] Support for mso_mdoc format
         - [x] Support for sd-jwt-vc format
-        - [x] Support credential offer
-        - [x] Support for DPoP JWT in authorization
-        - [x] Support for JWT and CWT proof types
+            - [x] Support credential offer
+            - [x] Support for DPoP JWT in authorization
+        - [x] Support for JWT proof types
         - [x] Support for deferred issuing
+        - [x] Support for batch issuing
 - Proximity document presentation
     - [x] Support for ISO-18013-5 device retrieval
         - [x] QR device engagement
         - [x] BLE data transfer
 - Remote document presentation
-    - [x] OpenId4VP document transfer
-        - [x] For pre-registered verifiers
-        - [x] Dynamic registration of verifiers
+    - [x] [OpenId4VP (1.0)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+      document transfer
+        - [x] ClienID scheme: preregistered, x509_san_uri, x509_san_dns, redirect_uri
+        - [x] DCQL
 
 The library is written in Swift and is compatible with iOS 16 or higher. It is distributed as a Swift package
 and can be included in any iOS project.
