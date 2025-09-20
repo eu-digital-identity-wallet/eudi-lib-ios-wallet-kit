@@ -26,42 +26,8 @@ import WalletStorage
 import JSONWebSignature
 @preconcurrency import JSONWebAlgorithms
 import SiopOpenID4VP
+import enum SiopOpenID4VP.ClaimPathElement
 import SwiftyJSON
-/**
- *  Utility class to generate the session transcript for the OpenID4VP protocol.
- *
- *  SessionTranscript = [
- *    DeviceEngagementBytes,
- *    EReaderKeyBytes,
- *    Handover
- *  ]
- *
- *  DeviceEngagementBytes = nil,
- *  EReaderKeyBytes = nil
- *
- *  Handover = OID4VPHandover
- *  OID4VPHandover = [
- *    clientIdHash
- *    responseUriHash
- *    nonce
- *  ]
- *
- *  clientIdHash = Data
- *  responseUriHash = Data
- *
- *  where clientIdHash is the SHA-256 hash of clientIdToHash and responseUriHash is the SHA-256 hash of the responseUriToHash.
- *
- *
- *  clientIdToHash = [clientId, mdocGeneratedNonce]
- *  responseUriToHash = [responseUri, mdocGeneratedNonce]
- *
- *
- *  mdocGeneratedNonce = String
- *  clientId = String
- *  responseUri = String
- *  nonce = String
- *
- */
 
 class Openid4VpUtils {
 	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
@@ -119,18 +85,17 @@ class Openid4VpUtils {
 			let itemIdentifier = claim.path.component2()?.head().description
 			return if let itemIdentifier { (ns, RequestItem(elementPath: [itemIdentifier], intentToRetain: claim.intentToRetain, isOptional: false)) } else { nil }
 		} else if docDataFormat == .sdjwt {
-			let elementPath = claim.path.value.map(\.description)
+			let elementPath = claim.path.value.compactMap(\.claimName)
 			return ("", RequestItem(elementPath: elementPath, intentToRetain: false, isOptional: false))
 		}
 		return nil
 	}
 
-	// Presentation Exchange parsing removed
-
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
-		let allPaths = try sdJwt.disclosedPaths()
+		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found") }
+		let allPaths = Array(allPathsDict.keys)
 		let requestPaths = requestItems.map(\.elementPath)
-		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.tokenArray) }) })
+		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.value.compactMap(\.claimName)) }) })
 		if query.isEmpty { throw WalletError(description: "No items to present found") }
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
@@ -140,9 +105,7 @@ class Openid4VpUtils {
 		  // Process transaction data hashes if available
 		if let transactionData, !transactionData.isEmpty {
 			let transactionDataHashes = transactionData.map { td -> String in
-				switch td {
-				case .sdJwtVc(let v): return sha256Hash(v)
-				}
+				switch td {	case .sdJwtVc(let v): return sha256Hash(v) }
 			}
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
@@ -169,6 +132,12 @@ class Openid4VpUtils {
 
 	static func vctToDocTypeMatch(_ s1: String, _ s2: String) -> Bool {
 		Openid4VpUtils.vctToDocType(s1).hasPrefix(Openid4VpUtils.vctToDocType(s2)) || Openid4VpUtils.vctToDocType(s2).hasPrefix(Openid4VpUtils.vctToDocType(s1))
+	}
+}
+
+extension ClaimPathElement {
+	public var claimName: String? {
+		if case .claim(let name) = self { name } else { nil }
 	}
 }
 
