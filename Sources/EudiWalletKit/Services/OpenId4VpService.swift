@@ -23,7 +23,6 @@ import MdocSecurity18013
 import MdocDataTransfer18013
 import WalletStorage
 import SiopOpenID4VP
-import struct SiopOpenID4VP.X509CertificateChainVerifier
 import protocol SiopOpenID4VP.Networking
 import eudi_lib_sdjwt_swift
 import JOSESwift
@@ -266,21 +265,20 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
-		guard let self, let leaf = certificates.first else { return false }
-		let chainVerifier = X509CertificateChainVerifier()
-		let rootBase64Certificates = self.iaca?.compactMap { SecCertificateCopyData($0) as Data }.map { $0.base64EncodedString() } ?? []
-		let verified = try? await chainVerifier.verifyChain(rootBase64Certificates: rootBase64Certificates,intermediateBase64Certificates: Array(certificates.dropFirst()), leafBase64Certificate: leaf) //base64Certificates: certificates)
-		var result = chainVerifier.isChainTrustResultSuccesful(verified ?? .failure)
-		let b64certs = certificates; let data = b64certs.compactMap { Data(base64Encoded: $0) }
-		let certs = data.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
-		guard certs.count > 0, certs.count == b64certs.count else { return result }
-		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](data.first!)) else { return result }
+		guard let self else { return false }
+		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
+		let certsDer = certsData.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+		guard certsDer.count > 0, certsDer.count == b64certs.count else { return false }
+		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.first!)) else { return false }
+		let policy = SecPolicyCreateBasicX509(); var trust: SecTrust?; var result: OSStatus
+		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
+		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certs, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootCerts: self.iaca ?? [])
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
-		self.certificateChain = data
-		return result
+		self.certificateChain = certsData
+		return isValid
 	}
 
 	/// OpenId4VP wallet configuration
@@ -289,13 +287,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
-		var supportedClientIdSchemes: [SupportedClientIdScheme] = [.x509SanUri(trust: chainVerifier), .x509SanDns(trust: chainVerifier)]
+		var supportedClientIdPrefixes: [SupportedClientIdPrefix] = [.redirectUri, .x509SanDns(trust: chainVerifier)]
 		if let verifierApiUrl = openId4VpVerifierApiUri, let verifierLegalName = openId4VpVerifierLegalName {
 			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
-			supportedClientIdSchemes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
+			supportedClientIdPrefixes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
 		}
-		supportedClientIdSchemes.append(.redirectUri) // add redirect uri scheme
-		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdSchemes, vpFormatsSupported: [],  jarConfiguration: .encryptionOption, vpConfiguration: .default(), session: networking, responseEncryptionConfiguration: .default())
+		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdPrefixes, vpFormatsSupported: [],  jarConfiguration: .encryptionOption, vpConfiguration: .default(), session: networking, responseEncryptionConfiguration: .default())
 		return res
 	}
 
