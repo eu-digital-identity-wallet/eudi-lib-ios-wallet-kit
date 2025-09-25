@@ -194,6 +194,10 @@ extension DocMetadata {
 	}
 }
 
+extension DocKeyInfo {
+	static var `default`: Self { DocKeyInfo(secureAreaName: SoftwareSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse) }
+}
+
 extension URL {
 	func getBaseUrl() -> String {
 		var urlString = scheme! + "://" + host!
