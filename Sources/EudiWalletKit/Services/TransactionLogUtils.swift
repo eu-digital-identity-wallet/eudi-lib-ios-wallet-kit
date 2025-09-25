@@ -69,9 +69,12 @@ class TransactionLogUtils {
 
 	static func parseDocClaimDecodable(_ presentedStr: String, dataFormat: DocDataFormat, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
 		if dataFormat == .cbor {
-				if let isd = Data(base64Encoded: presentedStr), let iss = IssuerSigned(data: isd.bytes), let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
+			guard let isd = Data(base64urlEncoded: presentedStr) ?? Data(base64Encoded: presentedStr) else { return nil }
+			let iss = if let dr = DeviceResponse(data: isd.bytes) { dr.documents?.first?.issuerSigned } else { IssuerSigned(data: isd.bytes) }
+			guard let iss else { return nil}
+			if let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
 		} else if dataFormat == .sdjwt {
-				if let docDecodable = parseSdJwtDocClaimsDecodable(id: UUID().uuidString, docType: "", sdJwtSerialized: presentedStr, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
+			if let docDecodable = parseSdJwtDocClaimsDecodable(id: UUID().uuidString, docType: "", sdJwtSerialized: presentedStr, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
 		}
 		return nil
 	}
