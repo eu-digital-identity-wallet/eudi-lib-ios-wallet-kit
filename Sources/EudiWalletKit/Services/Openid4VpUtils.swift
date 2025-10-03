@@ -60,6 +60,7 @@ class Openid4VpUtils {
 		return Data(bytes).base64URLEncodedString()
 	}
 
+	/// Parse DCQL into request items (docType -> namespaced items), formats requested (docType -> dataFormat) and input descriptor map (docType -> credentialQueryId)
 	static func parseDcql(_ dcql: DCQL, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> (RequestItems?, [String: DocDataFormat], [String: String]) {
 		var inputDescriptorMap = [String: String]()
 		var requestItems = RequestItems()
@@ -67,6 +68,11 @@ class Openid4VpUtils {
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
 			guard let docType = credQuery.docType else { continue }
+			if !idsToDocTypes.values.contains(docType) {
+				logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")
+				// todo: implement full support for credentialSets
+				if dcql.credentialSets == nil { throw WalletError(description: "Document type \(docType) not in supported document types \(idsToDocTypes.values)") }
+			}
 			var nsItems: [String: [RequestItem]] = [:]
 			for claim in credQuery.claims ?? [] {
 				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
