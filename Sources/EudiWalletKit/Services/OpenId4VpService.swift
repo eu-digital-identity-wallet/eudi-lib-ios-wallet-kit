@@ -62,8 +62,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var dcql: DCQL?
 	var resolvedRequestData: ResolvedRequestData?
 	var siopOpenId4Vp: SiopOpenID4VP!
-	var openId4VpVerifierApiUri: String?
-	var openId4VpVerifierLegalName: String?
+	var openID4VpConfig: OpenId4VpConfiguration
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
@@ -78,7 +77,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var flow: FlowType
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openId4VpVerifierApiUri: String?, openId4VpVerifierLegalName: String?, networking: Networking) throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = parameters.toInitializeTransferInfo()
 		dataFormats = objs.dataFormats; docs = objs.documentObjects; privateKeyObjects = objs.privateKeyObjects
@@ -91,8 +90,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
 		}
 		self.openid4VPlink = openid4VPlink
-		self.openId4VpVerifierApiUri = openId4VpVerifierApiUri
-		self.openId4VpVerifierLegalName = openId4VpVerifierLegalName
+		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
@@ -287,10 +285,13 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
 		guard let keySet = try? WebKeySet(jwk: rsaJWK) else { return nil }
-		var supportedClientIdPrefixes: [SupportedClientIdPrefix] = [.redirectUri, .x509SanDns(trust: chainVerifier)]
-		if let verifierApiUrl = openId4VpVerifierApiUri, let verifierLegalName = openId4VpVerifierLegalName {
-			let verifierMetaData = PreregisteredClient(clientId: "Verifier", legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUrl)/wallet/public-keys.json")!))
-			supportedClientIdPrefixes += [.preregistered(clients: [verifierMetaData.clientId: verifierMetaData])]
+		let supportedClientIdPrefixes: [SupportedClientIdPrefix] = openID4VpConfig.clientIdSchemes.map { cids in
+			switch cids {
+				case .redirectUri: .redirectUri
+				case .x509Hash: .x509Hash(trust: chainVerifier)
+				case .x509SanDns: .x509SanDns(trust: chainVerifier)
+				case .preregistered(let clients): .preregistered(clients: Dictionary(uniqueKeysWithValues: clients.map { ($0.clientId, $0) }))
+			}
 		}
 		let res = SiopOpenId4VPConfiguration(subjectSyntaxTypesSupported: [.decentralizedIdentifier, .jwkThumbprint], preferredSubjectSyntaxType: .jwkThumbprint, decentralizedIdentifier: try! DecentralizedIdentifier(rawValue: "did:example:123"), privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdPrefixes, vpFormatsSupported: [],  jarConfiguration: .encryptionOption, vpConfiguration: .default(), session: networking, responseEncryptionConfiguration: .default())
 		return res
