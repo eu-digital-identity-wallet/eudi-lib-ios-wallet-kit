@@ -58,6 +58,7 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let accessToken: IssuanceAccessToken
 	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
+	let publicKeys: [Data]
 	let derKeyData: Data?
 	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
@@ -76,7 +77,7 @@ struct PendingIssuanceModel: Codable {
 }
 
 enum IssuanceOutcome {
-	case issued([(Data?, String?)], CredentialConfiguration)
+	case issued([(data: Data, pk: Data)], CredentialConfiguration)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }
@@ -104,8 +105,14 @@ extension IssuanceOutcome {
 
 	func getDataToSave(index: Int, format: DocDataFormat) -> Data {
 		guard case let .issued(dataPairs, _) = self, dataPairs.count > index else { return Data() }
-		let (data, str) = dataPairs[index]
-		return if format == .cbor, let data { data } else if let str, let sd = str.data(using: .utf8) { sd } else { Data() }
+		let (data, _) = dataPairs[index]
+		return data
+	}
+
+	func getPublicKey(index: Int) -> Data {
+		guard case let .issued(dataPairs, _) = self, dataPairs.count > index else { return Data() }
+		let (_, pk) = dataPairs[index]
+		return pk
 	}
 }
 
