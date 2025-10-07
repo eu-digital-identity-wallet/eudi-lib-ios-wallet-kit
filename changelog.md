@@ -1,8 +1,8 @@
-## v0.14.8
+## v0.14.9
 - feat: introduce OpenID4VP configuration and refactor related classes
   - Added new `OpenId4VpConfiguration` model with support for different client identifier schemes
   - Introduced `ClientIdScheme` enum supporting preregistered clients, X.509 certificate validation (SAN DNS and hash), and redirect URI validation
-  - **Breaking change**: Refactored `EudiWallet` initialization to use new `openID4VpConfig` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters
+  - **Breaking change**: Refactored `EudiWallet` initialization and property to use a `OpenId4VpConfiguration` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters, for example: `wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns])`	
   - Added convenience initializer for `PreregisteredClient` from SiopOpenID4VP library
   - Updated related services to work with the new configuration structure
 

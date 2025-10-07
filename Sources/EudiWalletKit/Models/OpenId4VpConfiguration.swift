@@ -46,6 +46,9 @@ public struct OpenId4VpConfiguration {
 	public init() {
 		self.clientIdSchemes = [.redirectUri, .x509SanDns, .x509Hash]
 	}
+	public init(clientIdSchemes: [ClientIdScheme]) {
+		self.clientIdSchemes = clientIdSchemes
+	}
 }
 
 extension PreregisteredClient {
