@@ -31,6 +31,7 @@ import UIKit
 #endif
 import protocol OpenID4VCI.Networking
 import OpenID4VCI
+import eudi_lib_sdjwt_swift
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject, @unchecked Sendable {
@@ -292,7 +293,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			docMetadata = cc.convertToDocMetadata()
 			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope
 			dkInfo.batchSize = dataPair.count
-			docTypeToSave = if format == .cbor, dataToSave.count > 0 { IssuerSigned(data: [UInt8](dataToSave))?.issuerAuth.mso.docType ?? docTypeOrVctOrScope } else if format == .sdjwt, dataToSave.count > 0 {  StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
+			let iss = try IssuerSigned(data: [UInt8](dataToSave))
+			docTypeToSave = if format == .cbor, dataToSave.count > 0 { iss.issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 {  StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
 			displayName = cc.display.getName(uiCulture)
 			if dataPair.count > 0 { batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) } }
 		case .deferred(let deferredIssuanceModel):
@@ -309,6 +311,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
 		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
+		if newDocStatus == .issued { try await validateIssuedDocuments([newDocument] + (batch ?? [])) }
 		try await endIssueDocument(newDocument, batch: batch)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
@@ -377,6 +380,24 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter issued: The issued document
 	public func endIssueDocument(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?) async throws {
 		try await storage.storageService.saveDocument(issued, batch: batch, allowOverwrite: true)
+	}
+
+	public func validateIssuedDocuments(_ issued: [WalletStorage.Document]) async throws {
+		for doc in issued {
+			do {
+				if doc.docDataFormat == .cbor {
+					let iss = try IssuerSigned(data: [UInt8](doc.data))
+					try iss.validateMSO(docType: doc.docType ?? "", trustedIACA: trustedReaderCertificates?.compactMap { SecCertificateCreateWithData(nil, Data($0) as CFData) } ?? [])
+				} else if doc.docDataFormat == .sdjwt {
+					guard let serString = String(data: doc.data, encoding: .utf8) else { throw PresentationSession.makeError(str: "Failed to convert document data to UTF8 string") }
+					let sdjwtVerifier = try SDJWTVerifier(serialisedString: serString)
+					// WIP: verify jwt
+					//sdjwtVerifier.verifyIssuance { jws in
+						//try SignatureVerifier(signedJWT: jws, publicKey: jwk)
+					//}
+				}
+			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
+		}
 	}
 
 	/// Load documents with a specific status from storage

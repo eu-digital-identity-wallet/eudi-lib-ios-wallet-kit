@@ -139,8 +139,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> (any DocClaimsDecodable)? {
 		guard let (d, _, _, _) = doc.getDataForTransfer() else { return nil }
-		// guard let str = D dd = Data(base64Encoded: d.1.bytes)  else { return nil }
-		guard let iss = IssuerSigned(data: d.1.bytes) else { logger.error("Could not decode IssuerSigned"); return nil }
+		guard let iss = try? IssuerSigned(data: d.1.bytes) else { logger.error("Could not decode IssuerSigned"); return nil }
 		let docMetadata = DocMetadata(from: doc.metadata)
 		let docKeyInfo = DocKeyInfo(from: doc.docKeyInfo) ?? .default
 		let md = docMetadata?.getMetadata(uiCulture: uiCulture)
@@ -211,7 +210,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			let bValid = (try? await hasAnyCredential(id: m.id)) ?? false
 			guard bValid else { return nil }
 			let docTypedData: DocTypedData? = switch m.docDataFormat {
-				case .cbor: if let iss = IssuerSigned(data: doc.data.bytes) { .msoMdoc(iss) } else { nil }
+				case .cbor: if let iss = try? IssuerSigned(data: doc.data.bytes) { .msoMdoc(iss) } else { nil }
 				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
 			}
 			guard let docTypedData else { return nil }

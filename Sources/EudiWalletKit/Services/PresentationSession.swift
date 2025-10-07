@@ -109,6 +109,11 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
 		return WalletError(description: str, localizationKey: localizationKey)
 	}
+	
+	public static func makeError(err: LocalizedError) -> WalletError {
+		logger.error(Logger.Message(unicodeScalarLiteral: err.errorDescription ?? err.localizedDescription))
+		return WalletError(description: err.errorDescription ?? err.localizedDescription)
+	}
 
 	/// Start QR engagement to be presented to verifier
 	///
