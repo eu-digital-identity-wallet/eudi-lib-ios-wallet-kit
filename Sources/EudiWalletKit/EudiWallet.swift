@@ -389,7 +389,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			do {
 				if doc.docDataFormat == .cbor {
 					let iss = try IssuerSigned(data: [UInt8](doc.data))
-					try iss.validateMSO(docType: doc.docType ?? "", trustedIACA: trustedReaderCertificates?.compactMap { SecCertificateCreateWithData(nil, Data($0) as CFData) } ?? [])
+					try iss.validate(docType: doc.docType ?? "")
 					let skey = iss.issuerAuth.mso.deviceKeyInfo.deviceKey
 					print(skey.getx963Representation().toHexString())
 					let keyIndex = pkCoseKeys.firstIndex(where: { pk in pk.crv == skey.crv && pk.getx963Representation() == skey.getx963Representation()})
