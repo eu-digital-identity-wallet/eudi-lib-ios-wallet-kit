@@ -1,3 +1,49 @@
+## v0.14.8
+- feat: introduce OpenID4VP configuration and refactor related classes
+  - Added new `OpenId4VpConfiguration` model with support for different client identifier schemes
+  - Introduced `ClientIdScheme` enum supporting preregistered clients, X.509 certificate validation (SAN DNS and hash), and redirect URI validation
+  - **Breaking change**: Refactored `EudiWallet` initialization to use new `openID4VpConfig` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters
+  - Added convenience initializer for `PreregisteredClient` from SiopOpenID4VP library
+  - Updated related services to work with the new configuration structure
+
+## v0.14.7
+- Fix: Throw error if one of the requested doc types is not present and credentialSets is nil
+
+## v0.14.6
+- Error reason [provided](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationsession/uierror) when OpenID4VP response is rejected
+
+## v0.14.5
+- Fix CBOR log document claim decoding logic
+
+## v0.14.4
+- Fix transaction logs decoding
+
+## v0.14.3
+- Update eudi-lib-ios-siop-openid4vp-swift dependency to version [0.17.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.17.2)
+
+## v0.14.2
+- Update eudi-lib-ios-siop-openid4vp-swift to 0.17.0 and enhance certificate verification
+
+## v0.14.1
+- Fixes bug for sd-jwt documents array values not transfered with online presentation e.g. nationalities for PID
+
+## v0.14.0
+- Updated OpenID4VP library to version [v0.16.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.16.0) and adjusted wallet kit accordingly.
+
+## v0.13.5
+- Update eudi-lib-ios-openid4vci-swift to [0.15.4](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.15.4)
+- Added  property `var credentialPocily: CredentialPolicy` to `DocClaimsDecodable`
+- fix for removing port from URL (issue #215)
+
+## v0.13.4
+- Update the eudi-lib-ios-siop-openid4vp-swift dependency to version 0.15.1 (JARM fix)
+
+## v0.13.3
+- Updated eudi-lib-ios-siop-openid4vp-swift library to version [v0.15.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.15.0)
+- Updated eudi-lib-ios-openid4vci-swift library to version [v0.15.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.15.2)
+
+- **Breaking change**: Removed  `EudiWallet` property`verifierRedirectUri`
+
 ## v0.13.2
 
 ### Error Handling Improvements:
