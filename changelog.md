@@ -1,3 +1,14 @@
+## v0.15.0
+- Update dependency versions
+  - Updated `eudi-lib-ios-iso18013-data-transfer` from version 0.8.0 to 0.8.1
+  - Updated `eudi-lib-ios-siop-openid4vp-swift` from version 0.17.3 to 0.17.5
+- Enhanced CBOR document validation
+  - Perform CBOR document validation logic in `EudiWallet`, `validateIssuedDocuments` method: 
+  	- CBOR element digest values are compared against the digest values provided in the issuer-signed Mobile Security Object (MSO) section of the document to ensure integrity and authenticity.
+	- MSO Signature is validated.
+	- Doc type in MSO is the same as the doc type of the issued document.
+  
+
 ## v0.14.9
 - feat: introduce OpenID4VP configuration and refactor related classes
   - Added new `OpenId4VpConfiguration` model with support for different client identifier schemes
