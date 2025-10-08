@@ -6,6 +6,7 @@
   - Perform CBOR document validation logic in `EudiWallet`, `validateIssuedDocuments` method: 
   	- CBOR element digest values are compared against the digest values provided in the issuer-signed Mobile Security Object (MSO) section of the document to ensure integrity and authenticity.
 	- MSO Signature is validated.
+	- MSO Validity info dates are validated.
 	- Doc type in MSO is the same as the doc type of the issued document.
   
 
