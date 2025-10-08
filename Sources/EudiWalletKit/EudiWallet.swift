@@ -384,22 +384,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	public func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {
-		var pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
+		let pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
+		guard pkCoseKeys.count == publicKeys.count else { throw PresentationSession.makeError(str: "Failed to parse public keys") }
 		for (index, doc) in (batch ?? [issued]).enumerated() {
 			do {
 				if doc.docDataFormat == .cbor {
 					let iss = try IssuerSigned(data: [UInt8](doc.data))
-					try iss.validate(docType: doc.docType ?? "")
-					let skey = iss.issuerAuth.mso.deviceKeyInfo.deviceKey
-					print(skey.getx963Representation().toHexString())
-					let keyIndex = pkCoseKeys.firstIndex(where: { pk in pk.crv == skey.crv && pk.getx963Representation() == skey.getx963Representation()})
-					if let keyIndex { pkCoseKeys.remove(at: keyIndex) } else { throw PresentationSession.makeError(str: "Public key of document issued not found at index \(index)") }
-				} else if doc.docDataFormat == .sdjwt {
-					guard let serString = String(data: doc.data, encoding: .utf8), let pk = try? pkCoseKeys[index].toSecKey() else { throw PresentationSession.makeError(str: "Failed to verify document at index \(index)") }
-					let sdjwtVerifier = try SDJWTVerifier(serialisedString: serString)
-					_ = try sdjwtVerifier.verifyIssuance { jws in
-						try SignatureVerifier(signedJWT: jws, publicKey: pk)
-					}
+					guard let docType = doc.docType else { throw PresentationSession.makeError(str: "Document type missing at index \(index)") }
+					try iss.validate(docType: docType)
 				}
 			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
 		}

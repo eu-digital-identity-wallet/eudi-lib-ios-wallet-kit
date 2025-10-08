@@ -65,7 +65,7 @@ struct EudiWalletKitTests {
 		let data = Data(name: "mdoc-\(dt)", ext: "txt", from: Bundle.module)!
 		let strData = try #require(String(data: data, encoding: .utf8))
 		let base64Data = try #require(Data(base64URLEncoded: strData))
-		let dr = try #require(DeviceResponse(data: [UInt8](base64Data)))
+		let dr = try DeviceResponse(data: [UInt8](base64Data))
 		let iss = try #require(dr.documents?.first?.issuerSigned)
 		#expect("org.iso.18013.5.1.mDL" == iss.issuerAuth.mso.docType)
 	}
