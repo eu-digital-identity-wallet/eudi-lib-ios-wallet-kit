@@ -41,7 +41,7 @@ class TransactionLogUtils {
 		guard let raw = transactionLog.rawResponse else { return [] }
 		var res = [any DocClaimsDecodable]()
 		if transactionLog.dataFormat == .cbor {
-			guard let dr = DeviceResponse(data: raw.bytes) else { return [] }
+			guard let dr = try? DeviceResponse(data: raw.bytes) else { return [] }
 			for (index, doc) in (dr.documents ?? []).enumerated() {
 				let docMetadata = transactionLog.docMetadata?[index]
 				if let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: doc.docType, issuerSigned: doc.issuerSigned, metadata: docMetadata, uiCulture: uiCulture) {
@@ -70,7 +70,7 @@ class TransactionLogUtils {
 	static func parseDocClaimDecodable(_ presentedStr: String, dataFormat: DocDataFormat, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
 		if dataFormat == .cbor {
 			guard let isd = Data(base64urlEncoded: presentedStr) ?? Data(base64Encoded: presentedStr) else { return nil }
-			let iss = if let dr = DeviceResponse(data: isd.bytes) { dr.documents?.first?.issuerSigned } else { IssuerSigned(data: isd.bytes) }
+			let iss = if let dr = try? DeviceResponse(data: isd.bytes) { dr.documents?.first?.issuerSigned } else { try? IssuerSigned(data: isd.bytes) }
 			guard let iss else { return nil}
 			if let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
 		} else if dataFormat == .sdjwt {

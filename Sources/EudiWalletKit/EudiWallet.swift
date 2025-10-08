@@ -31,6 +31,7 @@ import UIKit
 #endif
 import protocol OpenID4VCI.Networking
 import OpenID4VCI
+import eudi_lib_sdjwt_swift
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject, @unchecked Sendable {
@@ -215,7 +216,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, keyOptions: keyOptions)
 		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: false, promptMessage: promptMessage)
 		let data = try await openId4VCIService.issueDocument(docTypeIdentifier: docTypeIdentifier, promptMessage: promptMessage)
-		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: openId4VCIService.issueReq)
 	}
 
 	func validateKeyOptions(docTypeIdentifier: DocTypeIdentifier, keyOptions: KeyOptions?, offer: CredentialOffer? = nil) async throws -> KeyOptions {
@@ -256,7 +257,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let openId4VCIService = await OpenId4VCIService(issueRequest: issueReq, credentialIssuerURL: "", uiCulture: uiCulture, config: self.openID4VciConfig.toOpenId4VCIConfig(), cacheIssuerMetadata: false, networking: networkingVci)
 		let data = try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_, _) = data else { return deferredDoc }
-		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, openId4VCIService: openId4VCIService)
+		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq)
 	}
 
 	/// Resume pending issuance. Supports dynamic isuuance scenario
@@ -273,28 +274,30 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, keyOptions: usedKeyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
-		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService)
+		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: openId4VCIService.issueReq)
 		return res
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, openId4VCIService: OpenId4VCIService) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest) async throws -> WalletStorage.Document  {
 		var dataToSave: Data; var docTypeToSave: String?
 		var docMetadata: DocMetadata?; var displayName: String?
 		let pds = issueOutcome.pendingOrDeferredStatus
 		var batch: [WalletStorage.Document]?
+		var publicKeys: [Data] = []
 		var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 1, credentialPolicy: issueReq.credentialPolicy)
 		switch issueOutcome {
 		case .issued(let dataPair, let cc):
-			guard dataPair.first != nil else {
-				throw PresentationSession.makeError(str: "Empty issued data array")
-			}
+			guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
 			dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 			docMetadata = cc.convertToDocMetadata()
 			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope
 			dkInfo.batchSize = dataPair.count
-			docTypeToSave = if format == .cbor, dataToSave.count > 0 { IssuerSigned(data: [UInt8](dataToSave))?.issuerAuth.mso.docType ?? docTypeOrVctOrScope } else if format == .sdjwt, dataToSave.count > 0 {  StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
+			docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 {  StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
 			displayName = cc.display.getName(uiCulture)
-			if dataPair.count > 0 { batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) } }
+			if dataPair.count > 0 {
+				batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) }
+				publicKeys = dataPair.map(\.pk)
+			}
 		case .deferred(let deferredIssuanceModel):
 			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
 			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata()
@@ -309,6 +312,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
 		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata?.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
+		if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys) }
 		try await endIssueDocument(newDocument, batch: batch)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
@@ -356,9 +360,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 		let (auth, issuer, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
 		for (i, openId4VCIService) in openId4VCIServices.enumerated() {
-			let bindingKeys = try await openId4VCIService.initSecurityKeys(algSupported: Set(credentialInfos[i].credentialSigningAlgValuesSupported))
-			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, promptMessage: promptMessage) else { continue }
-			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, openId4VCIService: openId4VCIService))
+			let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(algSupported: Set(credentialInfos[i].credentialSigningAlgValuesSupported))
+			guard let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage) else { continue }
+			documents.append(try await finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq))
 		}
 		return documents
 	}
@@ -377,6 +381,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter issued: The issued document
 	public func endIssueDocument(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?) async throws {
 		try await storage.storageService.saveDocument(issued, batch: batch, allowOverwrite: true)
+	}
+
+	public func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {
+		let pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
+		guard pkCoseKeys.count == publicKeys.count else { throw PresentationSession.makeError(str: "Failed to parse public keys") }
+		for (index, doc) in (batch ?? [issued]).enumerated() {
+			do {
+				if doc.docDataFormat == .cbor {
+					let iss = try IssuerSigned(data: [UInt8](doc.data))
+					guard let docType = doc.docType else { throw PresentationSession.makeError(str: "Document type missing at index \(index)") }
+					try iss.validate(docType: docType)
+				}
+			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
+		}
 	}
 
 	/// Load documents with a specific status from storage

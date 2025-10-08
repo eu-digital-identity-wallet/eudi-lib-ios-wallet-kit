@@ -19,7 +19,7 @@ import JOSESwift
 import OpenID4VCI
 import MdocSecurity18013
 
-public struct OpenId4VCIConfiguration {
+public struct OpenId4VCIConfiguration: Sendable {
 	public let client: Client
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig

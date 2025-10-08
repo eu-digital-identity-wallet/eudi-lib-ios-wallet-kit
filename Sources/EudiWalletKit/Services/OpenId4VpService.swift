@@ -165,7 +165,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	fileprivate func makeCborDocs() {
-		docsCbor = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .cbor)} .mapValues { IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
+		docsCbor = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .cbor)} .mapValues { try? IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?]) {
