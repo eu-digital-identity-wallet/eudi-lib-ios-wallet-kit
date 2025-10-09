@@ -284,7 +284,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let pds = issueOutcome.pendingOrDeferredStatus
 		var batch: [WalletStorage.Document]?
 		var publicKeys: [Data] = []
-		var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 1, credentialPolicy: issueReq.credentialPolicy)
+		var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialPolicy)
 		switch issueOutcome {
 		case .issued(let dataPair, let cc):
 			guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
