@@ -1,5 +1,5 @@
 {
-  "originHash" : "1b3d4496e9c9940a507a0266cf1e019117dc8e2f72a8ed93293cb50fd7734492",
+  "originHash" : "0841bf62f797d8831dbaabd34895b624bd047f15f8ac0f5603510a410cc65086",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
       "state" : {
-        "revision" : "729e01bc9b9dab466ac85f21fb9ee2bc1c61b258",
-        "version" : "1.8.4"
+        "revision" : "e45a26384239e028ec87fbcc788f513b67e10d8f",
+        "version" : "1.9.0"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "508556bdd1cf517735a0e6405c9dbd2704e6a892",
-        "version" : "0.15.4"
+        "revision" : "f60a2be657368308c59e21802d60f18dfc7088f5",
+        "version" : "0.16.0"
       }
     },
     {
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "aaf68f574b194a121490a6f1bffc2ddbbdbce4a2",
-        "version" : "0.8.0"
+        "revision" : "86070708b8042a5a1291c20381b0f57fe69921cd",
+        "version" : "0.9.1"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/beatt83/jose-swift.git",
       "state" : {
-        "revision" : "57fe5a03c83feaf73a84b23c02e641f86482e313",
-        "version" : "4.0.2"
+        "revision" : "8d087c7d8333310449aff4c9eb2431fbb4f1eb9f",
+        "version" : "6.0.0"
       }
     },
     {
@@ -224,6 +224,15 @@
       "state" : {
         "revision" : "4def3c1c772ca90ad5e7bfc8ac437c3b0b4276cf",
         "version" : "7.1.5"
+      }
+    },
+    {
+      "identity" : "zlib",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/DLTAStudio/zlib.git",
+      "state" : {
+        "revision" : "ad7db0fdde74b88b3ac9b20d412c3129e7eade34",
+        "version" : "1.0.1"
       }
     }
   ],

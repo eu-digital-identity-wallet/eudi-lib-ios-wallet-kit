@@ -196,7 +196,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
 		guard let openID4VciIssuerUrl else { throw WalletError(description: "issuer Url not defined")}
 		let credentialIssuerIdentifier = try CredentialIssuerId(openID4VciIssuerUrl)
-		let issuerMetadata = try await CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networkingVci)).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
+		let issuerMetadata = try await makeMetadataResolver().resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 			case .success(let metaData): return metaData
 			case .failure(let error):
@@ -320,13 +320,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return newDocument
 	}
 
-	/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
+	func makeMetadataResolver() -> CredentialIssuerMetadataResolver {
+	 CredentialIssuerMetadataResolver(fetcher: MetadataFetcher(rawFetcher: RawDataFetcher(session: networkingVci), processor: MetadataProcessor()))
+	}
+
+/// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
 	/// When resolving an offer, defaultKeyOptions are now included
 	/// - Parameters:
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher(session: networkingVci), credentialIssuerMetadataResolver: CredentialIssuerMetadataResolver(fetcher: Fetcher(session: networkingVci)), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher(session: networkingVci), oauthFetcher: Fetcher(session: networkingVci))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: makeMetadataResolver(), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
 			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
@@ -338,6 +342,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
 	}
+
+
 
 	/// Issue documents by offer URI.
 	/// - Parameters:

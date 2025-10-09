@@ -1,3 +1,13 @@
+## v0.16.0
+- **Breaking change**: Updated OpenID4VCI to version 0.16.0 with support for OpenID4VCI v1.0 specification
+  - Updated `eudi-lib-ios-openid4vci-swift` from version 0.7.6 to 0.16.0
+  - Implemented changes for OpenID4VCI v1.0 specification compatibility:
+    - Updated deferred credential issuance handling to support new API with separate `transactionId` and `interval` parameters
+    - Enhanced credential metadata access through new `ConfigurationCredentialMetadata` structure
+    - Added support for new `issuanceStillPending` case in deferred credential flows
+    - Improved error handling and logging for deferred credential scenarios
+- Updated `eudi-lib-sdjwt-swift` from version 0.8.0 to 0.9.1
+
 ## v0.15.0
 - Update dependency versions
   - Updated `eudi-lib-ios-iso18013-data-transfer` from version 0.8.0 to 0.8.1
