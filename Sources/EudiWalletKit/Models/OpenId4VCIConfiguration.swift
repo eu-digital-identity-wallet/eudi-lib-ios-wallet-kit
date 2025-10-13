@@ -24,6 +24,7 @@ public struct OpenId4VCIConfiguration: Sendable {
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	public let usePAR: Bool
+	public let useDPoP: Bool
 	public let cacheIssuerMetadata: Bool
 
 	public init(client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDPoP: Bool = false, cacheIssuerMetadata: Bool = true) {
@@ -31,6 +32,7 @@ public struct OpenId4VCIConfiguration: Sendable {
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.usePAR = usePAR
+		self.useDPoP = useDPoP
 		self.cacheIssuerMetadata = cacheIssuerMetadata
 	}
 }
@@ -60,6 +62,6 @@ extension OpenId4VCIConfiguration {
 	}
 
 	func toOpenId4VCIConfig() -> OpenId4VCIConfig {
-		OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR)
+		OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, useDpopIfSupported: useDPoP)
 	}
 }
