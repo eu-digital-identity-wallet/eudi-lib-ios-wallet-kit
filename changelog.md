@@ -1,3 +1,13 @@
+## v0.16.2
+- **Feature**: Added DPoP configuration support 
+  - Added `useDpopIfSupported` property to `OpenId4VCIConfiguration` to enable/disable DPoP usage (default: `true`)
+  - Conditionally use DPoP constructor based on the `useDpopIfSupported` configuration setting
+  - DPoP is now only used when both supported by the issuer and enabled in the configuration
+
+
+## v0.16.1
+- Fix deferred issuance bug
+
 ## v0.16.0
 - **Breaking change**: Updated OpenID4VCI to version 0.16.0 with support for OpenID4VCI v1.0 specification
   - Updated `eudi-lib-ios-openid4vci-swift` from version 0.7.6 to 0.16.0
