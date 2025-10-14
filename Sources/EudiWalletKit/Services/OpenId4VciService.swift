@@ -124,8 +124,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	func getIssuer(offer: CredentialOffer) async throws -> Issuer {
-		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config.toOpenId4VCIConfig(), parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: try await config.makeDPoPConstructor(keyId: issueReq.id + "_dpop", algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported))
-
+		try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config.toOpenId4VCIConfig(), parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: try await config.makeDPoPConstructor(keyId: issueReq.dpopKeyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported))
 	}
 
 	func getIssuerForDeferred(data: DeferredIssuanceModel) throws -> Issuer {
@@ -302,7 +301,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 						return .deferred(deferredModel)
 					case .issued(let format, _, _, _):
 						let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
-						return try handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, format: format, configuration: configuration)
+						return try await handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, format: format, configuration: configuration)
 					}
 				} else {
 					throw PresentationSession.makeError(str: "No credential response results available")
@@ -317,7 +316,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		}
 	}
 
-	private func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], format: String?, configuration: CredentialConfiguration) throws -> IssuanceOutcome {
+	private func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], format: String?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("Credential issued with format \(format ?? "unknown")")
 		let toData: (String) -> Data = { str in
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
@@ -332,6 +331,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		} else {
 			throw PresentationSession.makeError(str: "Invalid credential")
 		} }
+		if config.dpopKeyOptions != nil { try? await issueReq.secureArea.deleteKeyBatch(id: issueReq.dpopKeyId, startIndex: 0, batchSize: 1); try? await issueReq.secureArea.deleteKeyInfo(id: issueReq.dpopKeyId) }
 		return .issued(credData, configuration)
 	}
 
@@ -377,7 +377,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		case .success(let response):
 			switch response {
 			case .issued(let credential):
-				return try handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, format: nil, configuration: configuration)
+				return try await handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, format: nil, configuration: configuration)
 			case .issuancePending(let transactionId, let interval):
 				logger.info("Credential not ready yet. Try after \(interval)")
 				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
@@ -396,6 +396,13 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	@MainActor
 	private func loginUserAndGetAuthCode(authorizationCodeURL: URL) async throws -> AsWebOutcome {
+		if let scene = UIApplication.shared.connectedScenes.first {
+			let activateState = scene.activationState
+			if activateState != .foregroundActive {
+			  // Delay the task by 1 second if not foreground
+				try await Task.sleep(nanoseconds: 1_000_000_000)
+			}
+		}
 		let lock = NSLock()
 		return try await withCheckedThrowingContinuation { continuation in
 			var nillableContinuation: CheckedContinuation<AsWebOutcome, Error>? = continuation
@@ -432,12 +439,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 	}
 
 	public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-#if os(iOS)
-		let window = UIApplication.shared.windows.first { $0.isKeyWindow }
-		return window ?? ASPresentationAnchor()
-#else
-		return ASPresentationAnchor()
-#endif
+		 ASPresentationAnchor()
 	}
 
 	/// Find a signing algorithm that is supported by both the secure area and the credential issuer
@@ -509,7 +511,12 @@ public enum OpenId4VCIError: LocalizedError {
 	public var localizedDescription: String {
 		switch self {
 		case .authRequestFailed(let error):
-			if let wae = error as? ASWebAuthenticationSessionError, wae.code == .canceledLogin { return "The login has been canceled." }
+			if let wae = error as? ASWebAuthenticationSessionError {
+				if wae.code == .canceledLogin { return "The login has been canceled." }
+				else if wae.code == .presentationContextNotProvided { return "Web authentication presenentation context not provided." }
+				else if wae.code == .presentationContextInvalid { return "Web authentication presenentation context invalid." }
+				else { return wae.localizedDescription}
+			}
 			return "Authorization request failed: \(error.localizedDescription)"
 		case .authorizeResponseNoUrl:
 			return "Authorization response does not include a url"

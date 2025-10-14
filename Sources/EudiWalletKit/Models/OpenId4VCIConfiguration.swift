@@ -58,7 +58,7 @@ extension OpenId4VCIConfiguration {
 		[JWSAlgorithm(.ES256), JWSAlgorithm(.ES384), JWSAlgorithm(.ES512), JWSAlgorithm(.RS256)]
 	}
 
-	func makeDPoPConstructor(keyId: String, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructorType? {
+	func makeDPoPConstructor(keyId dpopKeyId: String, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructorType? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		guard useDpopIfSupported else { return nil }
 		let privateKeyProxy: SigningKeyProxy
@@ -71,9 +71,10 @@ extension OpenId4VCIConfiguration {
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
 				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
 			jwsAlgorithm = jwsAlg
-			let publicCoseKey = (try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: dpopKeyOptions)).first!
-			let unlockData = try await secureArea.unlockKey(id: keyId)
-			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: .ES256, unlockData: unlockData)
+			let publicCoseKey = (try await secureArea.createKeyBatch(id: dpopKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: dpopKeyOptions)).first!
+			let unlockData = try await secureArea.unlockKey(id: dpopKeyId)
+			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: dpopKeyOptions.curve)
+			let signer = try SecureAreaSigner(secureArea: secureArea, id: dpopKeyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
 			privateKeyProxy = .custom(signer)
 			publicKey = try publicCoseKey.toSecKey()
 		} else {
