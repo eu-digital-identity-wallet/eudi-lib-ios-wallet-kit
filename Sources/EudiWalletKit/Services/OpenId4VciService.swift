@@ -123,12 +123,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 		return CredentialOptions(credentialPolicy: .rotateUse, batchSize: metaData.batchCredentialIssuance?.batchSize ?? 1)
 	}
 
-	func getIssuer(offer: CredentialOffer) throws -> Issuer {
+	func getIssuer(offer: CredentialOffer) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
 		if config.useDpopIfSupported {
 			dpopConstructor = try await config.makeDPoPConstructor(keyId: issueReq.dpopKeyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported)
 		}
-		return try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: dpopConstructor)
+		return try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: config.toOpenId4VCIConfig(), parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: dpopConstructor)
 
 	}
 
@@ -401,13 +401,12 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 
 	@MainActor
 	private func loginUserAndGetAuthCode(authorizationCodeURL: URL) async throws -> AsWebOutcome {
+		#if os(iOS)
 		if let scene = UIApplication.shared.connectedScenes.first {
 			let activateState = scene.activationState
-			if activateState != .foregroundActive {
-			  // Delay the task by 1 second if not foreground
-				try await Task.sleep(nanoseconds: 1_000_000_000)
-			}
+			if activateState != .foregroundActive { try await Task.sleep(nanoseconds: 1_000_000_000) }
 		}
+		#endif
 		let lock = NSLock()
 		return try await withCheckedThrowingContinuation { continuation in
 			var nillableContinuation: CheckedContinuation<AsWebOutcome, Error>? = continuation
