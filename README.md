@@ -110,7 +110,29 @@ The wallet developer can customize cryptographic key operations by passing `Secu
 ```swift
 let wallet = try! EudiWallet(serviceName: "my_wallet_app",
    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!] )
-```	
+```
+
+### OpenID4VCI Configuration
+
+The wallet can be configured with OpenID4VCI options including DPoP (Demonstrating Proof-of-Possession) support:
+
+```swift
+// Configure OpenID4VCI with DPoP support
+let openID4VciConfig = OpenId4VCIConfiguration(
+    useDpopIfSupported: true,  // Enable DPoP if supported by issuer (default: true)
+    dpopKeyOptions: KeyOptions(
+        secureAreaName: "SecureEnclave", curve: .P256, credentialPolicy: .rotateUse
+    )
+)
+
+let wallet = try! EudiWallet(
+    serviceName: "my_wallet_app",
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    openID4VciConfig: openID4VciConfig
+)
+```
+
+The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type, and credential policy.	
 
 
 ## Manage documents
