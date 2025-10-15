@@ -1,5 +1,5 @@
 {
-  "originHash" : "92b4711a1139d7c12a151619c664a39934dd04f08969ed9069d5dff164f07730",
+  "originHash" : "ca5271c93b449a9d11ac9059079bb9f3e0d4ebfb8baf88ff6c4d5feced50dc68",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "revision" : "fd1aec9851b3ce89f06c6a9cfc380c7e74ad62ce",
-        "version" : "0.17.5"
+        "revision" : "93326236e40137f01f07b71533c6db95e8811bfa",
+        "version" : "0.17.6"
       }
     },
     {
@@ -123,8 +123,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "f70225981241859eb4aa1a18a75531d26637c8cc",
-        "version" : "1.4.0"
+        "revision" : "40d25bbb2fc5b557a9aa8512210bded327c0f60d",
+        "version" : "1.5.0"
       }
     },
     {
@@ -132,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "20c451f1ad8e344e61ddbb34ef196653d4b73ea6",
-        "version" : "1.13.0"
+        "revision" : "f4cd9e78a1ec209b27e426a5f5c693675f95e75a",
+        "version" : "1.15.0"
       }
     },
     {
