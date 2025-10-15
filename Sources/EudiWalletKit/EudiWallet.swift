@@ -213,13 +213,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
 	@discardableResult public func issueDocument(docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
-		let usedKeyOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
+		let usedKeyOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
 		let openId4VCIService = try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: nil, credentialOptions: usedKeyOptions, keyOptions: keyOptions, disablePrompt: false, promptMessage: promptMessage)
 		let data = try await openId4VCIService.issueDocument(docTypeIdentifier: docTypeIdentifier, promptMessage: promptMessage)
 		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: openId4VCIService.issueReq)
 	}
 
-	func validateKeyOptions(docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, offer: CredentialOffer? = nil) async throws -> CredentialOptions {
+	func validateCredentialOptions(docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, offer: CredentialOffer? = nil) async throws -> CredentialOptions {
 		let dvci = try await getdefaultOpenId4VCIService()
 		let defaultCredentialOptions: CredentialOptions
 		if let offer  {
@@ -237,10 +237,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return usedCredentialOptions
 	}
 
-	/// Get default key options (batch-size and credential policy) for a document type
+	/// Get default credential options (batch-size and credential policy) for a document type
 	/// - Parameters:
 	///  - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
-	public func getDefaultKeyOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
+	public func getDefaultCredentialOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
 		let openId4VCIService = try await getdefaultOpenId4VCIService()
 		return try await openId4VCIService.getMetadataDefaultCredentialOptions(docTypeIdentifier)
 	}
@@ -266,7 +266,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw PresentationSession.makeError(str: "Invalid document status for pending issuance: \(pendingDoc.status)")}
-		let usedCredentialOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
+		let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
 		let openId4VCIService = try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, credentialOptions: usedCredentialOptions, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
@@ -357,7 +357,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
-			let usedCredentialOptions = try await validateKeyOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: docTypeModel.credentialOptions, offer: offer)
+			let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: docTypeModel.credentialOptions, offer: offer)
 			openId4VCIServices.append(try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: usedCredentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage))
 		}
 		let (auth, issuer, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue)
