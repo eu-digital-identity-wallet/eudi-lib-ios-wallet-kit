@@ -146,7 +146,7 @@ extension IssuerSigned {
 extension SignedSDJWT {
 	public func extractSdJwtElements(docId: String, vct: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> SdJwtElements? {
 		guard let allPathsDict = (try? recreateClaims())?.disclosuresPerClaimPath else { return nil }
-		let allPaths = Array(allPathsDict.keys)
+		let allPaths = Set(allPathsDict.keys).union(docClaims.map(\.claimPath))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.value.compactMap(\.claimName)) }
 		var sdJwtArray = [SdJwtElement]()
@@ -176,7 +176,7 @@ extension RequestItem {
 		return MsoMdocElement(elementIdentifier: elementIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 
-	public func extractSdJwtElement(allPaths: [ClaimPath], docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
+	public func extractSdJwtElement(allPaths: Set<ClaimPath>, docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
 		// find path that the request item contains it
 		let query = allPaths.first { path in elementPath.elementsEqual(path.value.compactMap(\.claimName)) } ?? allPaths.first { path in elementPath.contains(path.value.compactMap(\.claimName)) }
 		let isValid = query != nil
