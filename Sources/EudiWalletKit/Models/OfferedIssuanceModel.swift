@@ -46,7 +46,7 @@ public struct OfferedIssuanceModel: Sendable {
 @Copyable
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], keyOptions: KeyOptions) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct
@@ -54,6 +54,7 @@ public struct OfferedDocModel: Sendable {
 		self.identifier = identifier
 		self.displayName = displayName
 		self.algValuesSupported = algValuesSupported
+		self.credentialOptions = credentialOptions
 		self.keyOptions = keyOptions
 	}
 	/// Credential configuration identifier from VCI issuer
@@ -62,7 +63,7 @@ public struct OfferedDocModel: Sendable {
 	public let docType: String?
 	/// vct (for sdJwt credential offers)
 	public let vct: String?
-	/// Scope of the offer
+	/// Scope
 	public let scope: String
 	/// issuer configuration identifier
 	public let identifier: String?
@@ -70,11 +71,26 @@ public struct OfferedDocModel: Sendable {
 	public let displayName: String
 	/// Credential signing algorithm values supported
 	public let algValuesSupported: [String]
-	/// Doc type or vct or scope
-	public var docTypeOrVctOrScope: String {
-		docType ?? vct ?? scope
+	/// Doc type or vct
+	public var docTypeOrVct: String? {
+		docType ?? vct
 	}
-	// default key options for the credential
-	public let keyOptions: KeyOptions
+	// options for the credential
+	public let credentialOptions: CredentialOptions
+	// key options
+	public let keyOptions: KeyOptions?
+
+	/// Convert OfferedDocModel to DocTypeIdentifier
+	public var docTypeIdentifier: DocTypeIdentifier? {
+		if let identifier = identifier {
+			return .identifier(identifier)
+		} else if let docType = docType {
+			return .msoMdoc(docType: docType)
+		} else if let vct = vct {
+			return .sdJwt(vct: vct)
+		} else {
+			return nil
+		}
+	}
 }
 

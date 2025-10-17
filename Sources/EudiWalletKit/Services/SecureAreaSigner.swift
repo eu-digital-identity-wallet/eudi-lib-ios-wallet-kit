@@ -44,6 +44,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
 		case .ES512: return .ES512
+		case .EDDSA: throw WalletError(description: "EdDSA is not supported by JOSESwift, use JSONWebAlgorithms instead.")
 		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
 		}
 	}
@@ -53,6 +54,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 		case .ES256: return .ES256
 		case .ES384: return .ES384
 		case .ES512: return .ES512
+		case .EDDSA: return .EdDSA
 		default: throw WalletError(description: "Invalid signing algorithm: \(sa.rawValue).")
 		}
 	}
@@ -63,8 +65,9 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	}
 
 	func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+		logger.info("Sign async JWT in secure area \(type(of: secureArea).name)")
 		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }.joined(separator: ".").data(using: .ascii)
-      	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
+      	guard let signingInput else { throw ValidationError.error(reason: "Invalid signing input for signing data") }
 		return try await sign(signingInput)
 	}
 

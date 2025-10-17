@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import OrderedCollections
 import MdocDataModel18013
 import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
@@ -145,9 +146,10 @@ extension IssuerSigned {
 
 extension SignedSDJWT {
 	public func extractSdJwtElements(docId: String, vct: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> SdJwtElements? {
-		guard let allPaths = try? disclosedPaths() else { return nil }
+		guard let allPathsDict = (try? recreateClaims())?.disclosuresPerClaimPath else { return nil }
+		let allPaths = OrderedSet(allPathsDict.keys).union(docClaims.flatMap(\.claimPaths))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
-		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.tokenArray) }
+		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.value.compactMap(\.claimName)) }
 		var sdJwtArray = [SdJwtElement]()
 		let tmp = itemsReq.map { reqItem in reqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(reqItem), bRootOnly: true) }
 		for d in tmp { if !sdJwtArray.contains(d) { sdJwtArray.append(d) } }
@@ -161,6 +163,12 @@ extension SignedSDJWT {
 	}
 }
 
+extension eudi_lib_sdjwt_swift.ClaimPathElement {
+	public var claimName: String? {
+		if case .claim(let name) = self { name } else { nil }
+	}
+}
+
 extension RequestItem {
 	public func extractMsoMdocElement(ns: String, nsItems: [IssuerSignedItem], docClaims: [DocClaim], isMandatory: Bool) -> MsoMdocElement {
 		let issuedElement = nsItems.first { $0.elementIdentifier == rootIdentifier }
@@ -169,9 +177,9 @@ extension RequestItem {
 		return MsoMdocElement(elementIdentifier: elementIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 
-	public func extractSdJwtElement(allPaths: [JSONPointer], docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
+	public func extractSdJwtElement(allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
 		// find path that the request item contains it
-		let query = allPaths.first { path in elementPath.elementsEqual(path.tokenArray) } ?? allPaths.first { path in elementPath.contains(path.tokenArray) }
+		let query = allPaths.first { path in elementPath.elementsEqual(path.value.compactMap(\.claimName)) } ?? allPaths.first { path in elementPath.contains(path.value.compactMap(\.claimName)) }
 		let isValid = query != nil
 		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
 		let docClaim: DocClaim? = findDocClaimByPath(docClaims: docClaims, requestPath: requestPath)

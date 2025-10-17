@@ -42,4 +42,9 @@ public protocol PresentationService: Sendable {
 	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws
 }
 
+public protocol NetworkingProtocol: Sendable {
+	func data(from url: URL) async throws -> (Data, URLResponse)
+	func data(for request: URLRequest) async throws -> (Data, URLResponse)
+}
 
+extension URLSession: NetworkingProtocol {}

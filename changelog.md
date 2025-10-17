@@ -1,6 +1,220 @@
+## v0.16.4
+- Fix to show all mandatory elements of sd-jwt document during sharing
+- The wallet can be configured with OpenID4VCI options including DPoP (Demonstrating Proof-of-Possession) support and key options for DPoP key generation:
+
+```swift
+// Configure OpenID4VCI with DPoP support
+let openID4VciConfig = OpenId4VCIConfiguration(
+    useDpopIfSupported: true,  // Enable DPoP if supported by issuer (default: true)
+    dpopKeyOptions: KeyOptions(
+        secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
+    )
+)
+```
+
+- **Breaking change**: Batch size and credential policy are passed with a `CredentialOptions` parameter:
+  - `issueDocument(docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)` 
+  - `getDefaultCredentialOptions(_:)` 
+  - `requestDeferredIssuance(deferredDoc:credentialOptions:keyOptions:)` 
+  - `resumePendingIssuance(pendingDoc:webUrl:credentialOptions:keyOptions:)` 
+  - `beginIssueDocument(id:credentialOptions:keyOptions:bDeferred:)` 
+
+## v0.16.2
+- **Feature**: Added DPoP configuration support
+  - Added `useDpopIfSupported` property to `OpenId4VCIConfiguration` to enable/disable DPoP usage (default: `true`)
+  - Conditionally use DPoP constructor based on the `useDpopIfSupported` configuration setting
+  - DPoP is now only used when both supported by the issuer and enabled in the configuration
+
+
+## v0.16.1
+- Fix deferred issuance bug
+
+## v0.16.0
+- **Breaking change**: Updated OpenID4VCI to version 0.16.0 with support for OpenID4VCI v1.0 specification
+  - Updated `eudi-lib-ios-openid4vci-swift` from version 0.7.6 to 0.16.0
+  - Implemented changes for OpenID4VCI v1.0 specification compatibility:
+    - Updated deferred credential issuance handling to support new API with separate `transactionId` and `interval` parameters
+    - Enhanced credential metadata access through new `ConfigurationCredentialMetadata` structure
+    - Added support for new `issuanceStillPending` case in deferred credential flows
+    - Improved error handling and logging for deferred credential scenarios
+- Updated `eudi-lib-sdjwt-swift` from version 0.8.0 to 0.9.1
+
+## v0.15.0
+- Update dependency versions
+  - Updated `eudi-lib-ios-iso18013-data-transfer` from version 0.8.0 to 0.8.1
+  - Updated `eudi-lib-ios-siop-openid4vp-swift` from version 0.17.3 to 0.17.5
+- Enhanced CBOR document validation
+  - Perform CBOR document validation logic in `EudiWallet`, `validateIssuedDocuments` method:
+  	- CBOR element digest values are compared against the digest values provided in the issuer-signed Mobile Security Object (MSO) section of the document to ensure integrity and authenticity.
+	- MSO Signature is validated.
+	- MSO Validity info dates are validated.
+	- Doc type in MSO is the same as the doc type of the issued document.
+
+
+## v0.14.9
+- feat: introduce OpenID4VP configuration and refactor related classes
+  - Added new `OpenId4VpConfiguration` model with support for different client identifier schemes
+  - Introduced `ClientIdScheme` enum supporting preregistered clients, X.509 certificate validation (SAN DNS and hash), and redirect URI validation
+  - **Breaking change**: Refactored `EudiWallet` initialization and property to use a `OpenId4VpConfiguration` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters, for example: `wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns])`
+  - Added convenience initializer for `PreregisteredClient` from SiopOpenID4VP library
+  - Updated related services to work with the new configuration structure
+
+## v0.14.7
+- Fix: Throw error if one of the requested doc types is not present and credentialSets is nil
+
+## v0.14.6
+- Error reason [provided](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/presentationsession/uierror) when OpenID4VP response is rejected
+
+## v0.14.5
+- Fix CBOR log document claim decoding logic
+
+## v0.14.4
+- Fix transaction logs decoding
+
+## v0.14.3
+- Update eudi-lib-ios-siop-openid4vp-swift dependency to version [0.17.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.17.2)
+
+## v0.14.2
+- Update eudi-lib-ios-siop-openid4vp-swift to 0.17.0 and enhance certificate verification
+
+## v0.14.1
+- Fixes bug for sd-jwt documents array values not transfered with online presentation e.g. nationalities for PID
+
+## v0.14.0
+- Updated OpenID4VP library to version [v0.16.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.16.0) and adjusted wallet kit accordingly.
+
+## v0.13.5
+- Update eudi-lib-ios-openid4vci-swift to [0.15.4](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.15.4)
+- Added  property `var credentialPocily: CredentialPolicy` to `DocClaimsDecodable`
+- fix for removing port from URL (issue #215)
+
+## v0.13.4
+- Update the eudi-lib-ios-siop-openid4vp-swift dependency to version 0.15.1 (JARM fix)
+
+## v0.13.3
+- Updated eudi-lib-ios-siop-openid4vp-swift library to version [v0.15.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.15.0)
+- Updated eudi-lib-ios-openid4vci-swift library to version [v0.15.2](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.15.2)
+
+- **Breaking change**: Removed  `EudiWallet` property`verifierRedirectUri`
+
+## v0.13.2
+
+### Error Handling Improvements:
+- **Improved WalletError structure**: Refactored `WalletError` from enum to struct with property to support localization: `public let localizationKey: String?`.
+- **Enhanced error logging**: Added `logger.error` statements before all `throw` statements across the wallet codebase to improve debugging capabilities.
+
+## v0.13.1
+- Fix for presentations based on DCQL query
+
+## v0.13.0
+- Fixed failure to issue documents with credential offer when the authorization server defined in the offer uses DPoP.
+- Fixed credential offer issuance to use batch size passed to `issueDocumentsByOfferUrl`.
+
+## v0.12.9
+- Updated [eudi-lib-sdjwt-swift](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift) library to version v0.7.2
+- Updated dPoP constructor logic and added RS256 algorithm
+
+## v0.12.8
+
+### Changes:
+- `DocClaimsDecodable` has a new property `var credentialsUsageCounts: CredentialsUsageCounts?`
+This property provides information about the number of remaining presentations available for a document, based on its credential policy. It is useful for documents issued with a one-time use policy, where it returns the number of remaining presentations available. For documents with a rotate-use policy, it returns nil as there's no usage limit.
+- Deprecated `getCredentialsUsageCount` method in `EudiWallet`. Use the new `credentialsUsageCounts` property instead.
+
+#### Performance Improvements:
+- **Configurable metadata caching**: Added `cacheIssuerMetadata: Bool` parameter to `OpenId4VCIConfiguration` (defaults to `true`). This flag controls whether issuer metadata should be cached in memory during the session.
+
+### Bug Fixes:
+- `DocClaimsDecodable` models are backed by classes instead of structs to ensure proper reference semantics. This allows the `credentialsUsageCounts` property to be updated correctly without requiring a full reload of the document claims.
+- Fixed issue with getting issuer metadata from wrong server when a url offer is used with different server than the default one.
+
+## v0.12.7
+
+#### DPoP updates
+- Library `eudi-lib-ios-openid4vci-swift` has been updated to version 0.15.1
+- DPoP constructor is always passed.
+
+#### Performance Improvements:
+- **Issuer metadata caching**: Added caching to `OpenId4VCIService.getIssuerMetadata` to improve performance by storing successful issuer metadata results in memory and avoiding redundant network requests during the same session. The cache is automatically cleared after changing issuerUrl.
+
+#### Bug fixes:
+ - When the `getCredentialsUsageCount` method is called, if the remaining count is 0, the `validUntil` property of the credential is now correctly set to `nil`.
+
+#### Breaking Changes:
+
+The `getDefaultKeyOptions` and `issueDocument` method signatures have been updated to accept a single `DocTypeIdentifier` parameter instead of separate `docType`, `scope`, and `identifier` parameters for improved type safety and API consistency.
+The `getDefaultKeyOptions` method queries the issuer to retrieve the recommended key configuration for a specific document type identifier.
+The returned KeyOptions can be used when issuing documents with `issueDocument`.
+
+#### Before:
+```swift
+let keyOptions = try await wallet.getDefaultKeyOptions(docType, scope: scope, identifier: identifier)
+let document = try await wallet.issueDocument(docType: docType, scope: scope, identifier: identifier, keyOptions: keyOptions)
+```
+
+#### After:
+```swift
+let keyOptions = try await wallet.getDefaultKeyOptions(.msoMdoc("org.iso.18013.5.1.mDL"))
+let document = try await wallet.issueDocument(.msoMdoc("org.iso.18013.5.1.mDL"), keyOptions: keyOptions)
+// or
+let keyOptions = try await wallet.getDefaultKeyOptions(.sdJwt(vct: "urn:eudi:pid:1"))
+let document = try await wallet.issueDocument(.sdJwt(vct: "urn:eudi:pid:1"), keyOptions: keyOptions)
+// or
+let keyOptions = try await wallet.getDefaultKeyOptions(.configurationIdentifier("eu.europa.ec.eudi.cor_mdoc"))
+let document = try await wallet.issueDocument(.configurationIdentifier("eu.europa.ec.eudi.cor_mdoc"), keyOptions: keyOptions)
+```
+
+## v0.12.6
+### Networking abstraction and protocol improvements
+
+- **EudiWallet initialization parameter change**: The `urlSession` parameter has been replaced with `networking` parameter
+  - Old: `urlSession: URLSession? = nil`
+  - New: `networking: (any NetworkingProtocol)? = nil`
+  - This allows for custom networking implementations while maintaining URLSession compatibility
+
+#### New NetworkingProtocol
+- Added `NetworkingProtocol` that abstracts network operations
+  - Provides `data(from url: URL)` and `data(for request: URLRequest)` methods
+  - `URLSession` conforms to `NetworkingProtocol` by default for backward compatibility
+
+#### Internal networking improvements
+- Split networking into separate VCI and VP clients:
+  - `networkingVci: OpenID4VCINetworking` - For OpenID4VCI operations
+  - `networkingVp: OpenID4VPNetworking` - For OpenID4VP operations
+- Both networking clients wrap the provided `NetworkingProtocol` implementation
+
+### `SecureArea` Protocol Improvements
+- Added property `static var supportedEcCurves: [CoseEcCurve]`
+
+### Bug Fixes
+- Fix for issue #187
+- Fix for issue #190
+- Fix for issue #195
+- Fix for issue: Attestation with 0 instances still triggers share flow
+- Fix for issue: Expiration date shown despite no available attestations
+- Fix for issue: When there is no matching attestation for BLE transfer, the QR code is still displayed.
+
+
+## v0.12.5
+-- Fixed redirect_uri clientId scheme handling
+
+## v0.12.4
+### `EudiWallet` property addition
+- Added `verifierRedirectUri: String?` property to `EudiWallet`.
+  - This property stores the OpenID4VP verifier redirect URI, used for redirectUri clients in OpenID4VP flows.
+
+### Fix to delete one-time credentials for presented documents only
+- Updated the logic to ensure that only one-time credentials for documents that have been presented are deleted.
+
+### Fix to `issueDocumentsByOfferUrl` crash
+- When multiple documents were issued many times the 'Fatal error: Unexpectedly found nil while unwrapping an Optional value' occurred.
+
+## v0.12.3
+ - Use exact versions for dependencies
+
 ## v0.12.2
  ### Modified issueDocumentsByOfferUrl method
- 
+
  ```swift
 	/// Issue documents by offer URI.
 	/// - Parameters:
@@ -26,14 +240,14 @@
  ```
 
 ### `OfferedDocModel` struct enhancements
- 
+
  #### Added properties:
  - `identifier: String?` - Issuer configuration identifier for the credential
  - `keyOptions: KeyOptions` - Default key options (batch size and credential policy) recommended by the issuer
- 
+
  #### Updated computed property:
  - `docTypeOrVctOrScope` renamed to `docTypeOrVctOrScope` - Now returns docType, vct, or scope in priority order
- 
+
 
 
 ## v0.12.1
@@ -63,6 +277,7 @@
  ```
 
  ### `OfferedDocModel` removed method: `getRemainingCredentialsCount`
+
 
 ## v0.12.0
 
@@ -175,7 +390,7 @@ let presentationData = await wallet.parseTransactionLog(transaction)
 ```
 
 ## v0.10.5
-- Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.9.0)
+- Updated OpenID4VP library to version [v0.9.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp/releases/tag/v0.9.0)
 - Updated OpenID4VCI library to version [0.12.3](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.12.3)
 
 ## v0.10.4
@@ -399,7 +614,7 @@ eudi-lib-ios-openid4vci-swift to version 0.3.1
 - `EudiWallet`: added property `public var accessGroup: String?` (used for sharing keychain items between apps with the same access group)he following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)
 ## v0.5.6
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.3.22 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`).
+- Update eudi-lib-ios-siop-openid4vp to version 0.3.22 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`).
 
 ## v0.5.5
 - Update eudi-lib-ios-openid4vci-swift to version 0.3.1
@@ -415,7 +630,7 @@ OS16 offer url parsing issue
 ### Support Pre-Authorized Code Flow## v0.4.9
 d4VP fixes and updates
 The flow is supported by existing methods:
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.1
+- Update eudi-lib-ios-siop-openid4vp to version 0.1.1
 1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`nid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)y to PresentationSession
 
@@ -435,16 +650,16 @@ The flow is supported by existing methods:
 ## v0.4.9## v0.4.4
 ### Openid4VP fixes and updatesking change - docModels contains not-nil items (SwiftUI breaks with nil items)
 
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.1
+- Update eudi-lib-ios-siop-openid4vp to version 0.1.1
 - Fix openid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
 - Add `readerLegalName` property to PresentationSession
 
 ## v0.4.8- PresentationSession / func sendResponse: itemsToSend dictionary is keyed by docId (and not docType)
-- Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+- Update eudi-lib-ios-siop-openid4vp to version 0.1.0
 - Added wallet configuration parameter `public var verifierLegalName: String?` (used for Openid4VP preregistered clients)
  data
 ## v0.4.7
-###Update eudi-lib-ios-siop-openid4vp-swift to version 0.1.0
+###Update eudi-lib-ios-siop-openid4vp to version 0.1.0
 
 ## v0.4.6
 ### Update openid4vci to version 0.1.2
@@ -559,14 +774,14 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 - OpenID4VCI draft13 support ([#31](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/31)) via [@phisakel](https://github.com/phisakel))
 - Simplify Storage Manager API ([#59](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/59)) via [@phisakel](https://github.com/phisakel)
 - Openid4vp and BLE should support sending response with multiple documents of the same doc-type (iOS) ([#56](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/56)) via [@phisakel](https://github.com/phisakel)@phisakel](https://github.com/phisakel)
-- Refactor to support IssuerSigned CBOR structure [iOS] ([#53](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/53)) via [@phisakel](https://github.com/phisakel)a [@phisakel](https://github.com/phisakel)
+- Refactor to support IssuerSigned CBOR structure [iOS] ([#53](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/53)) via [@phisakel](https://github.com/phisakel)
 - Changelog.md update ([#51](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/51)) via [@phisakel](https://github.com/phisakel)
 - Vci offer fix for filtering resolved identifiers ([#50](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/50)) via [@phisakel](https://github.com/phisakel)
 - Support mdoc Authentication for OpenId4Vp ([#46](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/46)) via [@phisakel](https://github.com/phisakel)
 - OpenID4VCI: Allow partial issuing when some documents fail to issue ([#48](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/48)) via [@phisakel](https://github.com/phisakel)
 - Issuing - Support for credential offer ([#45](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/45)) via [@phisakel](https://github.com/phisakel).com/phisakel)
 - Support OpenID4VCI credential offer (resolution of credential offer, issuing of specific doc types) ([#44](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/44)) via [@phisakel](https://github.com/phisakel)ithub.com/phisakel)
-- Chore: Update dependencies for udi-lib-ios-iso18013-data-transfer to … ([#43](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/43)) via [@phisakel](https://github.com/phisakel)isakel)
+- Chore: Update dependencies for udi-lib-ios-iso18013-data-transfer to … ([#43](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/43)) via [@phisakel](https://github.com/phisakel)
 - Return the QR code to the device engagement in string representation ([#42](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/42)) via [@akarabashov](https://github.com/akarabashov)](https://github.com/phisakel)
 - Centralization of sec workflows ([#21](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/21)) via [@christosservosNCIN](https://github.com/christosservosNCIN)
 - [fix] sdjwt case fix ([#36](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/36)) via [@dtsiflit](https://github.com/dtsiflit)

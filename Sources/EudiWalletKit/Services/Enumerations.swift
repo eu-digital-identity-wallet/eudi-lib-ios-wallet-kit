@@ -38,4 +38,3 @@ public enum DocTypedData: Sendable {
 	case msoMdoc(IssuerSigned)
 	case sdJwt(SignedSDJWT)
 }
-

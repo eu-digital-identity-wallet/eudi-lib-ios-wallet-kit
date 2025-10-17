@@ -90,13 +90,11 @@ extension BlePresentationService: MdocOfflineDelegate {
 	/// - Parameter newStatus: New status
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
 		status = if let st = TransferStatus(rawValue: newStatus.rawValue) { st } else { .error }
-				switch newStatus {
-				case .qrEngagementReady:
-						if let qrCode = self.bleServerTransfer.qrCodePayload {
-							deviceEngagement = qrCode
-						}
+		switch newStatus {
+		case .qrEngagementReady:
+			if let qrCode = self.bleServerTransfer.qrCodePayload { deviceEngagement = qrCode }
 		default: break
-				}
+		}
 	}
 	/// Transfer finished with error
 	/// - Parameter error: The error description
