@@ -121,7 +121,7 @@ The wallet can be configured with OpenID4VCI options including DPoP (Demonstrati
 let openID4VciConfig = OpenId4VCIConfiguration(
     useDpopIfSupported: true,  // Enable DPoP if supported by issuer (default: true)
     dpopKeyOptions: KeyOptions(
-        secureAreaName: "SecureEnclave", curve: .P256, credentialPolicy: .rotateUse
+        secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
     )
 )
 
@@ -132,7 +132,7 @@ let wallet = try! EudiWallet(
 )
 ```
 
-The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type, and credential policy.	
+The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.	
 
 
 ## Manage documents

@@ -22,6 +22,7 @@ import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
+import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 
 extension String {
@@ -158,6 +159,15 @@ extension MdocDataModel18013.SignUpResponse {
 
 extension Claim {
 	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description)) }
+}
+
+extension DocClaim {
+	var claimPath: ClaimPath {
+		ClaimPath(path.map { ClaimPathElement.claim(name: $0) })
+	}
+	var claimPaths: [ClaimPath] {
+		if let children { children.map(\.claimPath) } else { [claimPath] }
+	}
 }
 
 extension Array where Element == DocClaimMetadata {

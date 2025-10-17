@@ -209,6 +209,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
 	///  - Parameters:
 	///   - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
+	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults are fetched from issuer metadata. Use `getDefaultCredentialOptions(_:)` to retrieve issuer-recommended settings.
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
@@ -238,8 +239,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Get default credential options (batch-size and credential policy) for a document type
+	///
+	/// Queries the issuer's metadata to retrieve recommended credential configuration. The returned `CredentialOptions` contains:
+	/// - `batchSize`: Number of credentials to issue in a batch (enables multiple presentations before re-issuance)
+	/// - `credentialPolicy`: Either `.oneTimeUse` (credential consumed after presentation) or `.rotateUse` (unlimited presentations)
 	/// - Parameters:
 	///  - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
+	/// - Returns: Issuer-recommended credential options
 	public func getDefaultCredentialOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
 		let openId4VCIService = try await getdefaultOpenId4VCIService()
 		return try await openId4VCIService.getMetadataDefaultCredentialOptions(docTypeIdentifier)
@@ -247,7 +253,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
 	///
 	/// The caller does not need to reload documents, storage manager collections are updated.
-	/// - Parameter deferredDoc: A stored document with deferred status
+	/// - Parameters:
+	///   - deferredDoc: A stored document with deferred status
+	///   - credentialOptions: Credential options specifying batch size and credential policy for the deferred document
+	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard deferredDoc.status == .deferred else { throw PresentationSession.makeError(str: "Invalid document status for deferred issuance: \(deferredDoc.status)") }
@@ -258,11 +267,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq)
 	}
 
-	/// Resume pending issuance. Supports dynamic isuuance scenario
+	/// Resume pending issuance. Supports dynamic issuance scenario
 	///
 	/// The caller does not need to reload documents, storage manager collections are updated.
-	/// - Parameter pendingDoc: A temporary document with pending status
-	///
+	/// - Parameters:
+	///   - pendingDoc: A temporary document with pending status
+	///   - webUrl: The authorization URL returned from the presentation service (for dynamic issuance)
+	///   - credentialOptions: Credential options specifying batch size and credential policy for the pending document
+	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw PresentationSession.makeError(str: "Invalid document status for pending issuance: \(pendingDoc.status)")}
@@ -339,8 +351,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-
-
 	/// Issue documents by offer URI.
 	/// - Parameters:
 	///   - offerUri: url with offer
@@ -373,7 +383,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///
 	/// - Parameters:
 	///   - id: Document identifier
-	///   - issuer: Issuer function
+	///   - credentialOptions: Credential options specifying batch size and credential policy
+	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
+	///   - bDeferred: Whether this is for deferred issuance (default: false)
+	/// - Returns: An issue request object that can be used to complete the issuance process
 	public func beginIssueDocument(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, bDeferred: Bool = false) async throws -> IssueRequest {
 		let request = try IssueRequest(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		return request
