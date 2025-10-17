@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import OrderedCollections
 import MdocDataModel18013
 import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
@@ -146,7 +147,7 @@ extension IssuerSigned {
 extension SignedSDJWT {
 	public func extractSdJwtElements(docId: String, vct: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> SdJwtElements? {
 		guard let allPathsDict = (try? recreateClaims())?.disclosuresPerClaimPath else { return nil }
-		let allPaths = Set(allPathsDict.keys).union(docClaims.map(\.claimPath))
+		let allPaths = OrderedSet(allPathsDict.keys).union(docClaims.flatMap(\.claimPaths))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.value.compactMap(\.claimName)) }
 		var sdJwtArray = [SdJwtElement]()
@@ -176,7 +177,7 @@ extension RequestItem {
 		return MsoMdocElement(elementIdentifier: elementIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
 
-	public func extractSdJwtElement(allPaths: Set<ClaimPath>, docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
+	public func extractSdJwtElement(allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
 		// find path that the request item contains it
 		let query = allPaths.first { path in elementPath.elementsEqual(path.value.compactMap(\.claimName)) } ?? allPaths.first { path in elementPath.contains(path.value.compactMap(\.claimName)) }
 		let isValid = query != nil

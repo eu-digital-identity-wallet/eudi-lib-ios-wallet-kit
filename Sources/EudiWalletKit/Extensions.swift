@@ -165,6 +165,9 @@ extension DocClaim {
 	var claimPath: ClaimPath {
 		ClaimPath(path.map { ClaimPathElement.claim(name: $0) })
 	}
+	var claimPaths: [ClaimPath] {
+		if let children { children.map(\.claimPath) } else { [claimPath] }
+	}
 }
 
 extension Array where Element == DocClaimMetadata {
