@@ -42,7 +42,7 @@ The library provides the following functionality:
     - [x] Enforcing device user authentication when retrieving documents' private keys
 - Document issuance
     - [x] Support
-      for [OpenId4VCI (draft 15)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html)
+      for [OpenId4VCI (1.0)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
       document issuance
         - [x] Authorization Code Flow
         - [x] Pre-authorization Code Flow
@@ -69,9 +69,9 @@ and can be included in any iOS project.
 It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
 - Presentation Exchange v2.0.0 - Published
-- OpenID4VP – Draft 24
-- SIOPv2 – Draft 13
-- OpenID4VCI – Draft 15
+- [OpenID4VP – 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+- [SIOPv2 – Draft 13](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html)
+- [OpenID4VCI – 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
 
 ### Disclaimer
 The released software is a initial development release version: 
@@ -89,7 +89,7 @@ The released software is a initial development release version:
 To use EUDI Wallet Kit, add the following dependency to your Package.swift:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.12.2"))
+    .package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit.git", .upToNextMajor(from: "0.16.4"))
 ]
 ```
 
