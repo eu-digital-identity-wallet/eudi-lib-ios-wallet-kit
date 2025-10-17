@@ -205,6 +205,10 @@ extension DocKeyInfo {
 	static var `default`: Self { DocKeyInfo(secureAreaName: SoftwareSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse) }
 }
 
+extension IssueRequest {
+	var dpopKeyId: String { id + "_dpop" }
+}
+
 extension URL {
 	func getBaseUrl() -> String {
 		var urlString = scheme! + "://" + host!
