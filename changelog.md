@@ -1,5 +1,26 @@
+## v0.16.4
+- Fix to show all mandatory elements of sd-jwt document during sharing
+- The wallet can be configured with OpenID4VCI options including DPoP (Demonstrating Proof-of-Possession) support and key options for DPoP key generation:
+
+```swift
+// Configure OpenID4VCI with DPoP support
+let openID4VciConfig = OpenId4VCIConfiguration(
+    useDpopIfSupported: true,  // Enable DPoP if supported by issuer (default: true)
+    dpopKeyOptions: KeyOptions(
+        secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
+    )
+)
+```
+
+- **Breaking change**: Batch size and credential policy are passed with a `CredentialOptions` parameter:
+  - `issueDocument(docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)` 
+  - `getDefaultCredentialOptions(_:)` 
+  - `requestDeferredIssuance(deferredDoc:credentialOptions:keyOptions:)` 
+  - `resumePendingIssuance(pendingDoc:webUrl:credentialOptions:keyOptions:)` 
+  - `beginIssueDocument(id:credentialOptions:keyOptions:bDeferred:)` 
+
 ## v0.16.2
-- **Feature**: Added DPoP configuration support 
+- **Feature**: Added DPoP configuration support
   - Added `useDpopIfSupported` property to `OpenId4VCIConfiguration` to enable/disable DPoP usage (default: `true`)
   - Conditionally use DPoP constructor based on the `useDpopIfSupported` configuration setting
   - DPoP is now only used when both supported by the issuer and enabled in the configuration
@@ -23,18 +44,18 @@
   - Updated `eudi-lib-ios-iso18013-data-transfer` from version 0.8.0 to 0.8.1
   - Updated `eudi-lib-ios-siop-openid4vp-swift` from version 0.17.3 to 0.17.5
 - Enhanced CBOR document validation
-  - Perform CBOR document validation logic in `EudiWallet`, `validateIssuedDocuments` method: 
+  - Perform CBOR document validation logic in `EudiWallet`, `validateIssuedDocuments` method:
   	- CBOR element digest values are compared against the digest values provided in the issuer-signed Mobile Security Object (MSO) section of the document to ensure integrity and authenticity.
 	- MSO Signature is validated.
 	- MSO Validity info dates are validated.
 	- Doc type in MSO is the same as the doc type of the issued document.
-  
+
 
 ## v0.14.9
 - feat: introduce OpenID4VP configuration and refactor related classes
   - Added new `OpenId4VpConfiguration` model with support for different client identifier schemes
   - Introduced `ClientIdScheme` enum supporting preregistered clients, X.509 certificate validation (SAN DNS and hash), and redirect URI validation
-  - **Breaking change**: Refactored `EudiWallet` initialization and property to use a `OpenId4VpConfiguration` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters, for example: `wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns])`	
+  - **Breaking change**: Refactored `EudiWallet` initialization and property to use a `OpenId4VpConfiguration` parameter instead of separate `verifierApiUri` and `verifierLegalName` parameters, for example: `wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns])`
   - Added convenience initializer for `PreregisteredClient` from SiopOpenID4VP library
   - Updated related services to work with the new configuration structure
 
@@ -97,7 +118,7 @@
 
 ### Changes:
 - `DocClaimsDecodable` has a new property `var credentialsUsageCounts: CredentialsUsageCounts?`
-This property provides information about the number of remaining presentations available for a document, based on its credential policy. It is useful for documents issued with a one-time use policy, where it returns the number of remaining presentations available. For documents with a rotate-use policy, it returns nil as there's no usage limit. 
+This property provides information about the number of remaining presentations available for a document, based on its credential policy. It is useful for documents issued with a one-time use policy, where it returns the number of remaining presentations available. For documents with a rotate-use policy, it returns nil as there's no usage limit.
 - Deprecated `getCredentialsUsageCount` method in `EudiWallet`. Use the new `credentialsUsageCounts` property instead.
 
 #### Performance Improvements:
@@ -116,7 +137,7 @@ This property provides information about the number of remaining presentations a
 #### Performance Improvements:
 - **Issuer metadata caching**: Added caching to `OpenId4VCIService.getIssuerMetadata` to improve performance by storing successful issuer metadata results in memory and avoiding redundant network requests during the same session. The cache is automatically cleared after changing issuerUrl.
 
-#### Bug fixes: 
+#### Bug fixes:
  - When the `getCredentialsUsageCount` method is called, if the remaining count is 0, the `validUntil` property of the credential is now correctly set to `nil`.
 
 #### Breaking Changes:
