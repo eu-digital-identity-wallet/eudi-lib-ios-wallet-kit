@@ -10,32 +10,54 @@ If ``EudiWallet/userAuthenticationRequired`` is true, user authentication is req
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the ``EudiWallet/issueDocument(docTypeIdentifier:keyOptions:promptMessage:)`` method.
+When the document docType to be issued use the ``EudiWallet/issueDocument(docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)`` method.
 
 __Important Notes__:
 
-- For the 'SecureEnclave' secure area, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the
-public/private key pair.
+- Currently, only mso_mdoc and sd_jwt formats are supported
+- For the 'SecureEnclave' secure area, only ES256 algorithm is supported for signing OpenId4CVI proof of possession of the public/private key pair
 
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
 ```swift
 do {
-	let keyOptions = try await wallet.getDefaultKeyOptions(.msoMdoc("org.iso.18013.5.1.mDL"))
-	let doc = try await userWallet.issueDocument(.msoMdoc("org.iso.18013.5.1.mDL"), keyOptions: keyOptions
+  let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
+  let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
+  let doc = try await userWallet.issueDocument(
+    docTypeIdentifier: .msoMdoc(docType: EuPidModel.euPidDocType),
+    credentialOptions: credentialOptions,
+    keyOptions: keyOptions
+  )
+  // document has been added to wallet storage, you can display it
 }
 catch {
   // display error
 }
 ```
 
-You can also issue a document by passing a `configurationIdentifier` case. The configuration identifiers can be retrieved from the issuer's metadata,  using the `getIssuerMetadata` method.
+You can also issue a document by passing a configuration identifier. The configuration identifiers can be retrieved from the issuer's metadata using the ``EudiWallet/getIssuerMetadata()`` method.
 
 ```swift
-  // get current issuer metadata
-  let configuration = try await wallet.getIssuerMetadata()
-  ...
-  let doc = try await userWallet.issueDocument(.configurationIdentifier("eu.europa.ec.eudi.pid_vc_sd_jwt"))
+// Get current issuer metadata
+let metadata = try await wallet.getIssuerMetadata()
+// Use configuration identifier
+let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
+let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
+let doc = try await userWallet.issueDocument(
+  docTypeIdentifier: .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt"),
+  credentialOptions: credentialOptions,
+  keyOptions: keyOptions
+)
+```
+
+For SD-JWT credentials, use the `.sdJwt` identifier:
+
+```swift
+let doc = try await userWallet.issueDocument(
+  docTypeIdentifier: .sdJwt(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt"),
+  credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
+  keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
+)
 ```
 
 ### Resolving Credential offer
@@ -52,19 +74,31 @@ The following example shows how to resolve a credential offer:
   }
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` method.
+After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:)`` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
+
 The following example shows how to issue documents by offer URL:
-  ```swift
- // When resolving an offer, key options are now included
- let offer = try await wallet.resolveOfferUrlDocTypes(uriOffer: offerUrl)
- for docModel in offer.docModels {
-	// use recommended key options or modify them
-	 let docTypes = offer.docModels.map { $0.copy(keyOptions: KeyOptions(credentialPolicy: .oneTimeUse, batchSize: 2))
-     // Issue with optimal settings
-     let newDocs = try await wallet.issueDocumentsByOfferUrl(offerUri: offerUrl, docTypes: docTypes, txCodeValue: txCode)
- }
- ```
+
+```swift
+// Resolve the offer to get document models with recommended credential options
+let offer = try await wallet.resolveOfferUrlDocTypes(uriOffer: offerUrl)
+
+// Use the offered documents as-is with recommended settings, or customize them
+let customizedDocTypes = offer.docModels.map { docModel in
+  // You can customize credential options (batch size, credential policy)
+  docModel.copy(
+    credentialOptions: CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 2),
+    keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
+  )
+}
+
+// Issue with customized settings
+let newDocs = try await wallet.issueDocumentsByOfferUrl(
+  offerUri: offerUrl,
+  docTypes: customizedDocTypes,
+  txCodeValue: txCode
+)
+```
 
 ### Authorization code flow
 
@@ -82,15 +116,17 @@ information. Specifically, the `txCodeSpec` field in the ``OfferedIssuanceModel`
 
 From the user's perspective, the application must provide a way to input the transaction code.
 
-After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:useSecureEnclave:claimSet:)`` method.
+After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:)`` method.
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
 
 ### Dynamic issuance
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling ``EudiWallet/issueDocument(docType:scope:identifier:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:promptMessage:claimSet:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:)`` method should be called with the authorization URL provided by the server.
+After calling ``EudiWallet/issueDocument(docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:credentialOptions:keyOptions:)`` method should be called with the authorization URL provided by the server.
+
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
-	// perform openid4vp presentation using the urlString 
-	// on success call resumePendingIssuance using the authorization url  
+  // perform openid4vp presentation using the urlString 
+  // on success call resumePendingIssuance using the authorization url  
+}
 ```

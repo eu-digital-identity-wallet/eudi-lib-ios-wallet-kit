@@ -40,9 +40,9 @@ The storage model provides the following models for the supported well-known doc
 |eu.europa.ec.eudiw.pid.1|[EuPidModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/eupidmodel)|
 |org.iso.18013.5.1.mDL|[IsoMdlModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/isomdlmodel)|
 
-Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager/toClaimsModel(doc:modelFactory:)`` function to decode document raw CBOR data to strongly-typed models conforming to [MdocDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/mdocdecodable) protocol. 
+Since the issued mDoc documents retrieved expose only basic metadata and the raw data, they must be decoded to the corresponding CBOR models. The library provides the ``StorageManager/toClaimsModel(doc:modelFactory:)`` function to decode document raw CBOR data to strongly-typed models conforming to [DocClaimsDecodable](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/DocClaimsDecodable) protocol. 
 
-The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``docModels`` property. The deferred and pending documents are available in the ``deferredDocuments`` and ``pendingDocuments`` properties respectively.
+The loading functions automatically update the ``StorageManager`` members. The decoded issued documents are available in the ``StorageManager/docModels`` property. The deferred and pending documents are available in the ``StorageManager/deferredDocuments`` and ``StorageManager/pendingDocuments`` properties respectively.
 
 For other document types the [GenericMdocModel](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/genericmdocmodel) is provided.
 
