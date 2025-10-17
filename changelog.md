@@ -19,6 +19,9 @@ let openID4VciConfig = OpenId4VCIConfiguration(
   - `resumePendingIssuance(pendingDoc:webUrl:credentialOptions:keyOptions:)` 
   - `beginIssueDocument(id:credentialOptions:keyOptions:bDeferred:)` 
 
+## v0.16.3
+- Update eudi-lib-ios-siop-openid4vp-swift dependency to 0.17.6
+
 ## v0.16.2
 - **Feature**: Added DPoP configuration support
   - Added `useDpopIfSupported` property to `OpenId4VCIConfiguration` to enable/disable DPoP usage (default: `true`)
