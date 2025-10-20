@@ -525,16 +525,18 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		var docData = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.doc))
 		var documentKeyIndexes = docData.mapValues { _ in 0 }
 		for doc0 in docs {
+			// find the credential to use based on usage counts and policy
 			guard let dkid = docKeyInfos[doc0.id], let dki = DocKeyInfo(from: dkid) else { docKeyInfos[doc0.id] = nil; continue }
 			let kbi = try await SecureAreaRegistry.shared.get(name: dki.secureAreaName).getKeyBatchInfo(id: doc0.id)
 			guard kbi.batchSize > 1 else { if kbi.credentialPolicy == .oneTimeUse && kbi.usedCounts[0] > 0 { docKeyInfos[doc0.id] = nil }; continue }
+			if let dclaims = storage.getDocumentModel(id: doc0.id), dclaims.validUntil == nil || dclaims.validUntil! < .now { docKeyInfos[doc0.id] = nil; continue }
 			let doc = try await storage.storageService.loadDocument(id: doc0.id, status: .issued)
 			docData[doc0.id] = doc?.data
 			documentKeyIndexes[doc0.id] = doc?.keyIndex
 		}
 		docData = docData.filter { docKeyInfos[$0.key] != nil }
 		guard idsToDocData.count > 0 else {
-			throw PresentationSession.makeError(str: "Documents decode error - no valid document data found")
+			throw PresentationSession.makeError(str:  PresentationSession.NotAvailableStr, localizationKey: "request_data_no_document")
 		}
 		let docMetadata = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.metadata))
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.filter({$0.docType != nil}).map { ($0.id, $0.docType!) })
