@@ -25,6 +25,8 @@ import Security
 import WalletStorage
 import SwiftCBOR
 import JOSESwift
+import SwiftyJSON
+import class eudi_lib_sdjwt_swift.CompactParser
 
 public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthenticationPresentationContextProviding {
 	var issueReq: IssueRequest
@@ -330,8 +332,16 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable, ASWebAuthen
 			// logger.info("Issued credential data:\n\(str)")
 			return [(toData(str), publicKeys[index])]
 		} else if case let .json(json) = credential, json.type == .array, json.first != nil {
-			// logger.info("Issued credential data:\n\(json.first!.1["credential"].stringValue)")
-			return json.map { j in let str = j.1["credential"].stringValue; return (toData(str), publicKeys[index]) }
+			let compactParser = CompactParser()
+			let parseJsonToJwt = { (json: JSON) -> String in
+				do {
+					return try compactParser.stringFromJwsJsonObject(json)
+				} catch {
+					return json.stringValue
+				}
+			}
+			logger.notice("Issued credential data:\n\(json.first!.1["credential"].stringValue)")
+			return json.map { j in let str = parseJsonToJwt(j.1["credential"]); return (toData(str), publicKeys[index]) }
 		} else {
 			throw PresentationSession.makeError(str: "Invalid credential")
 		} }
