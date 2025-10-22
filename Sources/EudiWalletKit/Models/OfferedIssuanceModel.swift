@@ -46,7 +46,7 @@ public struct OfferedIssuanceModel: Sendable {
 @Copyable
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], claims: [Claim], credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct
@@ -54,6 +54,7 @@ public struct OfferedDocModel: Sendable {
 		self.identifier = identifier
 		self.displayName = displayName
 		self.algValuesSupported = algValuesSupported
+		self.claims = claims
 		self.credentialOptions = credentialOptions
 		self.keyOptions = keyOptions
 	}
@@ -75,6 +76,8 @@ public struct OfferedDocModel: Sendable {
 	public var docTypeOrVct: String? {
 		docType ?? vct
 	}
+	// claims supported for the document
+	public let claims: [Claim]
 	// options for the credential
 	public let credentialOptions: CredentialOptions
 	// key options
