@@ -22,6 +22,7 @@ import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
+import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 
 extension String {
@@ -160,6 +161,15 @@ extension Claim {
 	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description)) }
 }
 
+extension DocClaim {
+	var claimPath: ClaimPath {
+		ClaimPath(path.map { ClaimPathElement.claim(name: $0) })
+	}
+	var claimPaths: [ClaimPath] {
+		if let children { children.map(\.claimPath) } else { [claimPath] }
+	}
+}
+
 extension Array where Element == DocClaimMetadata {
 	func convertToCborClaimMetadata(_ uiCulture: String?) -> (displayNames: [NameSpace: [String: String]], mandatory: [NameSpace: [String: Bool]]) {
 		guard allSatisfy({ $0.claimPath.count > 1 }) else { return ([:], [:]) } // sanity check
@@ -196,6 +206,10 @@ extension DocMetadata {
 
 extension DocKeyInfo {
 	static var `default`: Self { DocKeyInfo(secureAreaName: SoftwareSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse) }
+}
+
+extension IssueRequest {
+	var dpopKeyId: String { id + "_dpop" }
 }
 
 extension URL {

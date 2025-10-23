@@ -65,8 +65,9 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	}
 
 	func signAsync(_ header: Data, _ payload: Data) async throws -> Data {
+		logger.info("Sign async JWT in secure area \(type(of: secureArea).name)")
 		let signingInput: Data? = [header as DataConvertible, payload as DataConvertible].map { $0.data().base64URLEncodedString() }.joined(separator: ".").data(using: .ascii)
-      	guard let signingInput else {  throw ValidationError.error(reason: "Invalid signing input for signing data") }
+      	guard let signingInput else { throw ValidationError.error(reason: "Invalid signing input for signing data") }
 		return try await sign(signingInput)
 	}
 
