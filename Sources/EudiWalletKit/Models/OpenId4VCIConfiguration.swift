@@ -21,6 +21,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 
 public struct OpenId4VCIConfiguration: Sendable {
+	public let issuerUrl: String?
 	public let client: Client
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
@@ -30,7 +31,8 @@ public struct OpenId4VCIConfiguration: Sendable {
 	public let dpopKeyOptions: KeyOptions?
 	public var keyId: String?
 
-	public init(client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, dpopKeyOptions: KeyOptions? = nil) {
+	public init(issuerUrl: String? = nil, client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, dpopKeyOptions: KeyOptions? = nil) {
+		self.issuerUrl = issuerUrl
 		self.client = client ?? .public(id: "wallet-dev")
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig

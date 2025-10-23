@@ -48,10 +48,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var trustedReaderCertificates: [Data]?
 	/// Method to perform mdoc authentication (MAC or signature). Defaults to device MAC
 	public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
-	/// OpenID4VCI issuer URL
-	public var openID4VciIssuerUrl: String? {
-		didSet { Task { if oldValue != openID4VciIssuerUrl || openID4VciIssuerUrl == nil { await OpenId4VCIService.clearCachedOfferMetadata(); await OpenId4VCIService.clearIssuerMetadataCache() } } }
-	}
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public var uiCulture: String?
 	public var openID4VpConfig: OpenId4VpConfiguration
@@ -99,7 +95,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.userAuthenticationRequired = false
 		#endif
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
-		self.openID4VciIssuerUrl = openID4VciIssuerUrl
 		self.openID4VciConfig = openID4VciConfig ?? OpenId4VCIConfiguration()
 		self.networkingVci = OpenID4VCINetworking(networking: networking ?? URLSession.shared)
 		self.networkingVp = OpenID4VPNetworking(networking: networking ?? URLSession.shared)
