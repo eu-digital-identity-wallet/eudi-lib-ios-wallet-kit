@@ -102,7 +102,7 @@ class Openid4VpUtils {
 		let allPaths = Array(allPathsDict.keys)
 		let requestPaths = requestItems.map(\.elementPath)
 		let query = Set(allPaths.filter { path in requestPaths.contains(where: { r in r.contains(path.value.compactMap(\.claimName)) }) })
-		if query.isEmpty { throw WalletError(description: "No items to present found") }
+//		if query.isEmpty { throw WalletError(description: "No items to present found") }
 		let presentedSdJwt = try await sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
