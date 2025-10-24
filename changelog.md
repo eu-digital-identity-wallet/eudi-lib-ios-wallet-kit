@@ -19,6 +19,7 @@
   - **VCI Methods refactoring**: Moved credential issuance logic from `EudiWallet` into `OpenId4VciService` for better separation of concerns (commit: bfec6e5)
   - **Code organization**: Better separation between wallet-level operations and service-level OpenID4VCI protocol handling
   - **Improved maintainability**: Consolidated related functionality and reduced code duplication across components
+  - **Improved thread safety**: OpenID4VCI service is now an actor
 
 ## v0.17.0
 
