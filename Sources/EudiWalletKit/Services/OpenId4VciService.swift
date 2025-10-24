@@ -31,10 +31,9 @@ import class eudi_lib_sdjwt_swift.CompactParser
 
 public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	var issueReq: IssueRequest!
-	public var credentialIssuerURL: String?
 	let uiCulture: String?
 	let logger: Logger
-	let config: OpenId4VCIConfiguration
+	let config: OpenId4VciConfiguration
 	static nonisolated(unsafe) var credentialOfferCache = [String: CredentialOffer]()
 	static nonisolated(unsafe) var issuerMetadataCache = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
 	var networking: Networking
@@ -44,7 +43,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	var storageService: any DataStorageService
 	var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 
-	init(uiCulture: String?, config: OpenId4VCIConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) {
+	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) {
 		logger = Logger(label: "OpenId4VCI")
 		self.uiCulture = uiCulture
 		self.networking = networking
@@ -129,14 +128,11 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 		return res
 	}
 
-	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: makeMetadataResolver(), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: uriOffer), policy: .ignoreSigned)
+	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: makeMetadataResolver(), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
-			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
-			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
-			self.credentialIssuerURL = credentialIssuerIdentifier.url.absoluteString
-			return try await resolveOfferDocTypes(uriOffer: uriOffer, offer: offer)
+			return try await resolveOfferDocTypes(offerUri: offerUri, offer: offer)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
@@ -147,9 +143,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	///   - uriOffer: Uri of the offer (from a QR or a deep link)
 	///   - format: format of the exchanged data
 	/// - Returns: The data of the document
-	public func resolveOfferDocTypes(uriOffer: String, offer: CredentialOffer) async throws -> OfferedIssuanceModel {
+	public func resolveOfferDocTypes(offerUri: String, offer: CredentialOffer) async throws -> OfferedIssuanceModel {
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
-		Self.credentialOfferCache[uriOffer] = offer
+		Self.credentialOfferCache[offerUri] = offer
 		let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: "")
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
@@ -175,8 +171,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	}
 
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
-		guard let credentialIssuerURL else { throw WalletError(description: "issuer Url not defined")}
-		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
+		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL)
 		let issuerMetadata = try await makeMetadataResolver().resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 			case .success(let metaData): return metaData
@@ -237,17 +232,16 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	}
 
 	func getIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
-		guard let credentialIssuerURL else { throw WalletError(description: "issuer Url not defined")}
 		// Check cache first
-		if config.cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[credentialIssuerURL] {
+		if config.cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL] {
 			return cachedResult
 		}
-		let credentialIssuerIdentifier = try CredentialIssuerId(credentialIssuerURL)
+		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL)
 		let issuerMetadata = try await makeMetadataResolver().resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
-			if config.cacheIssuerMetadata { Self.issuerMetadataCache[credentialIssuerURL] = result }
+			if config.cacheIssuerMetadata { Self.issuerMetadataCache[config.credentialIssuerURL] = result }
 			return result
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(error.localizedDescription)")

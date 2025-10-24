@@ -52,8 +52,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var uiCulture: String?
 	public var openID4VpConfig: OpenId4VpConfiguration
 	/// OpenID4VCI issuer parameters
-	public var openID4VciConfig: OpenId4VCIConfiguration
-	public var openId4VCIService: OpenId4VCIService!
+	public var openID4VciConfigurations: [String: OpenId4VciConfiguration]?  { didSet { registerVciManagers() } }
 	/// This variable can be used to set a custom networking client for network requests.
 	let networkingVci: OpenID4VCINetworking
 	let networkingVp: OpenID4VPNetworking
@@ -84,7 +83,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// ```swift
 	/// let wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!])
 	/// ```
-	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciIssuerUrl: String? = nil, openID4VciConfig: OpenId4VCIConfiguration? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
+	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
 
 		try Self.validateServiceParams(serviceName: serviceName)
 		self.serviceName = serviceName ?? Self.defaultServiceName
@@ -96,7 +95,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.userAuthenticationRequired = false
 		#endif
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
-		self.openID4VciConfig = openID4VciConfig ?? OpenId4VCIConfiguration()
+		self.openID4VciConfigurations = openID4VciConfigurations
 		self.networkingVci = OpenID4VCINetworking(networking: networking ?? URLSession.shared)
 		self.networkingVp = OpenID4VPNetworking(networking: networking ?? URLSession.shared)
 		self.logFileName = logFileName
@@ -111,7 +110,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea.create(storage: kcSks))
 		}
 		self.transactionLogger = transactionLogger
-		self.openId4VCIService = OpenId4VCIService(uiCulture: uiCulture, config: self.openID4VciConfig, networking: self.networkingVci, storage: storage, storageService: storageServiceObj)
+		registerVciManagers()
+	}
+
+	/// Register OpenID4VCI managers for each configuration.
+	private func registerVciManagers() {
+		guard let configurations = openID4VciConfigurations else { return }
+		for (name, config) in configurations {
+			registerVciManager(name: name, config: config)
+		}
 	}
 
 	/// Helper method to return a file URL from a file name.
@@ -168,14 +175,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	public func registerVciManager(name: String, config: OpenId4VCIConfiguration) async throws {
+	@discardableResult public func registerVciManager(name: String, config: OpenId4VciConfiguration) -> OpenId4VCIService {
 		let vciService = OpenId4VCIService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
+		return vciService
 	}
 
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
-	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
-		return try await openId4VCIService.getIssuerMetadata()
+	public func getIssuerMetadata(issuerName: String) async throws -> CredentialIssuerMetadata {
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
+		}
+		return try await vciService.getIssuerMetadata()
 	}
 
 	/// Issue a document using OpenId4Vci protocol
@@ -187,9 +197,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: The document issued. It is saved in storage.
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
-	@discardableResult public func issueDocument(docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
-		return try await openId4VCIService.issueDocument(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
+	@discardableResult public func issueDocument(issuerName: String, docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
+		}
+		return try await vciService.issueDocument(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
 	}
 
 	/// Get default credential options (batch-size and credential policy) for a document type
@@ -200,8 +212,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///  - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
 	/// - Returns: Issuer-recommended credential options
-	public func getDefaultCredentialOptions(_ docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
-		return try await openId4VCIService.getMetadataDefaultCredentialOptions(docTypeIdentifier)
+	public func getDefaultCredentialOptions(issuerName: String, docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
+		}
+		return try await vciService.getMetadataDefaultCredentialOptions(docTypeIdentifier)
 	}
 
 	/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
@@ -212,9 +227,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - credentialOptions: Credential options specifying batch size and credential policy for the deferred document
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
-	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		return try await openId4VCIService.requestDeferredIssuance(deferredDoc: deferredDoc, credentialOptions: credentialOptions, keyOptions: keyOptions)
+	@discardableResult public func requestDeferredIssuance(issuerName: String, deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
+		}
+		return try await vciService.requestDeferredIssuance(deferredDoc: deferredDoc, credentialOptions: credentialOptions, keyOptions: keyOptions)
 	}
 
 	/// Resume pending issuance. Supports dynamic issuance scenario
@@ -226,9 +243,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - credentialOptions: Credential options specifying batch size and credential policy for the pending document
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
-	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		return try await openId4VCIService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl, credentialOptions: credentialOptions, keyOptions: keyOptions)
+	@discardableResult public func resumePendingIssuance(issuerName: String, pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
+		}
+		return try await vciService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl, credentialOptions: credentialOptions, keyOptions: keyOptions)
 	}
 
 /// Resolve OpenID4VCI offer URL document types. Resolved offer metadata are cached
@@ -236,9 +255,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
-	public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-		return try await openId4VCIService.resolveOfferUrlDocTypes(uriOffer: uriOffer)
+	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
+		guard let url = URL(string: offerUri) else { throw WalletError(description: "Invalid offer URL: \(offerUri)")}
+		let urlString = url.getBaseUrl()
+		let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
+		let vciService = registerVciManager(name: urlString, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
+		return try await vciService.resolveOfferUrlDocTypes(offerUri: offerUri)
 	}
 
 	/// Issue documents by offer URI.
@@ -248,9 +270,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued and stored documents
-	@available(*, deprecated, message: "Use default OpenId4VCI manager")
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		return try await openId4VCIService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
+		guard let url = URL(string: offerUri) else { throw WalletError(description: "Invalid offer URL: \(offerUri)")}
+		let urlString = url.getBaseUrl()
+		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: urlString) else {
+			throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
+		}
+		return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
 	}
 
 	/// Begin issuing a document by generating an issue request
