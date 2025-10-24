@@ -114,22 +114,34 @@ let wallet = try! EudiWallet(serviceName: "my_wallet_app",
 
 ### OpenID4VCI Configuration
 
-The wallet can be configured with OpenID4VCI options including DPoP (Demonstrating Proof-of-Possession) support:
+The wallet now supports multiple OpenID4VCI issuer configurations for enhanced flexibility. You can configure the wallet with a dictionary of issuer configurations:
 
 ```swift
-// Configure OpenID4VCI with DPoP support
-let openID4VciConfig = OpenId4VCIConfiguration(
-    useDpopIfSupported: true,  // Enable DPoP if supported by issuer (default: true)
-    dpopKeyOptions: KeyOptions(
-        secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
+// Configure multiple OpenID4VCI issuers with DPoP support
+let issuerConfigurations: [String: OpenId4VciConfiguration] = [
+    "eudi_pid_issuer": OpenId4VciConfiguration(
+        credentialIssuerURL: "https://dev.issuer-backend.eudiw.dev",
+        useDpopIfSupported: true,
+        dpopKeyOptions: KeyOptions(
+            secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
+        )
+    ),
+    "mdl_issuer": OpenId4VciConfiguration(
+        credentialIssuerURL: "https://mdl.issuer.example.com",
+        useDpopIfSupported: false
     )
-)
+]
 
 let wallet = try! EudiWallet(
     serviceName: "my_wallet_app",
     trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
-    openID4VciConfig: openID4VciConfig
+    openID4VciConfigurations: issuerConfigurations
 )
+
+// Register additional issuers after initialization
+try wallet.registerOpenId4VciServices([
+    "new_issuer": OpenId4VciConfiguration(credentialIssuerURL: "https://new.issuer.com")
+])
 ```
 
 The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.	
@@ -203,7 +215,10 @@ If ``userAuthenticationRequired`` is true, user authentication is required. The 
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
 ### Issue document by docType
-When the document docType to be issued use the `issueDocument(docTypeIdentifier:credentialOptions:keyOptions:)` method.
+
+**Breaking Change**: All OpenID4VCI methods now require an `issuerName` parameter to support multi-issuer configurations.
+
+When the document docType to be issued use the `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` method.
 
 * Currently, only mso_mdoc and sd_jwt formats are supported
 
@@ -214,6 +229,7 @@ do {
   let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
   let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
   let doc = try await userWallet.issueDocument(
+    issuerName: "eudi_pid_issuer", // Specify which issuer to use
     docTypeIdentifier: .msoMdoc(docType: EuPidModel.euPidDocType),
     credentialOptions: credentialOptions,
     keyOptions: keyOptions
@@ -225,15 +241,16 @@ catch {
 }
 ```
 
-You can also issue a document by passing a configuration identifier. The configuration identifiers can be retrieved from the issuer's metadata using the `getIssuerMetadata` method.
+You can also issue a document by passing a configuration identifier. The configuration identifiers can be retrieved from the issuer's metadata using the `getIssuerMetadata(issuerName:)` method.
 
 ```swift
-// Get current issuer metadata
-let metadata = try await wallet.getIssuerMetadata()
+// Get issuer metadata for a specific issuer
+let metadata = try await wallet.getIssuerMetadata(issuerName: "eudi_pid_issuer")
 // Use configuration identifier
 let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
 let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
 let doc = try await userWallet.issueDocument(
+  issuerName: "eudi_pid_issuer",
   docTypeIdentifier: .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt"),
   credentialOptions: credentialOptions,
   keyOptions: keyOptions
@@ -244,9 +261,21 @@ For SD-JWT credentials, use the `.sdJwt` identifier:
 
 ```swift
 let doc = try await userWallet.issueDocument(
+  issuerName: "eudi_pid_issuer",
   docTypeIdentifier: .sdJwt(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt"),
   credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
   keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
+)
+```
+
+#### Get Default Credential Options
+
+You can retrieve issuer-recommended credential options before issuing:
+
+```swift
+let defaultOptions = try await wallet.getDefaultCredentialOptions(
+  issuerName: "eudi_pid_issuer",
+  docTypeIdentifier: .msoMdoc(docType: EuPidModel.euPidDocType)
 )
 ```
 ### Resolving Credential offer
@@ -263,7 +292,7 @@ The following example shows how to resolve a credential offer:
   }
 ```
 
-After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:)` method.
+After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:configuration:)` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
 
 The following example shows how to issue documents by offer URL:
@@ -309,13 +338,38 @@ After user acceptance of the offer, the selected documents can be issued using t
 When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
 
 ### Dynamic issuance
+
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling `issueDocument(docType:keyOptions: KeyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:docTypeKeyOptions:txCodeValue:)` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(pendingDoc:, webUrl:)` method should be called with the authorization URL provided by the server.
+**Breaking Change**: Dynamic issuance methods now require an `issuerName` parameter.
+
+After calling `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:configuration:)` the wallet application need to check if the doc is pending and has an `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` method should be called with the authorization URL provided by the server.
+
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 
-	// on success call resumePendingIssuance using the authorization url  
+	// on success call resumePendingIssuance using the authorization url
+	let resumedDoc = try await wallet.resumePendingIssuance(
+		issuerName: "eudi_pid_issuer",
+		pendingDoc: pendingDocument,
+		webUrl: authorizationURL,
+		credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
+		keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
+	)
+}
+```
+
+#### Deferred Issuance
+
+For deferred document issuance, use the `requestDeferredIssuance(issuerName:deferredDoc:credentialOptions:keyOptions:)` method:
+
+```swift
+let issuedDoc = try await wallet.requestDeferredIssuance(
+	issuerName: "eudi_pid_issuer",
+	deferredDoc: deferredDocument,
+	credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
+	keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
+)
 ```
 
 ## Presentation Service
