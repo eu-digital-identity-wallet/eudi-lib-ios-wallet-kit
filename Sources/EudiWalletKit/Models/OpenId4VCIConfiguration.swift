@@ -19,9 +19,7 @@ import JOSESwift
 import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
-import Copyable
 
-@Copyable
 public struct OpenId4VciConfiguration: Sendable {
 	public let credentialIssuerURL: String?
 	public let client: Client

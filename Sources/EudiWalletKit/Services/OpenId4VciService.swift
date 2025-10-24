@@ -29,7 +29,7 @@ import SwiftyJSON
 import LocalAuthentication
 import class eudi_lib_sdjwt_swift.CompactParser
 
-public final class OpenId4VCIService: NSObject, @unchecked Sendable {
+public actor OpenId4VCIService {
 	var issueReq: IssueRequest!
 	let uiCulture: String?
 	let logger: Logger
@@ -41,7 +41,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	var keyBatchSize: Int { issueReq.credentialOptions.batchSize }
 	var storage: StorageManager
 	var storageService: any DataStorageService
-	var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
+	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 
 	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) throws {
 		logger = Logger(label: "OpenId4VCI")
@@ -81,6 +81,10 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
 		let bindingKeys = try publicCoseKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset) }
 		return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
+	}
+
+	func setConfiguration(_ config: OpenId4VciConfiguration) {
+		self.config = config
 	}
 
 	func createBindingKey(_ publicCoseKey: CoseKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int) throws -> BindingKey {
@@ -566,9 +570,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 		#endif
 		simpleAuthWebContext = SimpleAuthenticationPresentationContext()
 		let lock = NSLock()
-		return try await withCheckedThrowingContinuation { continuation in
+		return try await withCheckedThrowingContinuation { [redirectUrl = config.authFlowRedirectionURI.scheme!] continuation in
 			var nillableContinuation: CheckedContinuation<AsWebOutcome, Error>? = continuation
-			let authenticationSession = ASWebAuthenticationSession(url: authorizationCodeURL, callbackURLScheme: config.authFlowRedirectionURI.scheme!) { url, error in
+			let authenticationSession = ASWebAuthenticationSession(url: authorizationCodeURL, callbackURLScheme: redirectUrl) { url, error in
 				lock.lock()
 				defer { lock.unlock() }
 				if let error {
@@ -710,7 +714,11 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 		}
 	}
 
-}
+	func hasIssuerUrl(_ issuerURL: String) -> Bool {
+		return config.credentialIssuerURL == issuerURL
+	}
+
+} // end of OpenId4VCIService
 
 fileprivate extension URL {
 	func getQueryStringParameter(_ parameter: String) -> String? {
@@ -770,18 +778,44 @@ struct OpenID4VCINetworking: Networking {
 	}
 }
 
+extension Array where Element == OpenId4VCIService {
+	public func getByIssuerURL(_ issuerURL: String) async -> OpenId4VCIService? {
+		for service in self {
+			if await service.hasIssuerUrl(issuerURL) {
+				return service
+			}
+		}
+		return nil
+	}
+}
+
 /// Registry for OpenId4VCI services
 public final class OpenId4VCIServiceRegistry: @unchecked Sendable {
 	public static let shared = OpenId4VCIServiceRegistry()
 	private var services: [String: OpenId4VCIService] = [:]
+	private let lock = NSRecursiveLock()
 
 	private init() {}
 
 	public func register(name: String, service: OpenId4VCIService) {
+		lock.lock()
+		defer { lock.unlock() }
 		services[name] = service
 	}
 
 	public func get(name: String) -> OpenId4VCIService? {
+		lock.lock()
+		defer { lock.unlock() }
 		return services[name]
+	}
+
+	public func getAllServices() -> [OpenId4VCIService] {
+		lock.lock()
+		defer { lock.unlock() }
+		return Array(services.values)
+	}
+
+	public func getByIssuerURL(issuerURL: String) async -> OpenId4VCIService? {
+		return await getAllServices().getByIssuerURL(issuerURL)
 	}
 }
