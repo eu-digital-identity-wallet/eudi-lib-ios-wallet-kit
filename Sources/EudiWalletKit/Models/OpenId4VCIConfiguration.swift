@@ -19,9 +19,11 @@ import JOSESwift
 import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
+import Copyable
 
+@Copyable
 public struct OpenId4VciConfiguration: Sendable {
-	public let credentialIssuerURL: String
+	public let credentialIssuerURL: String?
 	public let client: Client
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
@@ -31,7 +33,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	public let dpopKeyOptions: KeyOptions?
 
-	public init(credentialIssuerURL: String, client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
+	public init(credentialIssuerURL: String?, client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.client = client ?? .public(id: "wallet-dev")
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!

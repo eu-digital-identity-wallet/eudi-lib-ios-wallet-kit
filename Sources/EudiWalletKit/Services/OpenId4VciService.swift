@@ -33,7 +33,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	var issueReq: IssueRequest!
 	let uiCulture: String?
 	let logger: Logger
-	let config: OpenId4VciConfiguration
+	var config: OpenId4VciConfiguration
 	static nonisolated(unsafe) var credentialOfferCache = [String: CredentialOffer]()
 	static nonisolated(unsafe) var issuerMetadataCache = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
 	var networking: Networking
@@ -43,8 +43,9 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	var storageService: any DataStorageService
 	var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 
-	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) {
+	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) throws {
 		logger = Logger(label: "OpenId4VCI")
+		guard config.credentialIssuerURL != nil else { throw PresentationSession.makeError(str: "credentialIssuerURL must be set in OpenId4VciConfiguration") }
 		self.uiCulture = uiCulture
 		self.networking = networking
 		self.storage = storage
@@ -171,7 +172,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 	}
 
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
-		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL)
+		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
 		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 			case .success(let metaData): return metaData
@@ -233,15 +234,15 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 
 	func getIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
 		// Check cache first
-		if config.cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL] {
+		if config.cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL!] {
 			return cachedResult
 		}
-		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL)
+		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
 		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
-			if config.cacheIssuerMetadata { Self.issuerMetadataCache[config.credentialIssuerURL] = result }
+			if config.cacheIssuerMetadata { Self.issuerMetadataCache[config.credentialIssuerURL!] = result }
 			return result
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(error.localizedDescription)")
@@ -326,7 +327,7 @@ public final class OpenId4VCIService: NSObject, @unchecked Sendable {
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
 			let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: docTypeModel.credentialOptions, offer: offer)
-			let svc = OpenId4VCIService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService)
+			let svc = try OpenId4VCIService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService)
 			try await svc.prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: usedCredentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage)
 			openId4VCIServices.append(svc)
 		}

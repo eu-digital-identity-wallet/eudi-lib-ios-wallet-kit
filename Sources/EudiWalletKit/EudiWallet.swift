@@ -52,7 +52,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var uiCulture: String?
 	public var openID4VpConfig: OpenId4VpConfiguration
 	/// OpenID4VCI issuer parameters
-	public var openID4VciConfigurations: [String: OpenId4VciConfiguration]?  { didSet { registerVciManagers() } }
+	public var openID4VciConfigurations: [String: OpenId4VciConfiguration]?  { didSet { try? registerVciManagers() } }
 	/// This variable can be used to set a custom networking client for network requests.
 	let networkingVci: OpenID4VCINetworking
 	let networkingVp: OpenID4VPNetworking
@@ -110,14 +110,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			SecureAreaRegistry.shared.register(secureArea: SoftwareSecureArea.create(storage: kcSks))
 		}
 		self.transactionLogger = transactionLogger
-		registerVciManagers()
+		try registerVciManagers()
 	}
 
 	/// Register OpenID4VCI managers for each configuration.
-	private func registerVciManagers() {
+	private func registerVciManagers() throws {
 		guard let configurations = openID4VciConfigurations else { return }
 		for (name, config) in configurations {
-			registerVciManager(name: name, config: config)
+			try registerVciManager(name: name, config: config)
 		}
 	}
 
@@ -175,8 +175,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	@discardableResult public func registerVciManager(name: String, config: OpenId4VciConfiguration) -> OpenId4VCIService {
-		let vciService = OpenId4VCIService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService)
+	@discardableResult public func registerVciManager(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VCIService {
+		let vciService = try OpenId4VCIService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
 		return vciService
 	}
@@ -255,14 +255,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
-	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
+	public func resolveOfferUrlDocTypes(offerUri: String, configuration: OpenId4VciConfiguration? = nil) async throws -> OfferedIssuanceModel {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
 			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
 			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
-			let vciService = registerVciManager(name: offer.issuerName, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
-			return try await vciService.resolveOfferUrlDocTypes(offerUri: offerUri)
+			var vciService = OpenId4VCIServiceRegistry.shared.get(name: urlString)
+			if vciService == nil {
+				vciService = try registerVciManager(name: urlString, config: configuration ?? OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
+			}
+			return try await vciService!.resolveOfferUrlDocTypes(offerUri: offerUri)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
@@ -275,7 +278,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued and stored documents
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
@@ -283,6 +286,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: urlString) else {
 				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
 			}
+			if let configuration {	vciService.config = configuration }
 			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
