@@ -108,3 +108,35 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
   txCodeValue: txCode
 )
 ```
+
+
+### Authorization code flow
+
+For the authorization code flow to work, the redirect URI must be specified specified by setting the the ``EudiWallet/openID4VciConfig`` property.
+The user is redirected in an authorization web view to the issuer's authorization endpoint. After the user authenticates and authorizes the request, the issuer redirects the user back to the application with an authorization code. The library exchanges the authorization code for an access token and issues the document.
+
+### Pre-Authorization code flow
+
+When Issuer supports the pre-authorization code flow, the resolved offer will also contain the corresponding
+information. Specifically, the `txCodeSpec` field in the ``OfferedIssuanceModel`` object will contain:
+
+- The input mode, whether it is NUMERIC or TEXT
+- The expected length of the input
+- The description of the input
+
+From the user's perspective, the application must provide a way to input the transaction code.
+
+After user acceptance of the offer, the selected documents can be issued using the ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:)`` method.
+When the transaction code is provided, the issuance process can be resumed by calling the above-mentioned method and passing the transaction code in the `txCodeValue` parameter.
+
+### Dynamic issuance
+Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
+
+After calling ``EudiWallet/issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)`` or ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:)`` the wallet application need to check if the doc is pending and has a `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the ``EudiWallet/resumePendingIssuance(pendingDoc:webUrl:credentialOptions:keyOptions:)`` method should be called with the authorization URL provided by the server.
+
+```swift
+if let urlString = newDocs.last?.authorizePresentationUrl { 
+  // perform openid4vp presentation using the urlString 
+  // on success call resumePendingIssuance using the authorization url  
+}
+```
