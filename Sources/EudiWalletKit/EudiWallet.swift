@@ -170,16 +170,19 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter configurations: A dictionary of OpenId4VciConfiguration objects keyed by an arbitrary issuer name
 	public func registerOpenId4VciServices(_ configurations: [String: OpenId4VciConfiguration]) throws {
 		for (name, config) in configurations {
-			try registerVciManager(name: name, config: config)
+			try registerOpenId4VciService(name: name, config: config)
 		}
 	}
 	/// Register an OpenId4VCI service with a given name and configuration.
-	@discardableResult func registerVciManager(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VCIService {
+	@discardableResult func registerOpenId4VciService(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VCIService {
 		let vciService = try OpenId4VCIService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
 		return vciService
 	}
 
+	/// Get issuer metadata using OpenId4VCI protocol
+	/// - Parameter issuerName: The name of the issuer service
+	/// - Returns: The issuer metadata
 	public func getIssuerMetadata(issuerName: String) async throws -> CredentialIssuerMetadata {
 		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
@@ -266,7 +269,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
 			var vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: credentialIssuerIdentifier.url.absoluteString)
 			if vciService == nil {
-				vciService = try registerVciManager(name: urlString, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
+				vciService = try registerOpenId4VciService(name: urlString, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
 			}
 			return try await vciService!.resolveOfferUrlDocTypes(offerUri: offerUri)
 		case .failure(let error):
