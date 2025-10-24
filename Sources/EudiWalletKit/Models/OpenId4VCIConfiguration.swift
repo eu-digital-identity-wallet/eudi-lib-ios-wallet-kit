@@ -30,7 +30,6 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let cacheIssuerMetadata: Bool
 	public let userAuthenticationRequired: Bool
 	public let dpopKeyOptions: KeyOptions?
-	//public var keyId: String?
 
 	public init(credentialIssuerURL: String, client: Client? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL

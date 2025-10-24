@@ -256,11 +256,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
-		guard let url = URL(string: offerUri) else { throw WalletError(description: "Invalid offer URL: \(offerUri)")}
-		let urlString = url.getBaseUrl()
-		let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
-		let vciService = registerVciManager(name: urlString, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
-		return try await vciService.resolveOfferUrlDocTypes(offerUri: offerUri)
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
+		switch result {
+		case .success(let offer):
+			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
+			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
+			let vciService = registerVciManager(name: offer.issuerName, config: OpenId4VciConfiguration(credentialIssuerURL: credentialIssuerIdentifier.url.absoluteString))
+			return try await vciService.resolveOfferUrlDocTypes(offerUri: offerUri)
+		case .failure(let error):
+			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
+		}
 	}
 
 	/// Issue documents by offer URI.
@@ -271,12 +276,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		guard let url = URL(string: offerUri) else { throw WalletError(description: "Invalid offer URL: \(offerUri)")}
-		let urlString = url.getBaseUrl()
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: urlString) else {
-			throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
+		switch result {
+		case .success(let offer):
+			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
+			guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: urlString) else {
+				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
+			}
+			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
+		case .failure(let error):
+			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
-		return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
 	}
 
 	/// Begin issuing a document by generating an issue request
