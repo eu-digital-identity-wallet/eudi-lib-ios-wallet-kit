@@ -120,7 +120,7 @@ The wallet now supports multiple OpenID4VCI issuer configurations for enhanced f
 // Configure multiple OpenID4VCI issuers with DPoP support
 let issuerConfigurations: [String: OpenId4VciConfiguration] = [
     "eudi_pid_issuer": OpenId4VciConfiguration(
-        credentialIssuerURL: "https://dev.issuer-backend.eudiw.dev",
+        credentialIssuerURL: "https://pid.issuer.example.com",
         useDpopIfSupported: true,
         dpopKeyOptions: KeyOptions(
             secureAreaName: "SecureEnclave", curve: .P256, accessControl: .requireUserPresence
@@ -214,7 +214,7 @@ using this functionality, EudiWallet must be property initialized.
 If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
-### Issue document by docType
+### Issue document by docType or credential configuration identifier
 
 When the document docType to be issued use the `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` method.
 

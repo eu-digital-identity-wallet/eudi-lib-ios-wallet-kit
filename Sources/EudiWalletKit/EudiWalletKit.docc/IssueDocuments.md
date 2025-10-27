@@ -7,7 +7,7 @@ using this functionality, EudiWallet must be property initialized.
 If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
-### Issue document by docType
+### Issue document by docType or configuration identifier
 
 When the document docType to be issued use the `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` method.
 
@@ -72,7 +72,7 @@ let defaultOptions = try await wallet.getDefaultCredentialOptions(
 ### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(uriOffer:)` method that resolves the credential offer URI.
-The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
+The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, supported claims, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
 user.
 
 The following example shows how to resolve a credential offer:
