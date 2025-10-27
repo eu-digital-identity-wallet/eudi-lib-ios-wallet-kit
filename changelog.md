@@ -1,4 +1,50 @@
+## v0.18.0
+
+### Breaking Changes to Public API
+
+- **Multi-issuer support**: All OpenID4VCI methods now require an `issuerName` parameter to support multiple issuer configurations:
+  - `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:promptMessage:)` - Added `issuerName` parameter
+  - `getDefaultCredentialOptions(issuerName:docTypeIdentifier:)` - Added `issuerName` parameter
+  - `requestDeferredIssuance(issuerName:deferredDoc:credentialOptions:keyOptions:)` - Added `issuerName` parameter
+  - `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` - Added `issuerName` parameter
+  - `getIssuerMetadata(issuerName:)` - Added `issuerName` parameter
+- **Initializer changes**:
+  - Replaced `openID4VciIssuerUrl` and `openID4VciConfig` parameters with `openID4VciConfigurations: [String: OpenId4VciConfiguration]?`
+  - Enables configuration of multiple OpenID4VCI issuers with different settings
+- **Offer URL resolution**:
+  - `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:configuration:)` - Added optional `configuration` parameter
+- **OpenId4VCI Service registration**: New `func registerOpenId4VciServices(_ configurations: [String: OpenId4VciConfiguration])` method for dynamic issuer service registration
+
+- **Refactoring**: Major refactoring of OpenID4VCI service architecture for improved modularity
+  - **VCI Methods refactoring**: Moved credential issuance logic from `EudiWallet` into `OpenId4VciService` for better separation of concerns (commit: bfec6e5)
+  - **Code organization**: Better separation between wallet-level operations and service-level OpenID4VCI protocol handling
+  - **Improved maintainability**: Consolidated related functionality and reduced code duplication across components
+  - **Improved thread safety**: OpenID4VCI service is now an actor
+
+## v0.17.0
+
+- do not fail SdJwt presentation when query is empty
+
+## v0.16.9
+
+- fix credential identifier issue
+
+## v0.16.8
+
+- Add `claims` property to `OfferedDocModel` struct
+
+## v0.16.7
+
+- update eudi-lib-ios-openid4vci-swift to version 0.16.1
+- enhance sd-jwt parsing to support Jws Json format
+
+## v0.16.6
+
+- Do not send expired documents with BLE or OpenID4VP
+- Fix BLE sharing issue
+
 ## v0.16.4
+
 - Fix to show all mandatory elements of sd-jwt document during sharing
 - The wallet can be configured with OpenID4VCI options including DPoP (Demonstrating Proof-of-Possession) support and key options for DPoP key generation:
 
