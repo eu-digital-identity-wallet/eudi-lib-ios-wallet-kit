@@ -216,8 +216,6 @@ After issuing a document, the document data and corresponding private key are st
 
 ### Issue document by docType
 
-**Breaking Change**: All OpenID4VCI methods now require an `issuerName` parameter to support multi-issuer configurations.
-
 When the document docType to be issued use the `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` method.
 
 * Currently, only mso_mdoc and sd_jwt formats are supported
