@@ -133,7 +133,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				logger.info("Found jwks public key with curve \(crv)")
 				eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 			}
-			let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else { "" }
+			// Add support for directPost.
+			let responseUri = if case .directPostJWT(let uri) = vp.responseMode {
+			   uri.absoluteString
+			}
+			else if case .directPost(let uri) = vp.responseMode {
+			   uri.absoluteString
+			}
+			else {
+			   ""
+			}
 			vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
 			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
 			sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId,
