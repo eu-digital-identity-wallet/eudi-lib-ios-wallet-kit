@@ -27,6 +27,7 @@ struct CredentialConfiguration: Codable, Sendable {
 	let vct: String?
     let scope: String?
     let credentialSigningAlgValuesSupported: [String]
+	let dpopSigningAlgValuesSupported: [String]?
 	let issuerDisplay: [DisplayMetadata]    //public let proofTypesSupported: [String: ProofTypeSupportedMeta]?
     let display: [DisplayMetadata]
     let claims: [Claim]
@@ -34,13 +35,14 @@ struct CredentialConfiguration: Codable, Sendable {
 	var batchSize: Int?
 	let defaultCredentialOptions: CredentialOptions
 
-	public init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, credentialSigningAlgValuesSupported: [String], issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
+	public init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, credentialSigningAlgValuesSupported: [String], dpopSigningAlgValuesSupported: [String]?, issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
 		self.configurationIdentifier = configurationIdentifier
 		self.credentialIssuerIdentifier = credentialIssuerIdentifier
 		self.docType = docType
 		self.vct = vct
 		self.scope = scope
 		self.credentialSigningAlgValuesSupported = credentialSigningAlgValuesSupported
+		self.dpopSigningAlgValuesSupported = dpopSigningAlgValuesSupported
 		self.issuerDisplay = issuerDisplay
 		self.display = display
 		self.claims = claims
