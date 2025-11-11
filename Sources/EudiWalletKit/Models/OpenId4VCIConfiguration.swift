@@ -118,11 +118,7 @@ extension OpenId4VciConfiguration {
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: dpopConstructor.algorithm.name) else {
 			throw WalletError(description: "Unsupported DPoP algorithm: \(dpopConstructor.algorithm.name) for client attestation")
 		}
-		// todo: private-key-proxy
-		guard let jwsSigner = Signer(signatureAlgorithm: signatureAlgorithm, key: dpopConstructor.privateKey) else {
-			throw WalletError(description: "Failed to create JWS Signer for client attestation")
-		}
-		let popJwtSpec: ClientAttestationPoPJWTSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt", jwsSigner: jwsSigner)
+		let popJwtSpec: ClientAttestationPoPJWTSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt", signingKey: dpopConstructor.privateKey)
 		let client: Client = .attested(attestationJWT: try .init(jws: .init(compactSerialization: attestation)), popJwtSpec: popJwtSpec)
 		return client
 	}
