@@ -129,10 +129,23 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.resolvedRequestData = rrd
 		switch rrd {
 		case let .vpToken(vp):
-			if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}), let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y), let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv)  {
+			var jwkThumbprint: String?  = nil
+			
+			if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}),
+			   let x = key.x, let xd = Data(base64URLEncoded: x),
+			   let y = key.y, let yd = Data(base64URLEncoded: y),
+			   let crv = key.crv,
+			   let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv),
+			   let ecCrvType = ECCurveType(rawValue: crv) {
 				logger.info("Found jwks public key with curve \(crv)")
 				eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
+				
+				// Generate a jwkThumbprint if possible.
+				let publicKey = ECPublicKey(crv: ecCrvType, x: x , y: y)
+				jwkThumbprint = try? publicKey.thumbprint(algorithm: .SHA256)
+				logger.info("Generated jwkThumbprint: \(jwkThumbprint ?? "Failed")")
 			}
+			
 			// Add support for directPost.
 			let responseUri = if case .directPostJWT(let uri) = vp.responseMode {
 			   uri.absoluteString
@@ -143,10 +156,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			else {
 			   ""
 			}
+			
 			vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
-			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()
-			sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId,
-				responseUri: responseUri, nonce: vp.nonce, mdocGeneratedNonce: mdocGeneratedNonce)
+			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
+			sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
+			
 			logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 			var requestItems: RequestItems?; var deviceRequestBytes: Data?
 			// Only DCQL supported now
