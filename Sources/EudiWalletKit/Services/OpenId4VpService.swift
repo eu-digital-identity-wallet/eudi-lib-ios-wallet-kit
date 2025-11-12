@@ -158,7 +158,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			}
 			
 			vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
-			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (cllient) nonce i.e vpNonce
+			mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
 			sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
 			
 			logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
