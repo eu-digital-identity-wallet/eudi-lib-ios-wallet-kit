@@ -35,19 +35,33 @@ class Openid4VpUtils {
 	// example path: $.given_name_national_character
 	static let pathItemRx: NSRegularExpression = try! NSRegularExpression(pattern: #"\$\.(.+)"#, options: .caseInsensitive)
 
-	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> SessionTranscript {
-		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, mdocGeneratedNonce: mdocGeneratedNonce)
+	static func generateSessionTranscript(clientId: String,	responseUri: String, nonce: String, jwkThumbprint: String? = nil) -> SessionTranscript {
+		let openID4VPHandover = generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri,	nonce: nonce, jwkThumbprint: jwkThumbprint)
 		return SessionTranscript(handOver: openID4VPHandover)
 	}
 
-	static func generateOpenId4VpHandover(clientId: String,	responseUri: String, nonce: String,	mdocGeneratedNonce: String) -> CBOR {
-		let clientIdToHash = CBOR.encodeArray([clientId, mdocGeneratedNonce])
-		let responseUriToHash = CBOR.encodeArray([responseUri, mdocGeneratedNonce])
 
-		let clientIdHash = [UInt8](SHA256.hash(data: clientIdToHash))
-		let responseUriHash = [UInt8](SHA256.hash(data: responseUriToHash))
-
-		return CBOR.array([.byteString(clientIdHash), .byteString(responseUriHash), .utf8String(nonce)])
+	/// Generate the `SessionTranscript` CBOR where the presentation request is invoked using redirects.
+	/// - Parameters:
+	///   - clientId: The `client_id` request parameter. If applicable, this includes the Client Identifier Prefix.
+	///   - responseUri: Either the `redirect_uri` or `response_uri` request parameter, depending on which is present, as determined by the Response Mode.
+	///   - nonce: The value of the `nonce` request parameter.
+	///   - jwkThumbprint: If the response is encrypted, e.g., using `direct_post.jwt`, this element must be the JWK SHA-256 Thumbprint of the Verifier's public key used to encrypt the response. Otherwise `nil`.
+	/// - Returns: A CBOR representation of the OpenID4VPHandover structure.
+	/// - Remark: See [Handover and SessionTranscript Definitions](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-handover-and-sessiontranscript).
+	static func generateOpenId4VpHandover(clientId: String,	responseUri: String, nonce: String, jwkThumbprint: String? = nil) -> CBOR {
+		var openID4VPHandoverInfo: [UInt8]
+		
+		if let jwkThumbprint = jwkThumbprint {
+			let openID4VPHandoverInfoToHash = CBOR.array([.utf8String(clientId), .utf8String(nonce), .utf8String(jwkThumbprint), .utf8String(responseUri)])
+			openID4VPHandoverInfo = [UInt8](SHA256.hash(data: openID4VPHandoverInfoToHash.asData()))
+		}
+		else {
+			let openID4VPHandoverInfoToHash = CBOR.array([.utf8String(clientId), .utf8String(nonce), .null, .utf8String(responseUri)])
+			openID4VPHandoverInfo = [UInt8](SHA256.hash(data: openID4VPHandoverInfoToHash.asData()))
+		}
+		
+		return CBOR.array(["OpenID4VPHandover", .byteString(openID4VPHandoverInfo)])
 	}
 
 	static func generateMdocGeneratedNonce() -> String {
