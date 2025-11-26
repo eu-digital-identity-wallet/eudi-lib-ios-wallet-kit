@@ -414,9 +414,18 @@ Detailed documentation is provided in the DocC documentation [here](https://eu-d
 
 ### Dependencies
 
-The detailed functionality of the wallet kit is implemented in the following Swift Packages: [MdocDataModel18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git), [MdocSecurity18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git),  [MdocDataTransfer18013](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git) and
-  [SiopOpenID4VP](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git)
-  [OpenID4VCI](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift)
+| Package Name | Package URL | License |
+|-------------|-------------|---------|
+| swift-log | https://github.com/apple/swift-log.git | Apache-2.0 License |
+| swift-log-file | https://github.com/crspybits/swift-log-file | MIT License |
+| eudi-lib-ios-iso18013-data-transfer | https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git | Apache-2.0 License |
+| eudi-lib-ios-wallet-storage | https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git | Apache-2.0 License |
+| eudi-lib-sdjwt-swift | https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git | Apache-2.0 License |
+| eudi-lib-ios-siop-openid4vp-swift | https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git | Apache-2.0 License |
+| eudi-lib-ios-openid4vci-swift | https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git | Apache-2.0 License |
+| eudi-lib-ios-statium-swift | https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git | Apache-2.0 License |
+| SwiftCopyableMacro | https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git | Apache-2.0 License |
+
 
 ### Reference application  
 A reference application that demonstrates the usage of this library is [App Wallet UI](https://github.com/eu-digital-identity-wallet/eudi-app-ios-wallet-ui).
