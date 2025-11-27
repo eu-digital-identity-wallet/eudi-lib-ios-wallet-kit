@@ -20,8 +20,18 @@ import Security
 import MdocDataModel18013
 import JOSESwift
 
-public struct ClientAttestationConfig: Sendable {
+public struct KeyAttestationConfig: Sendable {
+	public init(walletAttestationsProvider: any WalletAttestationsProvider, popKeyOptions: KeyOptions? = nil, popKeyDuration: TimeInterval? = nil) {
+		self.walletAttestationsProvider = walletAttestationsProvider
+		self.popKeyOptions = popKeyOptions
+		self.popKeyDuration = popKeyDuration
+	}
+	public let walletAttestationsProvider: any WalletAttestationsProvider
 	public let popKeyOptions: KeyOptions?
 	public let popKeyDuration: TimeInterval?
-	public let attestationClient: @Sendable (_ publicKey: any JWK) async throws -> String
+}
+
+public protocol WalletAttestationsProvider: Sendable {
+	func getWalletAttestation(key: any JWK) async throws -> String
+	func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String
 }

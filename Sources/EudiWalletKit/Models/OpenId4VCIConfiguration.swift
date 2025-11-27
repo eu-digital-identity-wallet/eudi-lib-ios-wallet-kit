@@ -16,6 +16,7 @@ limitations under the License.
 
 import Foundation
 import JOSESwift
+import SwiftyJSON
 import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
@@ -24,7 +25,7 @@ import CryptoKit
 public struct OpenId4VciConfiguration: Sendable {
 	public let credentialIssuerURL: String?
 	public let clientId: String
-	public let clientAttestationConfig: ClientAttestationConfig?
+	public let keyAttestationsConfig: KeyAttestationConfig?
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	public let usePAR: Bool
@@ -33,10 +34,10 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	public let dpopKeyOptions: KeyOptions?
 
-	public init(credentialIssuerURL: String?, clientId: String? = nil, clientAttestationConfig: ClientAttestationConfig? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
+	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfig? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId ?? "wallet-dev"
-		self.clientAttestationConfig = clientAttestationConfig
+		self.keyAttestationsConfig = keyAttestationsConfig
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.usePAR = usePAR
@@ -106,15 +107,16 @@ extension OpenId4VciConfiguration {
 		return DPoPConstructor(algorithm: jwsAlgorithm, jwk: jwk, privateKey: privateKeyProxy)
 	}
 
-	func toOpenId4VCIConfig(credentialIssuerId: String, dpopSigningAlgorithms: [JWSAlgorithm]?) async throws -> OpenId4VCIConfig {
-		let client: Client = if let clientAttestationConfig { try await makeAttestationClient(config: clientAttestationConfig, credentialIssuerId: credentialIssuerId, algorithms: dpopSigningAlgorithms) } else { .public(id: clientId) }
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, useDpopIfSupported: useDpopIfSupported)
+	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]?) async throws -> OpenId4VCIConfig {
+		let client: Client = if let keyAttestationsConfig { try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported) } else { .public(id: clientId) }
+		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder? = if keyAttestationsConfig != nil { WalletKitClientAttestationPoPBuilder() } else { nil}
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, clientAttestationPoPBuilder: clientAttestationPoPBuilder, useDpopIfSupported: useDpopIfSupported)
 	}
 
-	private func makeAttestationClient(config: ClientAttestationConfig, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
+	private func makeAttestationClient(config: KeyAttestationConfig, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
 		let keyId = generatePopKeyId(credentialIssuerId: credentialIssuerId)
 		guard let dpopConstructor = try await makeDPoPConstructor(keyId: keyId, algorithms: algorithms) else {	 throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
-		let attestation = try await config.attestationClient(dpopConstructor.jwk)
+		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: dpopConstructor.jwk)
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: dpopConstructor.algorithm.name) else {
 			throw WalletError(description: "Unsupported DPoP algorithm: \(dpopConstructor.algorithm.name) for client attestation")
 		}
@@ -143,4 +145,49 @@ extension OpenId4VciConfiguration {
 	}
 }
 
+public struct WalletKitClientAttestationPoPBuilder: ClientAttestationPoPBuilder {
+  public func buildAttestationPoPJWT(
+    for client: Client,
+    algorithm: SignatureAlgorithm,
+    clock: ClockType,
+    authServerId: URL,
+    challenge: String?
+  ) async throws -> ClientAttestationPoPJWT {
+    switch client {
+    case .attested(let attestationJWT, let popJwtSpec):
 
+      let now = Date().timeIntervalSince1970
+      let exp = Date().addingTimeInterval(popJwtSpec.duration).timeIntervalSince1970
+      let payload: [String: Any?] = [
+        JWTClaimNames.issuer: attestationJWT.clientId,
+        JWTClaimNames.jwtId: String.randomBase64URLString(length: 20),
+        JWTClaimNames.expirationTime: exp,
+        JWTClaimNames.issuedAt: now,
+        JWTClaimNames.audience: authServerId.absoluteString,
+        JWTClaimNames.cnf: attestationJWT.cnf,
+        JWTClaimNames.challenge: challenge
+      ]
+
+      let header: JWSHeader = try .init(parameters: [
+        JWTClaimNames.algorithm: popJwtSpec.signingAlgorithm.rawValue,
+        JWTClaimNames.type: popJwtSpec.typ
+      ])
+      let jwsPayload: Payload = try .init(JSON(
+        payload.compactMapValues { $0 }
+      ).rawData())
+      let jws: JWS = try .init(
+        header: header,
+        payload: jwsPayload,
+        signer: await BindingKey.createSigner(
+          with: header,
+          and: jwsPayload,
+          for: popJwtSpec.signingKey,
+          and: algorithm
+        )
+      )
+      return try .init(jws: jws)
+    default:
+      throw WalletError(description: "Invalid client type for attestation PoP JWT")
+    }
+  }
+}
