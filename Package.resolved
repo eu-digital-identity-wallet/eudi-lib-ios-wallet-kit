@@ -1,5 +1,5 @@
 {
-  "originHash" : "3ce6f88e5a5e5c937cc736fa8b22da1277460861b58029335dfb66d13fba019f",
+  "originHash" : "5ed9f46a3424d1000aba46cb0a4b326671152409120340004fdf17d921ed85ce",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "324fba3cded7d0d2b6774faa2d0e32ac62fdba30",
-        "version" : "0.10.0"
+        "revision" : "99a017068518a33fc6011056f27361391875c434",
+        "version" : "0.10.1"
       }
     },
     {
