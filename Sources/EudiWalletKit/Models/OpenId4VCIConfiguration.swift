@@ -64,24 +64,26 @@ extension OpenId4VciConfiguration {
 	static var supportedDPoPAlgorithms: Set<JWSAlgorithm> {
 		[JWSAlgorithm(.ES256), JWSAlgorithm(.ES384), JWSAlgorithm(.ES512), JWSAlgorithm(.RS256)]
 	}
-
-	func makeDPoPConstructor(keyId dpopKeyId: String, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructor? {
+	
+	func makeDPoPConstructor(keyId dpopKeyId: String?, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructor? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		let privateKeyProxy: SigningKeyProxy
 		let publicKey: SecKey
 		let jwsAlgorithm: JWSAlgorithm
 		let jwk: any JWK
+		let keyId = dpopKeyId ?? UUID().uuidString
 		if let dpopKeyOptions {
 			// If dpopKeyOptions is specified, use it to determine key generation parameters
 			let secureArea = SecureAreaRegistry.shared.get(name: dpopKeyOptions.secureAreaName)
 			let ecCurve = dpopKeyOptions.curve
+			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: dpopKeyOptions.curve)
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
 				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
 			jwsAlgorithm = jwsAlg
-			let publicCoseKey = (try await secureArea.createKeyBatch(id: dpopKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: dpopKeyOptions)).first!
-			let unlockData = try await secureArea.unlockKey(id: dpopKeyId)
-			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: dpopKeyOptions.curve)
-			let signer = try SecureAreaSigner(secureArea: secureArea, id: dpopKeyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
+			let publicCoseKey: CoseKey = if let dpopKeyId, !dpopKeyId.hasSuffix("_dpop"), let keyInfo = try? await secureArea.getKeyBatchInfo(id: dpopKeyId), dpopKeyOptions.secureAreaName == keyInfo.secureAreaName, dpopKeyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: dpopKeyId, index: 0, curve: ecCurve) { pck } else {
+				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: dpopKeyOptions)).first! }
+			let unlockData = try await secureArea.unlockKey(id: keyId)
+			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
 			privateKeyProxy = .custom(signer)
 			publicKey = try publicCoseKey.toSecKey()
 		} else {
@@ -94,14 +96,14 @@ extension OpenId4VciConfiguration {
 			// EC supported bit sizes are 256, 384, or 521. RS256 is 2048 bits.
 			let bits: Int = switch jwsAlgorithm.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; case JWSAlgorithm(.RS256).name: 2048; default: throw WalletError(description: "Unsupported DPoP algorithm: \(jwsAlgorithm.name)") }
 			let type: SecKey.KeyType = switch jwsAlgorithm.name { case JWSAlgorithm(.RS256).name: .rsa; default: .ellipticCurve }
-			let privateKey = try SecKey.createRandomKey(type: type, bits: bits)
+			let privateKey: SecKey = if let dpopKeyId, !dpopKeyId.hasSuffix("_dpop"), let pk = SecKey.getExistingKey(type: type, keyId: dpopKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: dpopKeyId) }
 			privateKeyProxy = .secKey(privateKey)
 			publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		}
 		if jwsAlgorithm.name.starts(with: "RS") {
-			jwk = try RSAPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": dpopKeyId])
+			jwk = try RSAPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": keyId])
 		} else {
-			jwk = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": dpopKeyId])
+			jwk = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": keyId])
 		}
 		return DPoPConstructor(algorithm: jwsAlgorithm, jwk: jwk, privateKey: privateKeyProxy)
 	}

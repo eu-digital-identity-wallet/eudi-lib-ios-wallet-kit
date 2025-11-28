@@ -245,7 +245,6 @@ public actor OpenId4VCIService {
 		do {
 			let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
 			logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
-			//let issuer = try getIssuer(offer: offer)
 			let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys, publicKeys: publicKeys)
 			// logger.info("Credential str:\n\(str)")
 			return res
