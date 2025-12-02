@@ -33,7 +33,6 @@ let config = OpenId4VciConfiguration(
 - Updated `eudi-lib-sdjwt-swift` to version [0.10.0](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.10.0)
 
 ### Internal Changes
-- Added `WalletKitClientAttestationPoPBuilder` for building attestation Proof-of-Possession JWTs
 - Enhanced DPoP constructor to support RSA keys in addition to EC keys
 - Improved key management for client attestation with deterministic key ID generation
 

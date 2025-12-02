@@ -64,7 +64,7 @@ extension OpenId4VciConfiguration {
 	static var supportedDPoPAlgorithms: Set<JWSAlgorithm> {
 		[JWSAlgorithm(.ES256), JWSAlgorithm(.ES384), JWSAlgorithm(.ES512), JWSAlgorithm(.RS256)]
 	}
-	
+
 	func makeDPoPConstructor(keyId dpopKeyId: String?, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructor? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		let privateKeyProxy: SigningKeyProxy
@@ -110,7 +110,7 @@ extension OpenId4VciConfiguration {
 
 	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]?) async throws -> OpenId4VCIConfig {
 		let client: Client = if let keyAttestationsConfig, clientAttestationPopSigningAlgValuesSupported != nil { try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported) } else { .public(id: clientId) }
-		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder? = if keyAttestationsConfig != nil { WalletKitClientAttestationPoPBuilder() } else { nil}
+		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder? = if keyAttestationsConfig != nil { DefaultClientAttestationPoPBuilder() } else { nil}
 		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, clientAttestationPoPBuilder: clientAttestationPoPBuilder, useDpopIfSupported: useDpopIfSupported)
 	}
 
@@ -144,51 +144,4 @@ extension OpenId4VciConfiguration {
 		let hashHex = hash.map { String(format: "%02x", $0) }.joined().prefix(16)
 		return "client-attestation-\(hashHex)"
 	}
-}
-
-public struct WalletKitClientAttestationPoPBuilder: ClientAttestationPoPBuilder {
-  public func buildAttestationPoPJWT(
-    for client: Client,
-    algorithm: SignatureAlgorithm,
-    clock: ClockType,
-    authServerId: URL,
-    challenge: String?
-  ) async throws -> ClientAttestationPoPJWT {
-    switch client {
-    case .attested(let attestationJWT, let popJwtSpec):
-
-      let now = Date().timeIntervalSince1970
-      let exp = Date().addingTimeInterval(popJwtSpec.duration).timeIntervalSince1970
-      let payload: [String: Any?] = [
-        JWTClaimNames.issuer: attestationJWT.clientId,
-        JWTClaimNames.jwtId: String.randomBase64URLString(length: 20),
-        JWTClaimNames.expirationTime: exp,
-        JWTClaimNames.issuedAt: now,
-        JWTClaimNames.audience: authServerId.absoluteString,
-        JWTClaimNames.cnf: attestationJWT.cnf,
-        JWTClaimNames.challenge: challenge
-      ]
-
-      let header: JWSHeader = try .init(parameters: [
-        JWTClaimNames.algorithm: popJwtSpec.signingAlgorithm.rawValue,
-        JWTClaimNames.type: popJwtSpec.typ
-      ])
-      let jwsPayload: Payload = try .init(JSON(
-        payload.compactMapValues { $0 }
-      ).rawData())
-      let jws: JWS = try .init(
-        header: header,
-        payload: jwsPayload,
-        signer: await BindingKey.createSigner(
-          with: header,
-          and: jwsPayload,
-          for: popJwtSpec.signingKey,
-          and: algorithm
-        )
-      )
-      return try .init(jws: jws)
-    default:
-      throw WalletError(description: "Invalid client type for attestation PoP JWT")
-    }
-  }
 }
