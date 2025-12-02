@@ -26,7 +26,12 @@ struct CredentialConfiguration: Codable, Sendable {
     let docType: String?
 	let vct: String?
     let scope: String?
+	let supportsAttestationProofType: Bool
+	let supportsJwtProofTypeWithAttestation: Bool
+	let supportsJwtProofTypeWithoutAttestation: Bool
     let credentialSigningAlgValuesSupported: [String]
+	let dpopSigningAlgValuesSupported: [String]?
+	let clientAttestationPopSigningAlgValuesSupported: [String]?
 	let issuerDisplay: [DisplayMetadata]    //public let proofTypesSupported: [String: ProofTypeSupportedMeta]?
     let display: [DisplayMetadata]
     let claims: [Claim]
@@ -34,13 +39,18 @@ struct CredentialConfiguration: Codable, Sendable {
 	var batchSize: Int?
 	let defaultCredentialOptions: CredentialOptions
 
-	public init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, credentialSigningAlgValuesSupported: [String], issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
+	init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, supportsAttestationProofType: Bool, supportsJwtProofTypeWithAttestation: Bool, supportsJwtProofTypeWithoutAttestation: Bool,  credentialSigningAlgValuesSupported: [String], dpopSigningAlgValuesSupported: [String]?, clientAttestationPopSigningAlgValuesSupported: [String]?, issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
 		self.configurationIdentifier = configurationIdentifier
 		self.credentialIssuerIdentifier = credentialIssuerIdentifier
 		self.docType = docType
 		self.vct = vct
 		self.scope = scope
+		self.supportsAttestationProofType = supportsAttestationProofType
+		self.supportsJwtProofTypeWithAttestation = supportsJwtProofTypeWithAttestation
+		self.supportsJwtProofTypeWithoutAttestation = supportsJwtProofTypeWithoutAttestation
 		self.credentialSigningAlgValuesSupported = credentialSigningAlgValuesSupported
+		self.dpopSigningAlgValuesSupported = dpopSigningAlgValuesSupported
+		self.clientAttestationPopSigningAlgValuesSupported = clientAttestationPopSigningAlgValuesSupported
 		self.issuerDisplay = issuerDisplay
 		self.display = display
 		self.claims = claims

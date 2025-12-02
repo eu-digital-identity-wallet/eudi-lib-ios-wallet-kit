@@ -1,3 +1,55 @@
+## v0.18.4
+
+### Breaking Changes to Public API
+
+- **Client Attestation Support**: Added support for OAuth 2.0 Attestation-Based Client Authentication
+  - **New struct**: `KeyAttestationConfig` for configuring client attestation
+    - Property `walletAttestationsProvider: WalletAttestationsProvider` - Provider for wallet and key attestations
+    - Property `popKeyOptions: KeyOptions?` - Optional key options for PoP key generation
+    - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
+  
+  - **New protocol**: `WalletAttestationsProvider` with two required methods:
+    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet attestation JWT for a given public key
+    - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain key attestation JWT for multiple keys with optional nonce
+
+- **OpenId4VciConfiguration changes**:
+  - **Removed** `client: Client` parameter
+  - **Added** `clientId: String?` parameter (defaults to "wallet-dev")
+  - **Added** `keyAttestationsConfig: KeyAttestationConfig?` parameter for client attestation configuration
+
+```swift
+let config = OpenId4VciConfiguration(
+  credentialIssuerURL: "https://issuer.example.com",
+  clientId: "my-wallet-client",
+  keyAttestationsConfig: KeyAttestationConfig(
+    walletAttestationsProvider: MyAttestationProvider(),
+    popKeyDuration: 300
+  )
+)
+```
+
+### Dependency Updates
+- Updated `eudi-lib-ios-openid4vci-swift` to version [0.18.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.18.0)
+- Updated `eudi-lib-sdjwt-swift` to version [0.10.0](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.10.0)
+
+### Internal Changes
+- Enhanced DPoP constructor to support RSA keys in addition to EC keys
+- Improved key management for client attestation with deterministic key ID generation
+
+## v0.18.3
+
+- Update eudi-lib-ios-siop-openid4vp-swift to version [0.18.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift/releases/tag/v0.18.0)
+
+## v0.18.2
+
+- Adds `redirectUri` as part of supported `clientIdSchemes`
+- Adds support for `.directPost`.
+
+## v0.18.1
+
+- update eudi-lib-ios-openid4vci-swift dependency to version 0.16.2
+- update siop-openid4vp dependency to version 0.17.7
+
 ## v0.18.0
 
 ### Breaking Changes to Public API

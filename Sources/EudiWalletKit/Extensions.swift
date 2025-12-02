@@ -22,6 +22,7 @@ import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
+import JOSESwift
 import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 
@@ -294,7 +295,65 @@ extension JSON {
 	}
 }
 
+extension IdentityAndAccessManagementMetadata {
+  public var clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]? {
+    switch self {
+    case .oidc(let metaData):
+      return metaData.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+    case .oauth(let metaData):
+      return metaData.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+    }
+  }
+}
+
+extension ECPublicKey: @retroactive @unchecked Sendable {}
 
 
+extension BindingKey {
 
+  static func createSigner(
+    with header: JWSHeader,
+    and payload: Payload,
+    for privateKey: SigningKeyProxy,
+    and signatureAlgorithm: SignatureAlgorithm
+  ) async throws -> Signer {
 
+    if case let .secKey(secKey) = privateKey,
+       let secKeySigner = Signer(
+        signatureAlgorithm: signatureAlgorithm,
+        key: secKey
+       ) {
+      return secKeySigner
+
+    } else if case let .custom(customAsyncSigner) = privateKey {
+      let headerData = header as DataConvertible
+      let signature = try await customAsyncSigner.signAsync(
+        headerData.data(),
+        payload.data()
+      )
+
+      let customSigner = PrecomputedSigner(
+        signature: signature,
+        algorithm: signatureAlgorithm
+      )
+      return Signer(customSigner: customSigner)
+
+    } else {
+      throw ValidationError.error(reason: "Unable to create JWS signer")
+    }
+  }
+}
+
+class PrecomputedSigner: JOSESwift.SignerProtocol {
+  var algorithm: JOSESwift.SignatureAlgorithm
+  let signature: Data
+
+  init(signature: Data, algorithm: JOSESwift.SignatureAlgorithm) {
+    self.algorithm = algorithm
+    self.signature = signature
+  }
+
+  func sign(_ signingInput: Data) throws -> Data {
+    return signature
+  }
+}
