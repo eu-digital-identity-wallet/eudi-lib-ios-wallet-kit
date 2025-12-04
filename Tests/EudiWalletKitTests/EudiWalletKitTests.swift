@@ -23,7 +23,7 @@ import WalletStorage
 import SwiftCBOR
 @testable import JOSESwift
 import eudi_lib_sdjwt_swift
-import SiopOpenID4VP
+import OpenID4VP
 
 struct EudiWalletKitTests {
 

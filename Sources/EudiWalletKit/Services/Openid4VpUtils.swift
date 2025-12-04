@@ -25,8 +25,8 @@ import eudi_lib_sdjwt_swift
 import WalletStorage
 import JSONWebSignature
 @preconcurrency import JSONWebAlgorithms
-import SiopOpenID4VP
-import enum SiopOpenID4VP.ClaimPathElement
+import OpenID4VP
+import enum OpenID4VP.ClaimPathElement
 import SwiftyJSON
 
 class Openid4VpUtils {

@@ -1,7 +1,7 @@
 import Foundation
-import struct SiopOpenID4VP.PreregisteredClient
-import class SiopOpenID4VP.JWSAlgorithm
-import enum SiopOpenID4VP.WebKeySource
+import struct OpenID4VP.PreregisteredClient
+import class OpenID4VP.JWSAlgorithm
+import enum OpenID4VP.WebKeySource
 
 /// Client identifier scheme for verifier authentication
 ///
