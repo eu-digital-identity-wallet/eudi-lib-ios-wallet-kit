@@ -50,6 +50,7 @@ The library provides the following functionality:
         - [x] Support for sd-jwt-vc format
             - [x] Support credential offer
             - [x] Support for DPoP JWT in authorization
+            - [x] Support for OAuth 2.0 Attestation-Based Client Authentication
         - [x] Support for JWT proof types
         - [x] Support for deferred issuing
         - [x] Support for batch issuing
@@ -144,8 +145,65 @@ try wallet.registerOpenId4VciServices([
 ])
 ```
 
-The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.	
+The `useDpopIfSupported` property controls whether to use DPoP when the issuer supports it. The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.
 
+### OAuth 2.0 Attestation-Based Client Authentication
+
+The wallet supports OAuth 2.0 Attestation-Based Client Authentication as defined in [RFC 9449](https://datatracker.ietf.org/doc/html/rfc9449). This provides a mechanism for wallet applications to prove possession of cryptographic keys bound to wallet and key attestations.
+
+To use attestation-based authentication, implement the `WalletAttestationsProvider` protocol and configure it in the `OpenId4VciConfiguration`:
+
+```swift
+// Implement the WalletAttestationsProvider protocol
+struct MyAttestationProvider: WalletAttestationsProvider {
+    func getWalletAttestation(key: any JWK) async throws -> String {
+        // Obtain wallet attestation JWT from your attestation service
+        // The attestation should be bound to the provided public key
+        return try await attestationService.getWalletAttestation(for: key)
+    }
+    
+    func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
+        // Obtain key attestation JWT for multiple keys
+        // The nonce parameter should be included if provided by the issuer
+        return try await attestationService.getKeysAttestation(for: keys, nonce: nonce)
+    }
+}
+
+// Configure OpenID4VCI with attestation support
+let config = OpenId4VciConfiguration(
+    credentialIssuerURL: "https://issuer.example.com",
+    clientId: "my-wallet-app",
+    keyAttestationsConfig: KeyAttestationConfig(
+        walletAttestationsProvider: MyAttestationProvider(),
+        popKeyOptions: KeyOptions(
+            secureAreaName: "SecureEnclave",
+            curve: .P256,
+            accessControl: .requireUserPresence
+        ),
+        popKeyDuration: 300  // PoP JWT validity in seconds (default: 300)
+    ),
+    useDpopIfSupported: true
+)
+
+let wallet = try! EudiWallet(
+    serviceName: "my_wallet_app",
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    openID4VciConfigurations: ["attested_issuer": config]
+)
+```
+
+The `KeyAttestationConfig` structure accepts the following parameters:
+
+- `walletAttestationsProvider`: Provider implementation for obtaining wallet and key attestations
+- `popKeyOptions`: Optional key generation parameters for the Proof-of-Possession key
+- `popKeyDuration`: Optional duration in seconds for PoP JWT validity (default: 300 seconds)
+
+When configured, the wallet will:
+
+1. Generate a key pair for client attestation PoP
+2. Obtain a wallet attestation JWT bound to the public key
+3. Create attestation PoP JWTs for authorization requests
+4. Include key attestations when issuing credentials
 
 ## Manage documents
 
