@@ -189,60 +189,6 @@ extension DCQL {
 	public func findQuery(id: String) -> CredentialQuery? {
 		credentials.first { $0.id.value == id }
 	}
-
-	/// Simplify the DCQL by filtering credential sets and credentials based on what's available in the queryable source
-	/// - Parameter queryable: An instance conforming to DcqlQueryable protocol
-	/// - Returns: A simplified DCQL with only matching credentials and credential sets, or nil if nothing matches
-	func simplified(using queryable: DcqlQueryable) -> DCQL? {
-		// Simplify individual credentials
-		let simplifiedCredentials = credentials.compactMap { $0.simplified(using: queryable) }
-
-		// Simplify credential sets if they exist
-		let simplifiedCredentialSets = credentialSets?.compactMap { credSetQuery -> CredentialSetQuery? in
-			credSetQuery.simplified(using: queryable, availableCredentials: simplifiedCredentials)
-		}
-
-		// If no credentials match and no credential sets match, return nil
-		guard !simplifiedCredentials.isEmpty || (simplifiedCredentialSets?.isEmpty == false) else {
-			return nil
-		}
-
-		// Create a new DCQL with simplified components
-		return try? DCQL(
-			credentials: simplifiedCredentials,
-			credentialSets: simplifiedCredentialSets
-		)
-	}
-}
-
-extension CredentialSetQuery {
-	/// Simplify the credential set query by filtering options based on available credentials
-	/// - Parameters:
-	///   - queryable: An instance conforming to DcqlQueryable protocol
-	///   - availableCredentials: List of available (simplified) credentials
-	/// - Returns: A simplified CredentialSetQuery with only valid options, or nil if no options are satisfiable
-	func simplified(using queryable: DcqlQueryable, availableCredentials: [CredentialQuery]) -> CredentialSetQuery? {
-		// Filter options to only include sets where all credential queries are available
-		let simplifiedOptions = options.compactMap { credentialSet -> Set<QueryId>? in
-			// Check if all query IDs in this set correspond to available credentials
-			let allQueriesAvailable = credentialSet.allSatisfy { queryId in
-				availableCredentials.contains { credential in
-					credential.id == queryId
-				}
-			}
-
-			return allQueriesAvailable ? credentialSet : nil
-		}
-
-		// If no options remain valid, return nil
-		guard !simplifiedOptions.isEmpty else { return nil }
-
-		// Create a new CredentialSetQuery with simplified options
-		return try? CredentialSetQuery(
-			options: simplifiedOptions,
-			required: self.required
-		)
-	}
 }
 
 protocol DcqlQueryable {
@@ -256,156 +202,171 @@ protocol DcqlQueryable {
 	func hasClaimWithValue(id: String, claimPath: ClaimPath, values: [String]) -> Bool
 }
 
-extension CredentialQuery {
-	/// Simplify the credential query by filtering claims and claim sets based on what's available in the queryable source
-	/// - Parameter queryable: An instance conforming to DcqlQueryable protocol
-	/// - Returns: A simplified CredentialQuery with only matching claims/claim sets, or nil if no credentials match
-	func simplified(using queryable: DcqlQueryable) -> CredentialQuery? {
-		guard let docType = self.docType else { return nil }
-
-		// Check if any credentials match the docType and format
-		var matchingCredentials = queryable.getCredential(docOrVctType: docType, docDataFormat: self.dataFormat)
-		guard !matchingCredentials.isEmpty else { return nil }
-
-		// Check if multiple credentials can satisfy this query
-		if let multiple, !multiple { matchingCredentials = [matchingCredentials.first! ] }
-		// If no claims or claimSets are specified, return the query as-is (request all claims)
-		let hasClaims = claims != nil && !claims!.isEmpty
-		let hasClaimSets = claimSets != nil && !claimSets!.isEmpty
-		guard hasClaims || hasClaimSets else { return self }
-
-		// Filter claims to only include those that exist in the queryable source
-		var simplifiedClaims: [ClaimsQuery]? = nil
-		if let claims = self.claims, !claims.isEmpty {
-			simplifiedClaims = claims.compactMap { claimQuery -> ClaimsQuery? in
-				// Check if any matching credential has this claim
-				let hasMatchingClaim = matchingCredentials.contains { credId in
-					// If values are specified, check for value match first (takes precedence)
-					if let values = claimQuery.values, !values.isEmpty {
-						return queryable.hasClaimWithValue(id: credId, claimPath: claimQuery.path, values: values)
-					}
-
-					// Otherwise, check for claim path existence
-					return queryable.hasClaim(id: credId, claimPath: claimQuery.path)
-				}
-
-				return hasMatchingClaim ? claimQuery : nil
-			}
-		}
-
-		// Filter claim sets to only include those where all referenced claims exist in the simplified claims array
-		// Note: claim_sets MUST NOT be present if claims is absent (DCQL spec requirement)
-		var simplifiedClaimSets: [Set<ClaimId>]? = nil
-		if let claimSets = self.claimSets, !claimSets.isEmpty, let simplifiedClaims = simplifiedClaims, !simplifiedClaims.isEmpty {
-			simplifiedClaimSets = claimSets.compactMap { claimSet -> Set<ClaimId>? in
-				// Check if all claim IDs in the set reference claims that exist in the simplified claims array
-				let allClaimsReferenced = claimSet.allSatisfy { claimId in
-					simplifiedClaims.contains { claim in
-						// Match claim ID - the claim must have an ID that matches the one in the set
-						claim.id == claimId
-					}
-				}
-
-				return allClaimsReferenced ? claimSet : nil
-			}
-		}
-
-		// If no claims match, return nil (claim_sets cannot exist without claims)
-		guard let simplifiedClaims = simplifiedClaims, !simplifiedClaims.isEmpty else { return nil }
-
-		// Create a new CredentialQuery with the filtered claims and claim sets
-		return try? CredentialQuery(
-			id: self.id,
-			format: self.format,
-			meta: self.meta,
-			claims: simplifiedClaims,
-			claimSets: simplifiedClaimSets,
-			multiple: self.multiple,
-			trustedAuthorities: self.trustedAuthorities,
-			requireCryptographicHolderBinding: self.requireCryptographicHolderBinding
-		)
-	}
-
-	/// Construct the final list of claim paths for each credential identifier based on DCQL claim selection logic
-	/// - Parameter queryable: An instance conforming to DcqlQueryable protocol
-	/// - Returns: A dictionary mapping credential IDs to their claim paths, or nil if the query cannot be satisfied
+extension Openid4VpUtils {
+	/// Resolves a DCQL query against available credentials in the wallet
 	///
-	/// Selection logic:
-	/// - If only `claims` is present: return all claims that can be satisfied
-	/// - If both `claims` and `claim_sets` are present: return the first satisfiable claim_set option
-	///   (Wallet MUST NOT return any claims if no claim_set can be satisfied)
-	func constructClaimPaths(using queryable: DcqlQueryable) -> [String: [ClaimPath]]? {
-		guard let docType = self.docType else { return nil }
+	/// This function evaluates a DCQL (Digital Credentials Query Language) query to determine if the wallet
+	/// can satisfy the request. It returns a mapping of credential identifiers to the claim paths that should
+	/// be disclosed, or nil if the query cannot be satisfied.
+	///
+	/// The resolution process follows the DCQL specification from OpenID4VP 1.0:
+	/// - Evaluates credential queries to find matching credentials by format and metadata
+	/// - Processes claim queries with support for claim_sets (alternative claim combinations)
+	/// - Handles credential_sets for requesting multiple credentials or alternatives
+	/// - Supports optional vs required credential sets
+	/// - Validates claim value matching when specified
+	///
+	/// - Parameters:
+	///   - dcql: The DCQL query to resolve
+	///   - queryable: An object conforming to DcqlQueryable that provides access to wallet credentials
+	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
+	///            the claims to disclose, or nil if the query cannot be satisfied
+	///
+	/// - Note: According to the spec:
+	///   - If claims is absent, only mandatory claims are returned
+	///   - If claims is present but claim_sets is absent, all listed claims are requested
+	///   - If both claims and claim_sets are present, one combination from claim_sets is selected
+	///   - The wallet returns the first claim_sets option it can satisfy (Verifier's preference order)
+	///   - If the wallet cannot deliver all non-optional credentials, it returns nil
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable) -> [String: [ClaimPath]]? {
+		var result: [String: [ClaimPath]] = [:]
+		var credentialQueryResults: [QueryId: (matchedCredId: String, claimPaths: [ClaimPath])] = [:]
 
-		// Get matching credentials
-		var matchingCredentials = queryable.getCredential(docOrVctType: docType, docDataFormat: self.dataFormat)
-		guard !matchingCredentials.isEmpty else { return nil }
+		// Step 1: Process individual credential queries
+		for credQuery in dcql.credentials {
+			guard let docType = credQuery.docType else { continue }
+			let format = credQuery.dataFormat
 
-		// Check if multiple credentials can satisfy this query
-		if let multiple, !multiple { matchingCredentials = [matchingCredentials.first!] }
+			// Find matching credentials
+			let matchingCredIds = queryable.getCredential(docOrVctType: docType, docDataFormat: format)
+			guard !matchingCredIds.isEmpty else {
+				// No matching credential found - this query cannot be satisfied
+				credentialQueryResults.removeValue(forKey: credQuery.id)
+				continue
+			}
 
-		// If no claims are specified, return empty paths (all claims requested)
-		guard let claims = self.claims, !claims.isEmpty else {
-			// No specific claims requested - return empty array for each credential
-			return Dictionary(uniqueKeysWithValues: matchingCredentials.map { ($0, []) })
+			// Try to find a credential that satisfies the claim requirements
+			var foundMatch = false
+			for credId in matchingCredIds {
+				if let claimPaths = resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable) {
+					credentialQueryResults[credQuery.id] = (credId, claimPaths)
+					foundMatch = true
+					break
+				}
+			}
+
+			if !foundMatch {
+				credentialQueryResults.removeValue(forKey: credQuery.id)
+			}
 		}
 
-		// Build a lookup map of claims by their ID
-		let claimsById = Dictionary(uniqueKeysWithValues: claims.compactMap { claim -> (ClaimId, ClaimsQuery)? in
-			guard let claimId = claim.id else { return nil }
-			return (claimId, claim)
-		})
+		// Step 2: Handle credential_sets if present
+		if let credentialSets = dcql.credentialSets {
+			// When credential_sets are present, we need to satisfy at least all required sets
+			// First pass: check if all required sets can be satisfied
+			for credSet in credentialSets where credSet.required {
+				var setIsSatisfied = false
 
-		// Determine which claims to include based on claim_sets presence
-		let selectedClaims: [ClaimsQuery]?
-
-		if let claimSets = self.claimSets, !claimSets.isEmpty {
-			// Both claims and claim_sets are present: find the first satisfiable option
-			selectedClaims = claimSets.first { claimSet in
-				// Check if all claims in this set can be satisfied
-				claimSet.allSatisfy { claimId in
-					guard let claim = claimsById[claimId] else { return false }
-					return matchingCredentials.contains { credId in
-						if let values = claim.values, !values.isEmpty {
-							return queryable.hasClaimWithValue(id: credId, claimPath: claim.path, values: values)
-						}
-						return queryable.hasClaim(id: credId, claimPath: claim.path)
+				for option in credSet.options {
+					let allSatisfied = option.allSatisfy { queryId in
+						credentialQueryResults[queryId] != nil
+					}
+					if allSatisfied {
+						setIsSatisfied = true
+						break
 					}
 				}
-			}.map { claimSet in
-				// Convert the satisfiable claim set to an array of ClaimsQuery
-				claimSet.compactMap { claimsById[$0] }
-			}
 
-			// If no claim_set can be satisfied, return nil (per DCQL spec)
-			guard selectedClaims != nil else { return nil }
-		} else {
-			// Only claims present: use all claims
-			selectedClaims = claims
-		}
-
-		guard let selectedClaims = selectedClaims, !selectedClaims.isEmpty else { return nil }
-
-		// Build the result: for each credential, collect the claim paths that can be satisfied
-		var result: [String: [ClaimPath]] = [:]
-
-		for credId in matchingCredentials {
-			let satisfiablePaths = selectedClaims.compactMap { claim -> ClaimPath? in
-				let canSatisfy: Bool
-				if let values = claim.values, !values.isEmpty {
-					canSatisfy = queryable.hasClaimWithValue(id: credId, claimPath: claim.path, values: values)
-				} else {
-					canSatisfy = queryable.hasClaim(id: credId, claimPath: claim.path)
+				// If a required set cannot be satisfied, fail immediately
+				if !setIsSatisfied {
+					return nil
 				}
-				return canSatisfy ? claim.path : nil
 			}
 
-			// Only include credentials that can satisfy at least one claim
-			if !satisfiablePaths.isEmpty {
-				result[credId] = satisfiablePaths
+			// Second pass: add credentials from satisfied options (both required and optional)
+			for credSet in credentialSets {
+				for option in credSet.options {
+					let allSatisfied = option.allSatisfy { queryId in
+						credentialQueryResults[queryId] != nil
+					}
+
+					if allSatisfied {
+						// Add the credentials from this option to the result
+						for queryId in option {
+							if let match = credentialQueryResults[queryId] {
+								result[match.matchedCredId] = match.claimPaths
+							}
+						}
+						break // Take the first satisfiable option for this credential_set
+					}
+				}
+			}
+		} else {
+			// No credential_sets: all credential queries must be satisfied
+			for (_, match) in credentialQueryResults {
+				result[match.matchedCredId] = match.claimPaths
 			}
 		}
 
 		return result.isEmpty ? nil : result
+	}
+
+	/// Resolves claims for a specific credential query and credential
+	private static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) -> [ClaimPath]? {
+		// If no claims specified, return empty array (only mandatory claims)
+		guard let claims = credQuery.claims, !claims.isEmpty else {
+			return []
+		}
+		// If claim_sets is present, try to satisfy one of the claim set options
+		if let claimSets = credQuery.claimSets, !claimSets.isEmpty {
+			// Try each claim set option in order (first is most preferred)
+			for claimSetOption in claimSets {
+				var selectedPaths: [ClaimPath] = []
+				var allClaimsAvailable = true
+
+				for claimId in claimSetOption {
+					// Find the claim with this ID
+					guard let claim = claims.first(where: { $0.id?.id == claimId.id }) else {
+						allClaimsAvailable = false
+						break
+					}
+					// Check value matching if specified
+					if let values = claim.values, !values.isEmpty {
+						if !queryable.hasClaimWithValue(id: credId, claimPath: claim.path, values: values) {
+							allClaimsAvailable = false
+							break
+						}
+					} else if !queryable.hasClaim(id: credId, claimPath: claim.path) {
+						allClaimsAvailable = false
+						break
+					}
+					selectedPaths.append(claim.path)
+				}
+
+				if allClaimsAvailable {
+					// This claim set option can be satisfied
+					return selectedPaths
+				}
+			}
+
+			// No claim set option could be satisfied
+			return nil
+		} else {
+			// No claim_sets: all claims must be available
+			var selectedPaths: [ClaimPath] = []
+
+			for claim in claims {
+				// Check if the credential has this claim
+				if let values = claim.values, !values.isEmpty {
+					if !queryable.hasClaimWithValue(id: credId, claimPath: claim.path, values: values) {
+						return nil
+					}
+				} else if !queryable.hasClaim(id: credId, claimPath: claim.path) {
+					return nil
+				}
+				selectedPaths.append(claim.path)
+			}
+			return selectedPaths
+		}
 	}
 }
