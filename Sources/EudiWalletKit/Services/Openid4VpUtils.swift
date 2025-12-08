@@ -294,7 +294,17 @@ extension Openid4VpUtils {
 						// Add the credentials from this option to the result
 						for queryId in option {
 							if let match = credentialQueryResults[queryId] {
-								result[match.matchedCredId] = match.claimPaths
+								// If the credential ID already exists, merge claim paths
+								if let existingPaths = result[match.matchedCredId] {
+									// Merge and deduplicate claim paths
+									let mergedPaths = existingPaths + match.claimPaths
+									let uniquePaths = Array(Set(mergedPaths.map(\.value))).compactMap { pathValue in
+										mergedPaths.first { $0.value == pathValue }
+									}
+									result[match.matchedCredId] = uniquePaths
+								} else {
+									result[match.matchedCredId] = match.claimPaths
+								}
 							}
 						}
 						break // Take the first satisfiable option for this credential_set
