@@ -28,6 +28,7 @@ import eudi_lib_sdjwt_swift
 import JOSESwift
 import Logging
 import X509
+import struct OpenID4VP.ClaimPath
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP specification
