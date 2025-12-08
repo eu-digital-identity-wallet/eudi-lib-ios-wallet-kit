@@ -783,6 +783,221 @@ struct EudiWalletKitTests {
 		#expect(result == nil, "Query should fail when credential type doesn't match")
 	}
 
+	@Test("DCQL query values - pass with exact value matches", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesExactMatch(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential with exact matching values
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"],
+					ClaimPath([.claim(name: "postal_code")]): ["90210"]
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with matching values")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+	}
+
+	@Test("DCQL query values - pass with alternative postal code", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesAlternativeValue(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential with second postal code option
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"],
+					ClaimPath([.claim(name: "postal_code")]): ["90211"]
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with alternative postal code")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+	}
+
+	@Test("DCQL query values - fail with wrong last name", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesWrongLastName(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential but last_name doesn't match
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Smith"],  // Wrong value
+					ClaimPath([.claim(name: "postal_code")]): ["90210"]
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when last_name value doesn't match")
+	}
+
+	@Test("DCQL query values - fail with wrong postal code", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesWrongPostalCode(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential but postal_code doesn't match any option
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"],
+					ClaimPath([.claim(name: "postal_code")]): ["90212"]  // Wrong value
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when postal_code doesn't match any option")
+	}
+
+	@Test("DCQL query values - fail when missing value constraint claims", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesMissingClaims(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential but missing postal_code claim entirely
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")])
+					// Missing postal_code
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"]
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when claim with value constraint is missing")
+	}
+
+	@Test("DCQL query values - pass with multiple matching values", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesMultipleMatchingValues(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has credential with both postal code values available
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"],
+					ClaimPath([.claim(name: "postal_code")]): ["90210", "90211"]  // Has both
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved when credential has multiple matching values")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+	}
+
+	@Test("DCQL query values - fail with no matching credential type", arguments: ["dcql-query-values"])
+	func testDcqlQueryValuesWrongCredentialType(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has wrong credential type
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"other_cred": ("https://example.com/other", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"other_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"other_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Doe"],
+					ClaimPath([.claim(name: "postal_code")]): ["90210"]
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when credential type doesn't match")
+	}
+
 }
 
 // MARK: - Data Extension for Test Resources
