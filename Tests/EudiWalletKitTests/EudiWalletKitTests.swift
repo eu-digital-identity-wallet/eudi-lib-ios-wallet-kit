@@ -416,6 +416,205 @@ struct EudiWalletKitTests {
 		#expect(result == nil, "Query should fail when only partial credentials from an option are available")
 	}
 
+	@Test("DCQL mdl-or-photoid - pass with mDL", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithMdl(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has mDL with identity claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"mdl_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")])
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with mDL")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["mdl_cred"]?.count == 3, "Should have three identity claims")
+	}
+
+	@Test("DCQL mdl-or-photoid - pass with photo card", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithPhotoCard(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has photo ID card with identity claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"photo_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")])
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with photo card")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["photo_cred"]?.count == 3, "Should have three identity claims")
+	}
+
+	@Test("DCQL mdl-or-photoid - pass with mDL and address", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithMdlAndAddress(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has mDL with both identity and address claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"mdl_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "resident_address")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "resident_country")])
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with mDL including optional address")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["mdl_cred"]?.count == 5, "Should have identity and address claims")
+	}
+
+	@Test("DCQL mdl-or-photoid - pass with photo card and address", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithPhotoCardAndAddress(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has photo card with both identity and address claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"photo_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "resident_address")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "resident_country")])
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved with photo card including optional address")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["photo_cred"]?.count == 5, "Should have identity and address claims")
+	}
+
+	@Test("DCQL mdl-or-photoid - pass with both mDL and photo card prefers first", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithBoth(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has both mDL and photo card
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"mdl_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")])
+				],
+				"photo_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")])
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should be resolved")
+		#expect(result?.count == 1, "Should have one credential (first option)")
+		#expect(result?["mdl_cred"] != nil, "Should prefer mDL as first option")
+	}
+
+	@Test("DCQL mdl-or-photoid - fail with no identity credentials", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdFailNoIdentity(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has no identity credentials
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [:],
+			claimPaths: [:]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when no identity credentials available")
+	}
+
+	@Test("DCQL mdl-or-photoid - fail with partial identity claims", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdFailPartialClaims(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has mDL but missing required claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"mdl_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")])
+					// Missing portrait claim
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result == nil, "Query should fail when required identity claims are missing")
+	}
+
+	@Test("DCQL mdl-or-photoid - pass without optional address", arguments: ["dcql-mdl-or-photoid"])
+	func testDcqlMdlOrPhotoIdWithoutOptionalAddress(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+
+		// Wallet has mDL with identity claims but no address claims
+		let mockQueryable = MockDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)
+			],
+			claimPaths: [
+				"mdl_cred": [
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "given_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "family_name")]),
+					ClaimPath([.claim(name: "org.iso.18013.5.1"), .claim(name: "portrait")])
+					// No address claims
+				]
+			]
+		)
+
+		let result = Openid4VpUtils.resolveDcql(dcql, queryable: mockQueryable)
+		#expect(result != nil, "Query should succeed without optional address")
+		#expect(result?.count == 1, "Should have one credential")
+		#expect(result?["mdl_cred"]?.count == 3, "Should have only identity claims")
+	}
+
 }
 
 // MARK: - Data Extension for Test Resources

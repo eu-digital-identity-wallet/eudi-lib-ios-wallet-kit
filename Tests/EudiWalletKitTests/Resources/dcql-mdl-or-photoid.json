@@ -79,6 +79,7 @@
   ],
   "credential_sets": [
     {
+      "required": true,
       "options": [
         [ "mdl-id" ],
         [ "photo_card-id" ]
