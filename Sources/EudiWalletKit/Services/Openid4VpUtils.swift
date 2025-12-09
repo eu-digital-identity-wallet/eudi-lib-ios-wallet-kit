@@ -30,7 +30,7 @@ import enum OpenID4VP.ClaimPathElement
 import struct OpenID4VP.ClaimPath
 import SwiftyJSON
 
-class Openid4VpUtils {
+class OpenId4VpUtils {
 	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
 	static let pathNsItemRx = try! NSRegularExpression(pattern: #"\$\['([^']+)'\]\['([^']+)'\]"#, options: .caseInsensitive)
 	// example path: $.given_name_national_character
@@ -151,13 +151,13 @@ class Openid4VpUtils {
 	static func vctToDocType(_ vct: String) -> String { vct.replacingOccurrences(of: "urn:", with: "").replacingOccurrences(of: ":", with: ".") }
 
 	static func vctToDocTypeMatch(_ s1: String, _ s2: String) -> Bool {
-		Openid4VpUtils.vctToDocType(s1).hasPrefix(Openid4VpUtils.vctToDocType(s2)) || Openid4VpUtils.vctToDocType(s2).hasPrefix(Openid4VpUtils.vctToDocType(s1))
+		OpenId4VpUtils.vctToDocType(s1).hasPrefix(OpenId4VpUtils.vctToDocType(s2)) || OpenId4VpUtils.vctToDocType(s2).hasPrefix(OpenId4VpUtils.vctToDocType(s1))
 	}
 }
 
 extension ClaimPathElement {
 	public var claimName: String? {
-		if case .claim(let name) = self { name } else { nil }
+		if case .claim(let name) = self { name } else if case .arrayElement(let index) = self { String(index) } else { nil }
 	}
 }
 
@@ -191,18 +191,8 @@ extension DCQL {
 	}
 }
 
-protocol DcqlQueryable {
-	/// retrieve credential identifiers matching docType and dataFormat
-	func getCredential(docOrVctType: String, docDataFormat: DocDataFormat) -> [String]
-	/// retrieve all claim paths for a given credential identifier
-	func getAllClaimPaths(id: String) -> [ClaimPath]
-	/// check if a claim exists for a given credential identifier and claim path
-	func hasClaim(id: String, claimPath: ClaimPath) -> Bool
-	/// check if a claim exists for a given credential identifier and claim path and value
-	func hasClaimWithValue(id: String, claimPath: ClaimPath, values: [String]) -> Bool
-}
 
-extension Openid4VpUtils {
+extension OpenId4VpUtils {
 	/// Resolves a DCQL query against available credentials in the wallet
 	///
 	/// This function evaluates a DCQL (Digital Credentials Query Language) query to determine if the wallet
@@ -221,22 +211,13 @@ extension Openid4VpUtils {
 	///   - queryable: An object conforming to DcqlQueryable that provides access to wallet credentials
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose, or nil if the query cannot be satisfied
-	///
-	/// - Note: According to the spec:
-	///   - If claims is absent, only mandatory claims are returned
-	///   - If claims is present but claim_sets is absent, all listed claims are requested
-	///   - If both claims and claim_sets are present, one combination from claim_sets is selected
-	///   - The wallet returns the first claim_sets option it can satisfy (Verifier's preference order)
-	///   - If the wallet cannot deliver all non-optional credentials, it returns nil
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable) -> [String: [ClaimPath]]? {
 		var result: [String: [ClaimPath]] = [:]
 		var credentialQueryResults: [QueryId: (matchedCredId: String, claimPaths: [ClaimPath])] = [:]
-
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { continue }
 			let format = credQuery.dataFormat
-
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredential(docOrVctType: docType, docDataFormat: format)
 			guard !matchingCredIds.isEmpty else {
@@ -244,7 +225,6 @@ extension Openid4VpUtils {
 				credentialQueryResults.removeValue(forKey: credQuery.id)
 				continue
 			}
-
 			// Try to find a credential that satisfies the claim requirements
 			var foundMatch = false
 			for credId in matchingCredIds {
@@ -254,12 +234,8 @@ extension Openid4VpUtils {
 					break
 				}
 			}
-
-			if !foundMatch {
-				credentialQueryResults.removeValue(forKey: credQuery.id)
-			}
+			if !foundMatch {credentialQueryResults.removeValue(forKey: credQuery.id)}
 		}
-
 		// Step 2: Handle credential_sets if present
 		if let credentialSets = dcql.credentialSets {
 			// When credential_sets are present, we need to satisfy at least all required sets
@@ -276,20 +252,15 @@ extension Openid4VpUtils {
 						break
 					}
 				}
-
 				// If a required set cannot be satisfied, fail immediately
-				if !setIsSatisfied {
-					return nil
-				}
+				if !setIsSatisfied {return nil}
 			}
-
 			// Second pass: add credentials from satisfied options (both required and optional)
 			for credSet in credentialSets {
 				for option in credSet.options {
 					let allSatisfied = option.allSatisfy { queryId in
 						credentialQueryResults[queryId] != nil
 					}
-
 					if allSatisfied {
 						// Add the credentials from this option to the result
 						for queryId in option {
@@ -317,7 +288,6 @@ extension Openid4VpUtils {
 				result[match.matchedCredId] = match.claimPaths
 			}
 		}
-
 		return result.isEmpty ? nil : result
 	}
 
@@ -333,7 +303,6 @@ extension Openid4VpUtils {
 			for claimSetOption in claimSets {
 				var selectedPaths: [ClaimPath] = []
 				var allClaimsAvailable = true
-
 				for claimId in claimSetOption {
 					// Find the claim with this ID
 					guard let claim = claims.first(where: { $0.id?.id == claimId.id }) else {
@@ -351,20 +320,17 @@ extension Openid4VpUtils {
 						break
 					}
 					selectedPaths.append(claim.path)
-				}
-
+				} // next claimId
 				if allClaimsAvailable {
 					// This claim set option can be satisfied
 					return selectedPaths
 				}
-			}
-
+			} // next claimSetOption
 			// No claim set option could be satisfied
 			return nil
 		} else {
 			// No claim_sets: all claims must be available
 			var selectedPaths: [ClaimPath] = []
-
 			for claim in claims {
 				// Check if the credential has this claim
 				if let values = claim.values, !values.isEmpty {

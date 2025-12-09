@@ -29,6 +29,7 @@ import JOSESwift
 import Logging
 import X509
 import struct OpenID4VP.ClaimPath
+import enum OpenID4VP.ClaimPathElement
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP specification
@@ -47,6 +48,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var idsToDocTypes: [String: String]!
 	// map of document-id to SignedSDJWT
 	var docsSdJwt: [String: SignedSDJWT]!
+	var dcqlQueryable: DefaultDcqlQueryable!
 	// map of document-id to hashing algorithm
 	var docsHashingAlgs: [String: String]!
 	/// IACA root certificates
@@ -139,7 +141,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let ecCrvType = ECCurveType(rawValue: crv) {
 			logger.info("Found jwks public key with curve \(crv)")
 			eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
-
 			// Generate a jwkThumbprint if possible.
 			let publicKey = ECPublicKey(crv: ecCrvType, x: x , y: y)
 			jwkThumbprint = try? publicKey.thumbprint(algorithm: .SHA256)
@@ -149,8 +150,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else if case .directPost(let uri) = vp.responseMode { uri.absoluteString } else { "" }
 
 		vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
-		mdocGeneratedNonce = Openid4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
-		sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
+		mdocGeneratedNonce = OpenId4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
+		sessionTranscript = OpenId4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
 
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		var requestItems: RequestItems?; var deviceRequestBytes: Data?
@@ -158,7 +159,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 			self.dcql = dcql
 			deviceRequestBytes = try? JSONEncoder().encode(dcql)
-			let (items, fmtsReq, imap) = try Openid4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
+			decodeDocuments()
+			let (items, fmtsReq, imap) = try OpenId4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
 		}
 		self.transactionData = vp.transactionData
@@ -188,7 +190,50 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return (VerifiablePresentation.generic(vpTokenStr), vpTokenData, resp.responseMetadata)
 	}
 
-	/// Send response via openid4vp
+	func decodeDocuments() {
+		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
+		let parser = CompactParser()
+		let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
+		docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
+		// make dcqlQueryable
+		var credentialMap = [String: (String, DocDataFormat)]()
+		for (docId, docType) in idsToDocTypes {
+			if let format = formatsRequested[docType] {
+				credentialMap[docId] = (docType, format)
+			}
+		}
+		var claimPaths = [String: [ClaimPath]]()
+		var claimValues = [String: [ClaimPath: [String]]]()
+		var paths = [ClaimPath]();	var values = [ClaimPath: [String]]()
+		// make paths and values for cbor documents
+		for (docId, issuerSigned) in docsCbor {
+			paths.removeAll(); values.removeAll()
+			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
+			for (ns, items) in isNs.nameSpaces {
+				for item in items {
+					logger.info("IssuerSigned document \(docId) namespace \(ns) item: \(item.elementIdentifier)")
+					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
+					values[paths.last!] = [item.description]
+				}
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+		for (docId, sdjwt) in docsSdJwt {
+			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
+			paths.removeAll(); values.removeAll()
+			for (p, disclosures) in allPathsDict {
+				let path = ClaimPath(p.value.map { e in if case .claim(let name) = e { ClaimPathElement.claim(name: name) } else if case .arrayElement(let index) = e { ClaimPathElement.arrayElement(index: index) } else { ClaimPathElement.allArrayElements } } )
+				paths.append(path)
+				values[path] = disclosures
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+	}
+
+/// Send response via openid4vp
 	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
@@ -203,10 +248,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
-		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
-		let parser = CompactParser()
-		let docStrings = docs.filter { k,v in Self.filterFormat(dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
-		docsSdJwt = docStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
 		// tuples of inputDescriptor-id, docId and verifiable presentation
 		// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
 		var inputToPresentations = [(String, String?, VerifiablePresentation)]()
@@ -227,7 +268,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 				let hai = HashingAlgorithmIdentifier(rawValue: docsHashingAlgs[docId] ?? "") ?? .SHA3256
-				guard let presented = try await Openid4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
+				guard let presented = try await OpenId4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
 					continue
 				}
 				inputToPresentations.append((inputDescrId, docId, VerifiablePresentation.generic(presented.serialisation)))

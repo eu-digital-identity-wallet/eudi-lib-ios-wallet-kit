@@ -35,7 +35,7 @@ struct EudiWalletKitTests {
 		let testDcqlData = Data(name: "dcql-\(format.rawValue)", ext: "json", from: Bundle.module)!
 		let testDcql = try JSONDecoder().decode(DCQL.self, from: testDcqlData)
 		do {
-			let (items, fmtsRequested, _) = try Openid4VpUtils.parseDcql(testDcql,  idsToDocTypes: ["1": "urn:eu.europa.ec.eudi:pid:1"], dataFormats: [:], docDisplayNames: [:])
+			let (items, fmtsRequested, _) = try OpenId4VpUtils.parseDcql(testDcql,  idsToDocTypes: ["1": "urn:eu.europa.ec.eudi:pid:1"], dataFormats: [:], docDisplayNames: [:])
 			if let items, let docType = items.first?.key, let nsItems = items.first?.value.first {
 				print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map { $0.elementIdentifier })
 				#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
@@ -90,22 +90,22 @@ struct EudiWalletKitTests {
 	let jwkThumbprint: String = "h71LdVmq7J0bIxzn-HYE9dBzj5Tmu-qJ5Ocfnvp3pqQ"
 
 	@Test("Generate OpenId4Vp Handover") func testGenerateOpenId4VpHandover() {
-		let openid4VpHandover = Openid4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: nil)
+		let openid4VpHandover = OpenId4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: nil)
 		#expect(ANNEX_B_OPENID4VP_HANDOVER == openid4VpHandover.encode().toHexString().uppercased())
 	}
 
 	@Test func testGenerateSessionTranscript() {
-		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: nil).encode(options: CBOROptions())
+		let sessionTranscript = OpenId4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: nil).encode(options: CBOROptions())
 		#expect(ANNEX_B_SESSION_TRANSCRIPT == sessionTranscript.toHexString().uppercased())
 	}
 
 	@Test("Generate OpenId4Vp Handover with JwkThumbprint") func testGenerateOpenId4VpHandoverWithJwkThumbprint() {
-		let openid4VpHandover = Openid4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint)
+		let openid4VpHandover = OpenId4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint)
 		#expect(ANNEX_C_OPENID4VP_HANDOVER == openid4VpHandover.encode().toHexString().uppercased())
 	}
 
 	@Test("Generate Session Transcript with JwkThumbprint") func testGenerateSessionTranscriptWithJwkThumbprint() {
-		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint).encode(options: CBOROptions())
+		let sessionTranscript = OpenId4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint).encode(options: CBOROptions())
 		#expect(ANNEX_C_SESSION_TRANSCRIPT == sessionTranscript.toHexString().uppercased())
 	}
 

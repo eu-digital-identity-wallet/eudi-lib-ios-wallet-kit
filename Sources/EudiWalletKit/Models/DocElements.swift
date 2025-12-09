@@ -165,7 +165,7 @@ extension SignedSDJWT {
 
 extension eudi_lib_sdjwt_swift.ClaimPathElement {
 	public var claimName: String? {
-		if case .claim(let name) = self { name } else { nil }
+		if case .claim(let name) = self { name } else if case .arrayElement(let index) = self { String(index) } else { nil }
 	}
 }
 
