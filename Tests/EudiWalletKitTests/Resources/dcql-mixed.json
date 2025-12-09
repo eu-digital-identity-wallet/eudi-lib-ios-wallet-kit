@@ -1,69 +1,64 @@
 {
-	"type": "vp_token",
-	"dcql_query": {
-	  "credentials": [
+	"credentials": [
+	{
+		"id": "query_0",
+		"format": "vc+sd-jwt",
+		"meta": {
+		"vct_values": [
+			"urn:eu.europa.ec.eudi:pid:1"
+		]
+		},
+		"claims": [
 		{
-		  "id": "query_0",
-		  "format": "vc+sd-jwt",
-		  "meta": {
-			"vct_values": [
-			  "urn:eu.europa.ec.eudi:pid:1"
+			"path": [
+			"family_name"
 			]
-		  },
-		  "claims": [
-			{
-			  "path": [
-				"family_name"
-			  ]
-			},
-			{
-			  "path": [
-				"given_name"
-			  ]
-			},
-			{
-			  "path": [
-				"age_equal_or_over",
-				"18"
-			  ]
-			},
-			{
-			  "path": [
-				"address",
-				"postal_code"
-			  ]
-			},
-			{
-			  "path": [
-				"address",
-				"street_address"
-			  ]
-			}
-		  ]
 		},
 		{
-		  "id": "query_1",
-		  "format": "mso_mdoc",
-		  "meta": {
-			"doctype_value": "org.iso.18013.5.1.mDL"
-		  },
-		  "claims": [
-			{
-			  "namespace": "org.iso.18013.5.1",
-			  "claim_name": "family_name"
-			},
-			{
-			  "namespace": "org.iso.18013.5.1",
-			  "claim_name": "given_name"
-			},
-			{
-			  "namespace": "org.iso.18013.5.1",
-			  "claim_name": "age_over_18"
-			}
-		  ]
+			"path": [
+			"given_name"
+			]
+		},
+		{
+			"path": [
+			"age_equal_or_over",
+			"18"
+			]
+		},
+		{
+			"path": [
+			"address",
+			"postal_code"
+			]
+		},
+		{
+			"path": [
+			"address",
+			"street_address"
+			]
 		}
-	  ]
+		]
 	},
-	"nonce": "fe9b8871-727b-444b-8943-5ba33f357f15",
-	"request_uri_method": "get"
-  }
+	{
+		"id": "query_1",
+		"format": "mso_mdoc",
+		"meta": {
+		"doctype_value": "org.iso.18013.5.1.mDL"
+		},
+		"claims": [
+		{
+			"namespace": "org.iso.18013.5.1",
+			"claim_name": "family_name"
+		},
+		{
+			"namespace": "org.iso.18013.5.1",
+			"claim_name": "given_name"
+		},
+		{
+			"namespace": "org.iso.18013.5.1",
+			"claim_name": "age_over_18"
+		}
+		]
+	}
+	]
+}
