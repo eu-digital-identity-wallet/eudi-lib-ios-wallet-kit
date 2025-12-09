@@ -33,9 +33,7 @@ struct EudiWalletKitTests {
 	func testParseDcql(format: DocDataFormat) throws {
 		if format == .cbor { return } // skip cbor sample due to legacy schema differences
 		let testDcqlData = Data(name: "dcql-\(format.rawValue)", ext: "json", from: Bundle.module)!
-		struct Wrapper: Decodable { let dcql_query: DCQL }
-		let wrapper = try JSONDecoder().decode(Wrapper.self, from: testDcqlData)
-		let testDcql = wrapper.dcql_query
+		let testDcql = try JSONDecoder().decode(DCQL.self, from: testDcqlData)
 		do {
 			let (items, fmtsRequested, _) = try Openid4VpUtils.parseDcql(testDcql,  idsToDocTypes: ["1": "urn:eu.europa.ec.eudi:pid:1"], dataFormats: [:], docDisplayNames: [:])
 			if let items, let docType = items.first?.key, let nsItems = items.first?.value.first {
@@ -91,7 +89,7 @@ struct EudiWalletKitTests {
 	/// ```
 	let jwkThumbprint: String = "h71LdVmq7J0bIxzn-HYE9dBzj5Tmu-qJ5Ocfnvp3pqQ"
 
-	@Test func testGenerateOpenId4VpHandover() {
+	@Test("Generate OpenId4Vp Handover") func testGenerateOpenId4VpHandover() {
 		let openid4VpHandover = Openid4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: nil)
 		#expect(ANNEX_B_OPENID4VP_HANDOVER == openid4VpHandover.encode().toHexString().uppercased())
 	}
@@ -101,17 +99,17 @@ struct EudiWalletKitTests {
 		#expect(ANNEX_B_SESSION_TRANSCRIPT == sessionTranscript.toHexString().uppercased())
 	}
 
-	@Test func testGenerateOpenId4VpHandoverWithJwkThumbprint() {
+	@Test("Generate OpenId4Vp Handover with JwkThumbprint") func testGenerateOpenId4VpHandoverWithJwkThumbprint() {
 		let openid4VpHandover = Openid4VpUtils.generateOpenId4VpHandover(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint)
 		#expect(ANNEX_C_OPENID4VP_HANDOVER == openid4VpHandover.encode().toHexString().uppercased())
 	}
 
-	@Test func testGenerateSessionTranscriptWithJwkThumbprint() {
+	@Test("Generate Session Transcript with JwkThumbprint") func testGenerateSessionTranscriptWithJwkThumbprint() {
 		let sessionTranscript = Openid4VpUtils.generateSessionTranscript(clientId: clientId, responseUri: responseUri, nonce: nonce, jwkThumbprint: jwkThumbprint).encode(options: CBOROptions())
 		#expect(ANNEX_C_SESSION_TRANSCRIPT == sessionTranscript.toHexString().uppercased())
 	}
 
-	@Test func testJOSESigner() throws {
+	@Test("Signature with JOSE Signer") func testJOSESigner() throws {
 		let keyAgreement = P256.KeyAgreement.PrivateKey()
 		let secKey = try keyAgreement.toSecKey()
 		let signingInput = "Hello, World!".data(using: .utf8)!
