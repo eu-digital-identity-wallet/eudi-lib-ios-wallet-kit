@@ -393,7 +393,7 @@ struct DcqlQueryTests {
 		#expect(result.count == 1, "Should have one credential")
 		#expect(result["pid_cred"]?.count == 4, "Should select first claim set with 4 claims")
 		// Verify it's the first set by checking for locality/region (not postal_code)
-		let paths = result["pid_cred"]?.map { $0.value.map(\.claimName).joined(separator: ".") } ?? []
+		let paths = result["pid_cred"]?.map { $0.path.value.map(\.claimName).joined(separator: ".") } ?? []
 		#expect(paths.contains("locality"), "Should have locality from first set")
 		#expect(paths.contains("region"), "Should have region from first set")
 	}

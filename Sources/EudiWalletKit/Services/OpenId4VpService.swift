@@ -159,10 +159,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 			self.dcql = dcql
 			deviceRequestBytes = try? JSONEncoder().encode(dcql)
-			let (items, fmtsReq, imap) = try OpenId4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
-			formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
+			let (fmtsReq, imap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
+			formatsRequested = fmtsReq; inputDescriptorMap = imap
 			decodeDocuments()
 			let claimMapPath = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+			requestItems = OpenId4VpUtils.getRequestItems(claimMapPath, idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
 		}
 		self.transactionData = vp.transactionData
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }

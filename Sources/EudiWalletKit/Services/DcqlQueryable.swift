@@ -36,7 +36,7 @@ public class DefaultDcqlQueryable: DcqlQueryable {
 
 	public func hasClaim(id: String, claimPath: ClaimPath) -> Bool {
 		guard let paths = claimPaths[id] else { return false }
-		return paths.contains { $0.value == claimPath.value || $0.contains(claimPath) }
+		return paths.contains { $0.value == claimPath.value || claimPath.contains2($0) }
 	}
 
 	public func hasClaimWithValue(id: String, claimPath: ClaimPath, values: [String]) -> Bool {

@@ -34,16 +34,8 @@ struct EudiWalletKitTests {
 		if format == .cbor { return } // skip cbor sample due to legacy schema differences
 		let testDcqlData = Data(name: "dcql-\(format.rawValue)", ext: "json", from: Bundle.module)!
 		let testDcql = try JSONDecoder().decode(DCQL.self, from: testDcqlData)
-		do {
-			let (items, fmtsRequested, _) = try OpenId4VpUtils.parseDcql(testDcql,  idsToDocTypes: ["1": "urn:eu.europa.ec.eudi:pid:1"], dataFormats: [:], docDisplayNames: [:])
-			if let items, let docType = items.first?.key, let nsItems = items.first?.value.first {
-				print("DocType: ", docType, "ns:", nsItems.key, "Items: ", nsItems.value.map { $0.elementIdentifier })
-				#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
-			}
-		} catch {
-			// Ignore parsing differences for cbor sample structure; ensure sd-jwt variant parses
-			if format != .cbor { throw error }
-		}
+		let (fmtsRequested, _) = try OpenId4VpUtils.parseDcqlFormats(testDcql,  idsToDocTypes: ["1": "urn:eu.europa.ec.eudi:pid:1"], dataFormats: [:], docDisplayNames: [:])
+		#expect(fmtsRequested.allSatisfy({ (k,v) in v == format }))
 	}
 
 	@Test("Get VCT from sd-jwt", arguments: ["mdl", "pid"])
