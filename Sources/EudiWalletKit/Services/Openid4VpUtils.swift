@@ -222,7 +222,7 @@ extension OpenId4VpUtils {
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable) throws -> [String: [ClaimsQuery]] {
 		var result: [String: [ClaimsQuery]] = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: (matchedCredId: String, claimPaths: [ClaimsQuery])] = [:]
+		var credentialQueryResults: [QueryId: (matchedCredId: String, claimQueries: [ClaimsQuery])] = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
@@ -256,13 +256,13 @@ extension OpenId4VpUtils {
 								// If the credential ID already exists, merge claim paths
 								if let existingPaths = result[match.matchedCredId] {
 									// Merge and deduplicate claim paths
-									let mergedPaths = existingPaths + match.claimPaths
+									let mergedPaths = existingPaths + match.claimQueries
 									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { pathValue in
 										mergedPaths.first { $0.path.value == pathValue }
 									}
 									result[match.matchedCredId] = uniquePaths
 								} else {
-									result[match.matchedCredId] = match.claimPaths
+									result[match.matchedCredId] = match.claimQueries
 								}
 							}
 						}
@@ -276,7 +276,7 @@ extension OpenId4VpUtils {
 			}
 		} else {
 			for (_, match) in credentialQueryResults {
-				result[match.matchedCredId] = match.claimPaths
+				result[match.matchedCredId] = match.claimQueries
 			}
 		}
 		if result.isEmpty {
