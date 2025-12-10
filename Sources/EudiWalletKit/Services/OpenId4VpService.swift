@@ -159,9 +159,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 			self.dcql = dcql
 			deviceRequestBytes = try? JSONEncoder().encode(dcql)
-			decodeDocuments()
 			let (items, fmtsReq, imap) = try OpenId4VpUtils.parseDcql(dcql, idsToDocTypes: idsToDocTypes, dataFormats: dataFormats, docDisplayNames: docDisplayNames, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; requestItems = items
+			decodeDocuments()
+			let claimMapPath = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		}
 		self.transactionData = vp.transactionData
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
@@ -204,9 +205,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		var claimPaths = [String: [ClaimPath]]()
 		var claimValues = [String: [ClaimPath: [String]]]()
-		var paths = [ClaimPath]();	var values = [ClaimPath: [String]]()
+		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
 		// make paths and values for cbor documents
-		for (docId, issuerSigned) in docsCbor {
+		for (docId, issuerSigned) in docsCbor ?? [:] {
 			paths.removeAll(); values.removeAll()
 			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
 			for (ns, items) in isNs.nameSpaces {
@@ -219,7 +220,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			claimPaths[docId] = paths
 			claimValues[docId] = values
 		}
-		for (docId, sdjwt) in docsSdJwt {
+		for (docId, sdjwt) in docsSdJwt ?? [:] {
 			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
 			paths.removeAll(); values.removeAll()
 			for (p, disclosures) in allPathsDict {

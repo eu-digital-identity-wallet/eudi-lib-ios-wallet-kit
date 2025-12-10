@@ -332,7 +332,7 @@ class PrecomputedSigner: JOSESwift.SignerProtocol {
 
 extension DocClaim {
 	var claimPath: ClaimPath {
-		ClaimPath(path.map { ClaimPathElement.claim(name: $0) })
+		ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
 	}
 	var claimPaths: [ClaimPath] {
 		if let children { children.map(\.claimPath) } else { [claimPath] }

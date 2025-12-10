@@ -55,10 +55,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved successfully")
-		#expect(result?.count == 1, "Should have one credential query result")
-		#expect(result?["cred1"]?.count == 2, "Should have both claim paths for cred1")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential query result")
+		#expect(result["cred1"]?.count == 2, "Should have both claim paths for cred1")
 	}
 
 	@Test("DCQL simple query - failure", arguments: ["dcql-vehicle"])
@@ -76,8 +75,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should return nil when not all claims are available")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL multiple pid with credential_sets - pass with first option", arguments: ["dcql-pid-multiple"])
@@ -98,10 +98,9 @@ struct DcqlQueryTests {
 			]
 		)
 
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with first option")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 3, "Should have all three claims for pid")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 3, "Should have all three claims for pid")
 	}
 
 	@Test("DCQL multiple credentials with credential_sets - pass with third option (multiple creds)", arguments: ["dcql-pid-multiple"])
@@ -127,11 +126,10 @@ struct DcqlQueryTests {
 			]
 		)
 
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with third option (two credentials)")
-		#expect(result?.count == 2, "Should have two credentials")
-		#expect(result?["reduced_id"]?.count == 2, "Should have two claims for reduced_id")
-		#expect(result?["residence"]?.count == 3, "Should have three claims for residence")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 2, "Should have two credentials")
+		#expect(result["reduced_id"]?.count == 2, "Should have two claims for reduced_id")
+		#expect(result["residence"]?.count == 3, "Should have three claims for residence")
 	}
 
 	@Test("DCQL multiple credentials with credential_sets - pass with optional credential", arguments: ["dcql-pid-multiple"])
@@ -156,13 +154,12 @@ struct DcqlQueryTests {
 			]
 		)
 
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved")
-		#expect(result?.count == 2, "Should have two credentials including optional")
-		#expect(result?["pid_cred"] != nil, "Should have pid credential")
-		#expect(result?["rewards"] != nil, "Should have optional rewards credential")
-		#expect(result?["pid_cred"]?.count == 3, "Should have three claims for pid_cred")
-		#expect(result?["rewards"]?.count == 1, "Should have one claim for rewards")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 2, "Should have two credentials including optional")
+		#expect(result["pid_cred"] != nil, "Should have pid credential")
+		#expect(result["rewards"] != nil, "Should have optional rewards credential")
+		#expect(result["pid_cred"]?.count == 3, "Should have three claims for pid_cred")
+		#expect(result["rewards"]?.count == 1, "Should have one claim for rewards")
 	}
 
 
@@ -181,8 +178,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when required credential_set is not satisfied")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL multiple credentials with credential_sets - fail when partial claims", arguments: ["dcql-pid-multiple"])
@@ -203,8 +201,9 @@ struct DcqlQueryTests {
 			]
 		)
 
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when not all required claims are available")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL mdl-or-photoid - pass with mDL", arguments: ["dcql-mdl-or-photoid"])
@@ -224,10 +223,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with mDL")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["mdl_cred"]?.count == 3, "Should have three identity claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["mdl_cred"]?.count == 3, "Should have three identity claims")
 	}
 
 	@Test("DCQL mdl-or-photoid - pass with photo card", arguments: ["dcql-mdl-or-photoid"])
@@ -247,10 +245,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with photo card")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["photo_cred"]?.count == 3, "Should have three identity claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["photo_cred"]?.count == 3, "Should have three identity claims")
 	}
 
 	@Test("DCQL mdl-or-photoid - pass with photo card and address", arguments: ["dcql-mdl-or-photoid"])
@@ -272,10 +269,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with photo card including optional address")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["photo_cred"]?.count == 5, "Should have identity and address claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["photo_cred"]?.count == 5, "Should have identity and address claims")
 	}
 
 	@Test("DCQL mdl-or-photoid - pass with both mDL and photo card prefers first", arguments: ["dcql-mdl-or-photoid"])
@@ -301,10 +297,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved")
-		#expect(result?.count == 1, "Should have one credential (first option)")
-		#expect(result?["mdl_cred"] != nil, "Should prefer mDL as first option")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential (first option)")
+		#expect(result["mdl_cred"] != nil, "Should prefer mDL as first option")
 	}
 
 
@@ -325,8 +320,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when required identity claims are missing")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL mdl-or-photoid - pass without optional address", arguments: ["dcql-mdl-or-photoid"])
@@ -347,10 +343,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should succeed without optional address")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["mdl_cred"]?.count == 3, "Should have only identity claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["mdl_cred"]?.count == 3, "Should have only identity claims")
 	}
 
 	@Test("DCQL claim_sets - pass with second claim set", arguments: ["dcql-claim-sets"])
@@ -370,10 +365,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with second claim set")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 3, "Should have three claims from second set")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 3, "Should have three claims from second set")
 	}
 
 	@Test("DCQL claim_sets - pass with all claims (prefers first set)", arguments: ["dcql-claim-sets"])
@@ -395,12 +389,11 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 4, "Should select first claim set with 4 claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 4, "Should select first claim set with 4 claims")
 		// Verify it's the first set by checking for locality/region (not postal_code)
-		let paths = result?["pid_cred"]?.map { $0.value.compactMap(\.claimName).joined(separator: ".") } ?? []
+		let paths = result["pid_cred"]?.map { $0.value.map(\.claimName).joined(separator: ".") } ?? []
 		#expect(paths.contains("locality"), "Should have locality from first set")
 		#expect(paths.contains("region"), "Should have region from first set")
 	}
@@ -423,8 +416,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when no complete claim set is available")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL claim_sets - fail with wrong credential type", arguments: ["dcql-claim-sets"])
@@ -444,8 +438,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when credential type doesn't match")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL query values - pass with exact value matches", arguments: ["dcql-query-values"])
@@ -472,10 +467,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with matching values")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
 	}
 
 	@Test("DCQL query values - pass with alternative postal code", arguments: ["dcql-query-values"])
@@ -502,10 +496,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved with alternative postal code")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
 	}
 
 	@Test("DCQL query values - fail with wrong last name", arguments: ["dcql-query-values"])
@@ -532,8 +525,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when last_name value doesn't match")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL query values - fail with wrong postal code", arguments: ["dcql-query-values"])
@@ -560,8 +554,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when postal_code doesn't match any option")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL query values - fail when missing value constraint claims", arguments: ["dcql-query-values"])
@@ -587,8 +582,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result == nil, "Query should fail when claim with value constraint is missing")
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
 	}
 
 	@Test("DCQL query values - pass with multiple matching values", arguments: ["dcql-query-values"])
@@ -615,10 +611,9 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-		let result = OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result != nil, "Query should be resolved when credential has multiple matching values")
-		#expect(result?.count == 1, "Should have one credential")
-		#expect(result?["pid_cred"]?.count == 4, "Should have all four claims")
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		#expect(result.count == 1, "Should have one credential")
+		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
 	}
 
 }
