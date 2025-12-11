@@ -1,5 +1,5 @@
 {
-  "originHash" : "84a3239b2e2dbfe04107e4d855a2444ef4ee2015354f3181b61543acbb295bba",
+  "originHash" : "267d73ba6967026aecf6b1e9088957dd7100a3828fac5ff0f4834140467655b0",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-siop-openid4vp-swift.git",
       "state" : {
-        "branch" : "feature/remove-siop",
-        "revision" : "4b1ee74599e18d44f7335e8b693169bc92d46cca"
+        "revision" : "8dff156ce71d384cb783a7c468c055e581c9f157",
+        "version" : "0.9.4"
       }
     },
     {
