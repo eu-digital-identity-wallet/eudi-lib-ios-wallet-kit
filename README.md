@@ -71,7 +71,6 @@ It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
 - Presentation Exchange v2.0.0 - Published
 - [OpenID4VP – 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
-- [SIOPv2 – Draft 13](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html)
 - [OpenID4VCI – 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
 
 ### Disclaimer
@@ -109,8 +108,21 @@ The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-walle
 The wallet developer can customize cryptographic key operations by passing `SecureArea` instances to the wallet, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas. The wallet developer can specify key create options per doc-type such as curve type, secure area name, and key unlock policy.
 
 ```swift
-let wallet = try! EudiWallet(serviceName: "my_wallet_app",
-   trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!] )
+// Basic initialization
+let wallet = try! EudiWallet(
+    serviceName: "my_wallet_app",
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
+)
+
+// With OpenID4VP configuration
+let openId4VpConfig = OpenId4VpConfiguration(
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri]
+)
+let wallet = try! EudiWallet(
+    serviceName: "my_wallet_app",
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    openId4VpConfiguration: openId4VpConfig
+)
 ```
 
 ### OpenID4VCI Configuration
