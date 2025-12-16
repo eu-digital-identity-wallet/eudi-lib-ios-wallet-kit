@@ -43,7 +43,6 @@ public actor OpenId4VCIService {
 	var storageService: any DataStorageService
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
-	var keyAttestationJwt: KeyAttestationJWT?
 
 	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) throws {
 		logger = Logger(label: "OpenId4VCI")
@@ -92,17 +91,14 @@ public actor OpenId4VCIService {
 		} else if config.keyAttestationsConfig != nil, configuration.supportsJwtProofTypeWithAttestation {
 			throw PresentationSession.makeError(str: "JWT proof with attestation is not yet supported in wallet")
 		}
-		keyAttestationJwt = nil
 		let bindingKeys = try publicKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: funcKeyAttestationJWT) }
-		keyAttestationJwt = nil
 		return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
 	}
 
 	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], nonce: String?) async throws -> KeyAttestationJWT {
-		if let keyAttestationJwt { return keyAttestationJwt }
 		let jwt = try await self.config.keyAttestationsConfig!.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce!)
-		keyAttestationJwt = try .init(jws: .init(compactSerialization: jwt))
-		return keyAttestationJwt!
+		let keyAttestationJwt: KeyAttestationJWT = try .init(jws: .init(compactSerialization: jwt))
+		return keyAttestationJwt
 	}
 
 	func setConfiguration(_ config: OpenId4VciConfiguration) {
