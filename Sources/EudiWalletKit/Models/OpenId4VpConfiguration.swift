@@ -18,6 +18,7 @@ import Foundation
 import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
+import enum OpenID4VP.ResponseEncryptionConfiguration
 
 /// Client identifier scheme for verifier authentication
 ///
@@ -63,12 +64,17 @@ public enum ClientIdScheme: Sendable {
 /// the OpenID4VP specification, which enables the presentation of verifiable credentials
 /// to relying parties in a standardized way.
 public struct OpenId4VpConfiguration: Sendable {
-	let clientIdSchemes: [ClientIdScheme]
+	public let clientIdSchemes: [ClientIdScheme]
+	public let responseEncryptionConfiguration: ResponseEncryptionConfiguration?
+
 	public init() {
 		self.clientIdSchemes = [.x509SanDns, .x509Hash, .redirectUri]
+		self.responseEncryptionConfiguration = nil
 	}
-	public init(clientIdSchemes: [ClientIdScheme]) {
+
+	public init(clientIdSchemes: [ClientIdScheme], responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil) {
 		self.clientIdSchemes = clientIdSchemes
+		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 	}
 }
 
