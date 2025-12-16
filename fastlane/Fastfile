@@ -1,0 +1,58 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Runs unit tests"
+  lane :tests do
+
+    params = {
+      package_path: '.',
+      scheme: 'EudiWalletKit',
+      devices: ['iPhone Air'],
+      result_bundle: true
+    }
+
+    if ENV['CI'] 
+      params[:xcargs] = "-skipPackagePluginValidation"
+    end
+
+    run_tests(params)
+  end
+
+  desc "Code coverage"
+  lane :code_coverage do
+    
+    # You can convert the generated report to JSON using the following command:
+    # xcrun xccov view xcov_output/xccovreport-0.xccovreport --json
+    params = {
+      package_path: '.',
+      scheme: 'EudiWalletKit',
+      devices: ['iPhone Air'],
+      output_directory: "xcov_output",
+      result_bundle: true,
+      parallel_testing: false,
+      xcodebuild_formatter: "xcbeautify"
+    }
+
+    if ENV['CI']
+      params[:xcargs] = "-skipPackagePluginValidation"
+    end
+
+    run_tests(params)
+
+    xcov(
+      scheme: "EudiWalletKit",
+      output_directory: "xcov_output",
+      is_swift_package: true,
+      minimum_coverage_percentage: 50.0,
+      include_targets: "EudiWalletKit"
+    )
+    if ENV['CI'] != 'true'
+      sh 'open ../xcov_output/index.html'
+    end
+  end
+
+  before_all do
+    FileUtils.remove_dir '../xcov_output', true
+  end
+  
+end

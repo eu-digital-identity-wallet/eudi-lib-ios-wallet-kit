@@ -22,6 +22,7 @@ import MdocSecurity18013
 import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
+import JOSESwift
 import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 
@@ -161,15 +162,6 @@ extension Claim {
 	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description)) }
 }
 
-extension DocClaim {
-	var claimPath: ClaimPath {
-		ClaimPath(path.map { ClaimPathElement.claim(name: $0) })
-	}
-	var claimPaths: [ClaimPath] {
-		if let children { children.map(\.claimPath) } else { [claimPath] }
-	}
-}
-
 extension Array where Element == DocClaimMetadata {
 	func convertToCborClaimMetadata(_ uiCulture: String?) -> (displayNames: [NameSpace: [String: String]], mandatory: [NameSpace: [String: Bool]]) {
 		guard allSatisfy({ $0.claimPath.count > 1 }) else { return ([:], [:]) } // sanity check
@@ -259,7 +251,7 @@ extension JSON {
 			var a = [DocClaim]()
 			for (n,(key,subJson)) in enumerated() {
 				let isArray = type == .array
-				let n2 = if isArray { "" } else { key }
+				let n2 = if isArray { String(n) } else { key }
 				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
 				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimMetadata, uiCulture, cmd?.displayNames[key], cmd?.mandatory[key]) {
 					a.append(di)
@@ -294,7 +286,55 @@ extension JSON {
 	}
 }
 
+extension IdentityAndAccessManagementMetadata {
+  public var clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]? {
+    switch self {
+    case .oidc(let metaData):
+      return metaData.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+    case .oauth(let metaData):
+      return metaData.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+    }
+  }
+}
+
+extension ECPublicKey: @retroactive @unchecked Sendable {}
+
+extension BindingKey {
+
+  static func createSigner(with header: JWSHeader, and payload: Payload, for privateKey: SigningKeyProxy, and signatureAlgorithm: SignatureAlgorithm) async throws -> Signer {
+    if case let .secKey(secKey) = privateKey, let secKeySigner = Signer(signatureAlgorithm: signatureAlgorithm, key: secKey) {
+      return secKeySigner
+    } else if case let .custom(customAsyncSigner) = privateKey {
+      let headerData = header as DataConvertible
+      let signature = try await customAsyncSigner.signAsync(headerData.data(), payload.data())
+      let customSigner = PrecomputedSigner(signature: signature, algorithm: signatureAlgorithm)
+      return Signer(customSigner: customSigner)
+    } else {
+      throw ValidationError.error(reason: "Unable to create JWS signer")
+    }
+  }
+}
+
+class PrecomputedSigner: JOSESwift.SignerProtocol {
+  var algorithm: JOSESwift.SignatureAlgorithm
+  let signature: Data
+
+  init(signature: Data, algorithm: JOSESwift.SignatureAlgorithm) {
+    self.algorithm = algorithm
+    self.signature = signature
+  }
+
+  func sign(_ signingInput: Data) throws -> Data {
+    return signature
+  }
+}
 
 
-
-
+extension DocClaim {
+	var claimPath: ClaimPath {
+		ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
+	}
+	var claimPaths: [ClaimPath] {
+		if let children { children.map(\.claimPath) } else { [claimPath] }
+	}
+}

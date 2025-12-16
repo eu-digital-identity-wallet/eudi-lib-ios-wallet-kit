@@ -2,7 +2,7 @@ import Foundation
 import Logging
 import XCGLogger
 import MdocDataModel18013
-import SiopOpenID4VP
+import OpenID4VP
 import Copyable
 
 /// Transaction log.
