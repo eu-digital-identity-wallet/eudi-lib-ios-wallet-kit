@@ -1,3 +1,45 @@
+## v0.19.3
+- Fixed device authentication for OpenID4VP. Session transcript calculation was fixed.
+
+## v0.19.2
+- Removed SIOPv2 support.
+- Fixed OpenID4VP bug for direct post response mode.
+- DCQL query handling improvements (supports claim_sets and credentials_sets).
+
+## v0.19.1
+- SD-JWT data model: Include index in path for array child elements
+
+## v.0.19.0
+- **Client Attestation Support**: Added support for Wallet Instance Attestation and Wallet Unit Attestation
+  - **New struct**: `KeyAttestationConfig` for configuring client attestation
+    - Property `walletAttestationsProvider: WalletAttestationsProvider` - Provider for wallet and key attestations
+    - Property `popKeyOptions: KeyOptions?` - Optional key options for PoP key generation
+    - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
+  
+  - **New protocol**: `WalletAttestationsProvider` with two required methods:
+    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet instance attestation JWT for a given public key
+    - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain unit attestation JWT for multiple keys 
+
+- **OpenId4VciConfiguration changes**:
+  - **Removed** `client: Client` parameter
+  - **Added** `clientId: String?` parameter (defaults to "wallet-dev")
+  - **Added** `keyAttestationsConfig: KeyAttestationConfig?` parameter for client attestation configuration
+
+```swift
+let config = OpenId4VciConfiguration(
+  credentialIssuerURL: "https://issuer.example.com",
+  clientId: "my-wallet-client",
+  keyAttestationsConfig: KeyAttestationConfig(
+    walletAttestationsProvider: MyAttestationProvider(),
+    popKeyDuration: 300
+  )
+)
+```
+
+## v0.18.5
+- VP Handover and SessionTranscript by @craigaps 
+- eudi-lib-sdjwt-swift dependency updated to version 0.10.1
+
 ## v0.18.4
 
 ### Breaking Changes to Public API
