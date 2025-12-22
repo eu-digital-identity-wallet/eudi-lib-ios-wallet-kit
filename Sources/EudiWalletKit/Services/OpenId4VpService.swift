@@ -131,7 +131,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	func handleRequestData(_ rrd: ResolvedRequestData) throws -> UserRequestInfo {
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
-		var jwkThumbprint: String?  = nil
+		var jwkThumbprint: Data?  = nil
 
 		if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}),
 			let x = key.x, let xd = Data(base64URLEncoded: x),
@@ -143,15 +143,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 			// Generate a jwkThumbprint if possible.
 			let publicKey = ECPublicKey(crv: ecCrvType, x: x , y: y)
-			jwkThumbprint = try? publicKey.thumbprint(algorithm: .SHA256)
-			logger.info("Generated jwkThumbprint: \(jwkThumbprint ?? "Failed")")
+			jwkThumbprint = (try? publicKey.thumbprint(algorithm: .SHA256)).flatMap { Data(base64URLEncoded: $0) }
+
 		}
 		// Add support for directPost.
 		let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else if case .directPost(let uri) = vp.responseMode { uri.absoluteString } else { "" }
 
 		vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
 		mdocGeneratedNonce = OpenId4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
-		sessionTranscript = OpenId4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
+		sessionTranscript = SessionTranscript(handOver: OpenId4VpUtils.generateOpenId4VpHandover(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint?.byteArray))
 
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		var requestItems: RequestItems?; var deviceRequestBytes: Data?
