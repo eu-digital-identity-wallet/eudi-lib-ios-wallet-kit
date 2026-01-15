@@ -25,7 +25,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "main",
-        "revision" : "502382a14b2c22ba2ac9f5aabb70f45b59bdc197"
+        "revision" : "08e854f65bf2905f126bed1415104c2526ccb6ec"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
         "branch" : "main",
-        "revision" : "f07cb668794a56a7ce53d735688ac3ea9d21ad6f"
+        "revision" : "aab22d8e458e79f371c6ccde8ab688fe274b4ec0"
       }
     },
     {
