@@ -1,5 +1,5 @@
 {
-  "originHash" : "02621a870c93f69f2fdd19413461ce8e661993bc76b7d48983a245ee14217634",
+  "originHash" : "00f62d4f3fe13158309d00a374ed2f60d65165d4b94425b74c98c1f8ece04a66",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -25,7 +25,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
         "branch" : "main",
-        "revision" : "6ef415a99a1dce1c766f98f9770b43037723588c"
+        "revision" : "502382a14b2c22ba2ac9f5aabb70f45b59bdc197"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
         "branch" : "main",
-        "revision" : "b3cd08ca7d6c783970ffd1932a90a65dd53ebbcc"
+        "revision" : "f07cb668794a56a7ce53d735688ac3ea9d21ad6f"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/beatt83/jose-swift.git",
       "state" : {
-        "revision" : "8d087c7d8333310449aff4c9eb2431fbb4f1eb9f",
-        "version" : "6.0.0"
+        "revision" : "13e5ae6f23ef1487b0dad72540eff414272bd7ca",
+        "version" : "6.0.2"
       }
     },
     {
@@ -123,8 +123,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "40d25bbb2fc5b557a9aa8512210bded327c0f60d",
-        "version" : "1.5.0"
+        "revision" : "810496cf121e525d660cd0ea89a758740476b85f",
+        "version" : "1.5.1"
       }
     },
     {
@@ -132,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-certificates.git",
       "state" : {
-        "revision" : "f4cd9e78a1ec209b27e426a5f5c693675f95e75a",
-        "version" : "1.15.0"
+        "revision" : "7d5f6124c91a2d06fb63a811695a3400d15a100e",
+        "version" : "1.17.1"
       }
     },
     {
@@ -150,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "e8d6eba1fef23ae5b359c46b03f7d94be2f41fed",
-        "version" : "3.12.3"
+        "revision" : "95ba0316a9b733e92bb6b071255ff46263bbe7dc",
+        "version" : "3.15.1"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "3d8596ed08bd13520157f0355e35caed215ffbfa",
-        "version" : "1.6.3"
+        "revision" : "7ee16e465622412764b0ff0c1301801dc71b8f61",
+        "version" : "1.9.0"
       }
     },
     {
@@ -204,8 +204,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git",
       "state" : {
-        "revision" : "1983f8e7d805d323b834846b1a7594a327729cbe",
-        "version" : "0.0.3"
+        "revision" : "d535b0836be52c846d87605adad1205445e4dc35",
+        "version" : "0.0.4"
       }
     },
     {

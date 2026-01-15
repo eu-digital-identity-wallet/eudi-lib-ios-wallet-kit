@@ -13,7 +13,6 @@ let package = Package(
 			targets: ["EudiWalletKit"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
 		.package(url: "https://github.com/crspybits/swift-log-file", from: "0.1.0"),
         .package(url: "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git", branch: "main"),
 		.package(url: "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git", branch: "main"),
@@ -36,7 +35,6 @@ let package = Package(
 				.product(name: "OpenID4VP", package: "eudi-lib-ios-openid4vp-swift"),
 				.product(name: "OpenID4VCI", package: "eudi-lib-ios-openid4vci-swift"),
 				.product(name: "eudi-lib-sdjwt-swift", package: "eudi-lib-sdjwt-swift"),
-				.product(name: "Logging", package: "swift-log"),
 				.product(name: "FileLogging", package: "swift-log-file"),
 				.product(name: "StatiumSwift", package: "eudi-lib-ios-statium-swift"),
 				.product(name: "Copyable", package: "SwiftCopyableMacro"),
