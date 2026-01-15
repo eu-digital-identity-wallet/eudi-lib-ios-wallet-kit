@@ -1,5 +1,5 @@
 {
-  "originHash" : "e59dced258576e3b9673ef67b4df0ea255739b244567a3e6ec6ca5b2517a4d19",
+  "originHash" : "02621a870c93f69f2fdd19413461ce8e661993bc76b7d48983a245ee14217634",
   "pins" : [
     {
       "identity" : "blueecc",
@@ -22,19 +22,19 @@
     {
       "identity" : "eudi-lib-ios-iso18013-data-model",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-model.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-model.git",
       "state" : {
-        "revision" : "a3e8f8991aaf5e51690cf30a3728c534174329c6",
-        "version" : "0.9.2"
+        "branch" : "main",
+        "revision" : "6ef415a99a1dce1c766f98f9770b43037723588c"
       }
     },
     {
       "identity" : "eudi-lib-ios-iso18013-data-transfer",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-data-transfer.git",
       "state" : {
-        "revision" : "1edd207667a3a6e0df59868fed059647c089332d",
-        "version" : "0.8.5"
+        "branch" : "main",
+        "revision" : "b3cd08ca7d6c783970ffd1932a90a65dd53ebbcc"
       }
     },
     {
