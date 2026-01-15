@@ -59,6 +59,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// If not-nil, logging to the specified log file name will be configured
 	public var logFileName: String? { didSet { try? initializeLogging() } }
+	public private(set) var zkSystemRepository: ZkSystemRepository?
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 	//public static let defaultOpenId4VCIConfig =
@@ -82,7 +83,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// ```swift
 	/// let wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!])
 	/// ```
-	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
+	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, zkSystemRepository: ZkSystemRepository? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
 
 		try Self.validateServiceParams(serviceName: serviceName)
 		self.serviceName = serviceName ?? Self.defaultServiceName
@@ -98,6 +99,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.networkingVci = OpenID4VCINetworking(networking: networking ?? URLSession.shared)
 		self.networkingVp = OpenID4VPNetworking(networking: networking ?? URLSession.shared)
 		self.logFileName = logFileName
+		self.zkSystemRepository = zkSystemRepository
 		let storageServiceObj = storageService ?? KeyChainStorageService(serviceName: self.serviceName, accessGroup: self.accessGroup)
 		storage = StorageManager(storageService: storageServiceObj, modelFactory: self.modelFactory)
 		if let secureAreas, !secureAreas.isEmpty {
@@ -451,7 +453,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.filter({$0.docType != nil}).map { ($0.id, $0.docType!) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(uiCulture)) })
 		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, StorageManager.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
-		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt)), documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, trustedCertificates: trustedReaderCertificates ?? [], deviceAuthMethod: deviceAuthMethod.rawValue, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs)
+		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt)), documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, trustedCertificates: trustedReaderCertificates ?? [], deviceAuthMethod: deviceAuthMethod.rawValue, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, zkSystemRepository: zkSystemRepository)
 		return (parameters, docs)
 	}
 
