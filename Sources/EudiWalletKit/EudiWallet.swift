@@ -59,7 +59,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// If not-nil, logging to the specified log file name will be configured
 	public var logFileName: String? { didSet { try? initializeLogging() } }
-	public private(set) var zkSystemRepository: ZkSystemRepository?
+	public var zkSystemRepository: ZkSystemRepository?
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 	//public static let defaultOpenId4VCIConfig =
