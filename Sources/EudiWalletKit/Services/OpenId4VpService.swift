@@ -235,7 +235,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
 	}
 
-/// Send response via openid4vp
+	/// Send response via openid4vp
 	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
