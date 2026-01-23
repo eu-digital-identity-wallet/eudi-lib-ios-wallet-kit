@@ -1,3 +1,16 @@
+## v0.19.4
+- **Dependency Updates**:
+  - Updated `eudi-lib-sdjwt-swift` to version [0.12.1](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.12.1)
+  - Updated `eudi-lib-ios-statium-swift` to version [0.3.1](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.3.1)
+
+- **Document Status Service Enhancements**:
+  - Added `clockSkew` parameter to `DocumentStatusService` initializer (default: 60 seconds) to handle time differences when validating status list tokens
+  - Updated status verification to use `clockSkew` parameter for improved reliability
+
+- **Client Attestation Refactoring**:
+  - Refactored PoP (Proof-of-Possession) constructor method in `OpenId4VciConfiguration`
+  - Renamed `makeDPoPConstructor` to `makePoPConstructor` and added a `PopUsage` parameter. Use attestation key options instead of DPoP-specific key options for the `.clientAttestation` case.
+  
 ## v0.19.3
 - Fixed device authentication for OpenID4VP. Session transcript calculation was fixed.
 

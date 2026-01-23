@@ -299,6 +299,17 @@ extension IdentityAndAccessManagementMetadata {
 
 extension ECPublicKey: @retroactive @unchecked Sendable {}
 
+extension CoseEcCurve {
+	init?(crvName: String) {
+		switch crvName {
+		case "P-256": self = .P256
+		case "P-384": self = .P384
+		case "P-512": self = .P521
+		default: return nil
+		}
+	}
+}
+
 extension BindingKey {
 
   static func createSigner(with header: JWSHeader, and payload: Payload, for privateKey: SigningKeyProxy, and signatureAlgorithm: SignatureAlgorithm) async throws -> Signer {
