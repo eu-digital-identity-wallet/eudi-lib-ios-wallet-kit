@@ -22,11 +22,13 @@ public actor DocumentStatusService {
 	let statusIdentifier: StatusIdentifier
 	let verifier: VerifyStatusListTokenSignature?
 	let date: Date?
+	let clockSkew: TimeInterval
 
-	public init(statusIdentifier: StatusIdentifier, date: Date = .now, verifier: VerifyStatusListTokenSignature? = nil) {
+	public init(statusIdentifier: StatusIdentifier, date: Date = .now, clockSkew: TimeInterval = 60, verifier: VerifyStatusListTokenSignature? = nil) {
 		self.statusIdentifier = statusIdentifier
 		self.verifier = verifier
 		self.date = date
+		self.clockSkew = clockSkew
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
@@ -35,13 +37,13 @@ public actor DocumentStatusService {
 		}
 		let getStatus = GetStatus()
 		let tokenFetcher = StatusListTokenFetcher(verifier: verifier ?? VerifyStatusListTokenSignatureIgnore())
-		let result = try await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims).get()
+		let result = try await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: clockSkew).get()
 		return result
 	}
 }
 
 struct VerifyStatusListTokenSignatureIgnore: VerifyStatusListTokenSignature {
-	func verify(statusListToken: String, format: StatusListTokenFormat,at: Date) throws {
+	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) {
 		// No verification logic, ignore the signature
 	}
 }

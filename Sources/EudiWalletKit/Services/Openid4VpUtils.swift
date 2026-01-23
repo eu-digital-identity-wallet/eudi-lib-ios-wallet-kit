@@ -107,7 +107,7 @@ class OpenId4VpUtils {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found") }
 		let allPaths = Array(allPathsDict.keys)
 		let query = Set(allPaths.filter { path in requestItems.contains(where: { r in r.claimPath.contains2(path) }) })
-		let presentedSdJwt = try await sdJwt.present(query: query)
+		let presentedSdJwt = try sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
 		guard let sdHash = digestCreator.hashAndBase64Encode(input: CompactSerialiser(signedSDJWT: presentedSdJwt).serialised) else { return nil }
@@ -150,18 +150,6 @@ extension ClaimPathElement {
 		if case .claim(let name) = self { name } else if case .arrayElement(let index) = self { String(index) } else { "" }
 	}
 }
-
-extension CoseEcCurve {
-	init?(crvName: String) {
-		switch crvName {
-		case "P-256": self = .P256
-		case "P-384": self = .P384
-		case "P-512": self = .P521
-		default: return nil
-		}
-	}
-}
-
 
 extension CredentialQuery {
 	public var docType: String? {

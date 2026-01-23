@@ -65,23 +65,24 @@ extension OpenId4VciConfiguration {
 		[JWSAlgorithm(.ES256), JWSAlgorithm(.ES384), JWSAlgorithm(.ES512), JWSAlgorithm(.RS256)]
 	}
 
-	func makeDPoPConstructor(keyId dpopKeyId: String?, algorithms: [JWSAlgorithm]?) async throws -> DPoPConstructor? {
+	/// Creates a PoP constructor based on the provided parameters and configuration.
+	func makePoPConstructor(popUsage: PopUsage, privateKeyId: String?, algorithms: [JWSAlgorithm]?, keyOptions: KeyOptions?) async throws -> DPoPConstructor? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		let privateKeyProxy: SigningKeyProxy
 		let publicKey: SecKey
 		let jwsAlgorithm: JWSAlgorithm
 		let jwk: any JWK
-		let keyId = dpopKeyId ?? UUID().uuidString
-		if let dpopKeyOptions {
-			// If dpopKeyOptions is specified, use it to determine key generation parameters
-			let secureArea = SecureAreaRegistry.shared.get(name: dpopKeyOptions.secureAreaName)
-			let ecCurve = dpopKeyOptions.curve
-			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: dpopKeyOptions.curve)
+		let keyId = privateKeyId ?? UUID().uuidString
+		if let keyOptions {
+			// If keyOptions is specified, use it to determine key generation parameters
+			let secureArea = SecureAreaRegistry.shared.get(name: keyOptions.secureAreaName)
+			let ecCurve = keyOptions.curve
+			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: keyOptions.curve)
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
 				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
 			jwsAlgorithm = jwsAlg
-			let publicCoseKey: CoseKey = if let dpopKeyId, !dpopKeyId.hasSuffix("_dpop"), let keyInfo = try? await secureArea.getKeyBatchInfo(id: dpopKeyId), dpopKeyOptions.secureAreaName == keyInfo.secureAreaName, dpopKeyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: dpopKeyId, index: 0, curve: ecCurve) { pck } else {
-				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: dpopKeyOptions)).first! }
+			let publicCoseKey: CoseKey = if let privateKeyId, popUsage != .dpop, let keyInfo = try? await secureArea.getKeyBatchInfo(id: privateKeyId), keyOptions.secureAreaName == keyInfo.secureAreaName, keyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) { pck } else {
+				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first! }
 			let unlockData = try await secureArea.unlockKey(id: keyId)
 			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
 			privateKeyProxy = .custom(signer)
@@ -96,7 +97,7 @@ extension OpenId4VciConfiguration {
 			// EC supported bit sizes are 256, 384, or 521. RS256 is 2048 bits.
 			let bits: Int = switch jwsAlgorithm.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; case JWSAlgorithm(.RS256).name: 2048; default: throw WalletError(description: "Unsupported DPoP algorithm: \(jwsAlgorithm.name)") }
 			let type: SecKey.KeyType = switch jwsAlgorithm.name { case JWSAlgorithm(.RS256).name: .rsa; default: .ellipticCurve }
-			let privateKey: SecKey = if let dpopKeyId, !dpopKeyId.hasSuffix("_dpop"), let pk = SecKey.getExistingKey(type: type, keyId: dpopKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: dpopKeyId) }
+			let privateKey: SecKey = if let privateKeyId, popUsage != .dpop, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
 			privateKeyProxy = .secKey(privateKey)
 			publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		}
@@ -116,7 +117,7 @@ extension OpenId4VciConfiguration {
 
 	private func makeAttestationClient(config: KeyAttestationConfig, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
 		let keyId = generatePopKeyId(credentialIssuerId: credentialIssuerId)
-		guard let dpopConstructor = try await makeDPoPConstructor(keyId: keyId, algorithms: algorithms) else {	 throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
+		guard let dpopConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else { throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
 		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: dpopConstructor.jwk)
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: dpopConstructor.algorithm.name) else {
 			throw WalletError(description: "Unsupported DPoP algorithm: \(dpopConstructor.algorithm.name) for client attestation")

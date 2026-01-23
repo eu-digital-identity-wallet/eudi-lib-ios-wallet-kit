@@ -65,25 +65,13 @@ struct EudiWalletKitTests {
 		#expect("org.iso.18013.5.1.mDL" == iss.issuerAuth.mso.docType)
 	}
 
-	let OPENID4VP_1_0_SESSION_TRANSCRIPT =
-		"83f6f682714f70656e494434565048616e646f7665725820048bc053c00442af9b8eed494cefdd9d95240d254b046b11b68013722aad38ac"
-
-	let clientId = "x509_san_dns:example.com"
-	let nonce = "exc7gBkxjx1rdc9udRrveKvSsJIq80avlXeLHhGwqtA"
-	let jwk = """
-		{
-		"kty": "EC",
-		"crv": "P-256",
-		"x": "DxiH5Q4Yx3UrukE2lWCErq8N8bqC9CHLLrAwLz5BmE0",
-		"y": "XtLM4-3h5o3HUH0MHVJV0kyq0iBlrBwlh8qEDMZ4-Pc",
-		"use": "enc",
-		"alg": "ECDH-ES",
-		"kid": "1"
-		}
-		"""
-	let responseUri = "https://example.com/response"
-
 	@Test("Generate OpenId4Vp Session Transcript with JwkThumbprint") func testGenerateOpenId4VpSessionTranscriptWithJwkThumbprint() {
+		let OPENID4VP_1_0_SESSION_TRANSCRIPT = "83f6f682714f70656e494434565048616e646f7665725820048bc053c00442af9b8eed494cefdd9d95240d254b046b11b68013722aad38ac"
+		let clientId = "x509_san_dns:example.com"
+		let nonce = "exc7gBkxjx1rdc9udRrveKvSsJIq80avlXeLHhGwqtA"
+		let jwk = "{\"kty\": \"EC\",\"crv\": \"P-256\",\"x\": \"DxiH5Q4Yx3UrukE2lWCErq8N8bqC9CHLLrAwLz5BmE0\",\"y\": \"XtLM4-3h5o3HUH0MHVJV0kyq0iBlrBwlh8qEDMZ4-Pc\",\"use\": \"enc\",\"alg\": \"ECDH-ES\",\"kid\": \"1\"}"
+		let responseUri = "https://example.com/response"
+
 		let jwkData = jwk.data(using: .utf8)!
 		let jwkObj = try! ECPublicKey(data: jwkData)
 		let jwkThumbprint = (try? jwkObj.thumbprint(algorithm: .SHA256)).flatMap { Data(base64URLEncoded: $0) }
