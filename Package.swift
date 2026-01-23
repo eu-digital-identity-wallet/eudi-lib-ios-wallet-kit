@@ -20,7 +20,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.12.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift.git", exact: "0.19.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",exact: "0.19.2"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git", exact: "0.2.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git", exact: "0.3.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git", from: "0.0.3")
 	],
 	targets: [
