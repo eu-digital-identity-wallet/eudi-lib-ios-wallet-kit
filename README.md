@@ -177,7 +177,9 @@ struct MyAttestationProvider: WalletAttestationsProvider {
     func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
         // Obtain key attestation JWT for multiple keys
         // The nonce parameter should be included if provided by the issuer
-        return try await attestationService.getKeysAttestation(for: keys, nonce: nonce)
+        var params: [String: Any] = ["keys": keys]
+        if let nonce { params["nonce"] = nonce }
+        return try await attestationService.getKeysAttestation(params: params)
     }
 }
 
