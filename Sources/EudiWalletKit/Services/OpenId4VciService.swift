@@ -112,8 +112,7 @@ public actor OpenId4VCIService {
 		if funcKeyAttestationJWT == nil {
 			bindingKey = .jwt(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: config.clientId)
 		} else {
-			//bindingKey = try! .jwtKeyAttestation(algorithm: JWSAlgorithm(algType), keyAttestationJWT: funcKeyAttestationJWT!, keyIndex: UInt(index), privateKey: .custom(signer), issuer: config.clientId)
-			bindingKey = .attestation(keyAttestationJWT: funcKeyAttestationJWT!)
+			bindingKey = try! .jwtKeyAttestation(algorithm: JWSAlgorithm(algType), keyAttestationJWT: funcKeyAttestationJWT!, keyIndex: UInt(index), privateKey: .custom(signer), issuer: config.clientId)
 		}
 		return bindingKey
 	}
@@ -241,17 +240,11 @@ public actor OpenId4VCIService {
 		guard case .authorized(let authorized) = authorizedOutcome else {
 			throw PresentationSession.makeError(str: "Invalid authorized request outcome")
 		}
-		do {
-			let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
-			logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
-			let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys, publicKeys: publicKeys)
-			// logger.info("Credential str:\n\(str)")
-			return res
-		} catch {
-			// logger.error("Failed to issue document with scope \(ci.scope)")
-			logger.info("Exception: \(error)")
-			return nil
-		}
+		let id = configuration.configurationIdentifier.value; let sc = configuration.scope; let dn = configuration.display.getName(uiCulture) ?? ""
+		logger.info("Starting issuing with identifer \(id), scope \(sc ?? ""), displayName: \(dn)")
+		let res = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys, publicKeys: publicKeys)
+		// logger.info("Credential str:\n\(str)")
+		return res
 	}
 
 	static func makeMetadataResolver(_ networking: any Networking) -> CredentialIssuerMetadataResolver {
@@ -450,8 +443,9 @@ public actor OpenId4VCIService {
 
 			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: scope,  supportsAttestationProofType: attestProofType != nil, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation,  supportsJwtProofTypeWithoutAttestation: supportsJwtProofTypeWithoutAttestation, credentialSigningAlgValuesSupported: jwtProofType?.algorithms ?? [], dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: sdJwtVc.credentialMetadata?.claims ?? [], format: .sdjwt, defaultCredentialOptions: getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance))
 		}
-		logger.error("No credential for \(docType ?? vct ?? identifier ?? ""). Currently supported credentials: \(credentialsSupported.keys)")
-		throw WalletError(description: "Issuer does not support docType or scope or identifier \(docType ?? vct ?? identifier ?? "")")
+		let requestedParams = [docType.map { "docType: \($0)" }, vct.map { "vct: \($0)" }, identifier.map { "identifier: \($0)" }].compactMap { $0 }.joined(separator: ", ")
+		logger.error("No credential configuration found with \(requestedParams). Available credential identifiers: \(credentialsSupported.keys.map(\.value).joined(separator: ", "))")
+		throw WalletError(description: "Issuer does not support the requested credential with \(requestedParams).")
 	}
 
 	func getCredentialOfferedModels(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], batchCredentialIssuance: BatchCredentialIssuance?) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
@@ -506,7 +500,6 @@ public actor OpenId4VCIService {
 	private func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data]) async throws -> IssuanceOutcome {
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
-
 		switch requestOutcome {
 		case .success(let request):
 			switch request {
@@ -527,7 +520,7 @@ public actor OpenId4VCIService {
 					throw PresentationSession.makeError(str: "No credential response results available")
 				}
 			case .invalidProof(let errorDescription):
-				throw PresentationSession.makeError(str: errorDescription ?? "Although providing a proof with c_nonce the proof is still invalid")
+				throw PresentationSession.makeError(str: "Issuer error: " + (errorDescription ?? "The proof is invalid"))
 			case .failed(let error):
 				throw PresentationSession.makeError(str: error.localizedDescription)
 			}
