@@ -19,14 +19,16 @@ import OpenID4VCI
 import Security
 import MdocDataModel18013
 import JOSESwift
+import Copyable
 
-public struct KeyAttestationConfig: Sendable {
+@Copyable
+public struct KeyAttestationConfiguration: Sendable {
 	public init(walletAttestationsProvider: any WalletAttestationsProvider, popKeyOptions: KeyOptions? = nil, popKeyDuration: TimeInterval? = nil) {
 		self.walletAttestationsProvider = walletAttestationsProvider
 		self.popKeyOptions = popKeyOptions
 		self.popKeyDuration = popKeyDuration
 	}
-	public let walletAttestationsProvider: any WalletAttestationsProvider
+	public let walletAttestationsProvider: (any WalletAttestationsProvider)
 	public let popKeyOptions: KeyOptions?
 	public let popKeyDuration: TimeInterval?
 }

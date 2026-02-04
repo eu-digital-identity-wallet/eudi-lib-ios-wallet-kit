@@ -15,17 +15,19 @@ limitations under the License.
 */
 
 import Foundation
+import CryptoKit
 import JOSESwift
 import SwiftyJSON
 import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
-import CryptoKit
+import Copyable
 
+@Copyable
 public struct OpenId4VciConfiguration: Sendable {
 	public let credentialIssuerURL: String?
 	public let clientId: String
-	public let keyAttestationsConfig: KeyAttestationConfig?
+	public let keyAttestationsConfig: KeyAttestationConfiguration?
 	public let authFlowRedirectionURI: URL
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	public let usePAR: Bool
@@ -34,7 +36,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	public let dpopKeyOptions: KeyOptions?
 
-	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfig? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
+	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfiguration? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId ?? "wallet-dev"
 		self.keyAttestationsConfig = keyAttestationsConfig
@@ -115,14 +117,14 @@ extension OpenId4VciConfiguration {
 		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, usePAR: usePAR, clientAttestationPoPBuilder: clientAttestationPoPBuilder, useDpopIfSupported: useDpopIfSupported)
 	}
 
-	private func makeAttestationClient(config: KeyAttestationConfig, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
+	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
 		let keyId = generatePopKeyId(credentialIssuerId: credentialIssuerId)
-		guard let dpopConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else { throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
-		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: dpopConstructor.jwk)
-		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: dpopConstructor.algorithm.name) else {
-			throw WalletError(description: "Unsupported DPoP algorithm: \(dpopConstructor.algorithm.name) for client attestation")
+		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else { throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
+		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: popConstructor.jwk)
+		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: popConstructor.algorithm.name) else {
+			throw WalletError(description: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation")
 		}
-		let popJwtSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt", signingKey: dpopConstructor.privateKey)
+		let popJwtSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt", signingKey: popConstructor.privateKey)
 		let client: Client = .attested(attestationJWT: try .init(jws: .init(compactSerialization: attestation)), popJwtSpec: popJwtSpec)
 		return client
 	}
