@@ -536,23 +536,25 @@ public actor OpenId4VCIService {
 		}
 		let credData: [(Data, Data)] = try credentials.enumerated().flatMap { index, credential in
 		if case let .string(str) = credential  {
-			// logger.info("Issued credential data:\n\(str)")
+			logger.notice("Issued credential data:\n\(str)")
 			return [(toData(str), publicKeys[index])]
 		} else if case let .json(json) = credential, json.type == .array, json.first != nil {
 			let compactParser = CompactParser()
 			let parseJsonToJwt = { (json: JSON) -> String in
-				do {
-					return try compactParser.stringFromJwsJsonObject(json)
-				} catch {
-					return json.stringValue
-				}
+				do { return try compactParser.stringFromJwsJsonObject(json) }
+				catch { return json.stringValue }
 			}
-			logger.notice("Issued credential data:\n\(json.first!.1["credential"].stringValue)")
-			return json.map { j in let str = parseJsonToJwt(j.1["credential"]); return (toData(str), publicKeys[index]) }
+			let response = json.map { j in
+				let str = parseJsonToJwt(j.1["credential"])
+				return (toData(str), publicKeys[index])
+			}
+			logger.notice("Issued credential data:\n\(String(data: response.first!.0, encoding: .utf8) ?? "")")
+			return response
 		} else {
 			throw PresentationSession.makeError(str: "Invalid credential")
 		} }
-		if config.dpopKeyOptions != nil { try? await issueReq.secureArea.deleteKeyBatch(id: issueReq.dpopKeyId, startIndex: 0, batchSize: 1); try? await issueReq.secureArea.deleteKeyInfo(id: issueReq.dpopKeyId) }
+		// keep dpop key may be reused
+		// if config.dpopKeyOptions != nil { try? await issueReq.secureArea.deleteKeyBatch(id: issueReq.dpopKeyId, startIndex: 0, batchSize: 1); try? await issueReq.secureArea.deleteKeyInfo(id: issueReq.dpopKeyId) }
 		return .issued(credData, configuration)
 	}
 
