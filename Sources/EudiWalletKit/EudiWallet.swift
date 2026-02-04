@@ -46,8 +46,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var userAuthenticationRequired: Bool
 	/// Trusted root certificates to validate the reader authentication certificate included in the proximity request
 	public var trustedReaderCertificates: [Data]?
-	/// Method to perform mdoc authentication (MAC or signature). Defaults to device MAC
-	public var deviceAuthMethod: DeviceAuthMethod = .deviceMac
+	/// Method to perform mdoc authentication (MAC or signature). Defaults to device signature
+	public var deviceAuthMethod: DeviceAuthMethod = .deviceSignature
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public var uiCulture: String?
 	public var openID4VpConfig: OpenId4VpConfiguration
@@ -69,7 +69,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - serviceName: The service name for the keychain. Optional.
 	///   - accessGroup: The access group for the keychain. Optional.
 	///   - trustedReaderCertificates: An array of trusted reader certificates. Optional.
-	///   - userAuthenticationRequired: A boolean indicating if user authentication is required when issuing or presenting a document. Defaults to `true`.
+	///   - userAuthenticationRequired: A boolean indicating if user authentication is required when issuing or presenting a document. Defaults to `false`.
+	///   - deviceAuthMethod: The method to perform mdoc authentication (MAC or signature). Defaults to `.deviceSignature`.
 	///   - openID4VpConfig: The configuration for OpenID4VP. Optional.
 	///   - openID4VciConfigurations: A dictionary of OpenId4VciConfiguration objects keyed by an arbitrary issuer name. Optional.
 	///   - networking: The networking Client to use for network requests. Optional.
@@ -82,17 +83,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// ```swift
 	/// let wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!])
 	/// ```
-	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = true, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
-
+	public init(storageService: (any DataStorageService)? = nil, serviceName: String? = nil, accessGroup: String? = nil, trustedReaderCertificates: [Data]? = nil, userAuthenticationRequired: Bool = false, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, logFileName: String? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
 		try Self.validateServiceParams(serviceName: serviceName)
 		self.serviceName = serviceName ?? Self.defaultServiceName
 		self.accessGroup = accessGroup
 		self.modelFactory = modelFactory
 		self.trustedReaderCertificates = trustedReaderCertificates
 		self.userAuthenticationRequired = userAuthenticationRequired
-		#if DEBUG
-		self.userAuthenticationRequired = false
-		#endif
+		self.deviceAuthMethod = deviceAuthMethod
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
 		self.openID4VciConfigurations = openID4VciConfigurations
 		self.networkingVci = OpenID4VCINetworking(networking: networking ?? URLSession.shared)
