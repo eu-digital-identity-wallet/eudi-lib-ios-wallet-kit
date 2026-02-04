@@ -174,12 +174,11 @@ struct MyAttestationProvider: WalletAttestationsProvider {
         return try await attestationService.getWalletAttestation(for: key)
     }
     
-    func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
-        // Obtain key attestation JWT for multiple keys
-        // The nonce parameter should be included if provided by the issuer
-        var params: [String: Any] = ["keys": keys]
+  public func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
+        var params: [String: Any] =  ["jwkSet": ["keys": try keys.map { try $0.toDictionary() }]]
         if let nonce { params["nonce"] = nonce }
-        return try await attestationService.getKeysAttestation(params: params)
+        let attestation = try await issueWalletUnitAttestation(dictionary: params)
+        return attestation.walletUnitAttestation
     }
 }
 
