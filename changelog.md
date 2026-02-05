@@ -1,6 +1,6 @@
 ## v0.20.0
 
-- **Dependency Updates**:
+### Dependency Update
   - Updated `eudi-lib-sdjwt-swift` to version [0.13.0](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.13.0)
   - Updated `eudi-lib-ios-openid4vci-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.20.0)
   - Updated `eudi-lib-openid4vp-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift/releases/tag/v0.20.0)
