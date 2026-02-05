@@ -25,15 +25,23 @@ import Copyable
 
 @Copyable
 public struct OpenId4VciConfiguration: Sendable {
+	/// The URL of the credential issuer
 	public let credentialIssuerURL: String?
+	/// The client identifier used for OpenID4VCI flows
 	public let clientId: String
+	/// Configuration for key attestation, if supported by the issuer
 	public let keyAttestationsConfig: KeyAttestationConfiguration?
+	/// The redirect URI used after authorization flow completion
 	public let authFlowRedirectionURI: URL
+	/// Configuration that determines how authorization issuance should be handled
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
+	/// Whether to use Pushed Authorization Request (PAR) for enhanced security
 	public let usePAR: Bool
+	/// Whether to use DPoP (Demonstrating Proof-of-Possession) if supported by the issuer
 	public let useDpopIfSupported: Bool
-	public let cacheIssuerMetadata: Bool
+	/// Whether user authentication is required for credential issuance
 	public let userAuthenticationRequired: Bool
+	/// Key options for generating DPoP keys, if DPoP is used
 	public let dpopKeyOptions: KeyOptions?
 
 	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfiguration? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, usePAR: Bool = true, useDpopIfSupported: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
@@ -44,7 +52,6 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.usePAR = usePAR
 		self.useDpopIfSupported = useDpopIfSupported
-		self.cacheIssuerMetadata = cacheIssuerMetadata
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
 	}
