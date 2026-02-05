@@ -141,16 +141,6 @@ public actor OpenId4VCIService {
 	public func endIssueDocument(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?) async throws {
 		try await storageService.saveDocument(issued, batch: batch, allowOverwrite: true)
 	}
-	/// Issue a document with the given `DocTypeIdentifier` using OpenId4Vci protocol
-	/// - Parameters:
-	///   - docTypeIdentifier: the document type identifier specifying the type of document to be issued
-	///   - promptMessage: optional message to prompt the user during issuance
-	/// - Returns: The data of the document
-	func issueDocument(docTypeIdentifier: DocTypeIdentifier, promptMessage: String? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
-		logger.log(level: .info, "Issuing document with identifier: \(docTypeIdentifier.value)")
-		let res = try await issueByDocType(docTypeIdentifier, promptMessage: promptMessage)
-		return res
-	}
 
 	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: Self.makeMetadataResolver(networking), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
@@ -253,7 +243,7 @@ public actor OpenId4VCIService {
 
 	func getIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
 		// Check cache first
-		if config.cacheIssuerMetadata, let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL!] {
+		if let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL!] {
 			return cachedResult
 		}
 		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
@@ -261,7 +251,7 @@ public actor OpenId4VCIService {
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
-			if config.cacheIssuerMetadata { Self.issuerMetadataCache[config.credentialIssuerURL!] = result }
+			Self.issuerMetadataCache[config.credentialIssuerURL!] = result
 			return result
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(error.localizedDescription)")
@@ -283,23 +273,6 @@ public actor OpenId4VCIService {
 			usedCredentialOptions.batchSize = defaultCredentialOptions.batchSize
 		}
 		return usedCredentialOptions
-	}
-
-
-	/// Issue a document using OpenId4Vci protocol
-	///
-	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
-	///  - Parameters:
-	///   - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
-	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults are fetched from issuer metadata. Use `getDefaultCredentialOptions(_:)` to retrieve issuer-recommended settings.
-	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
-	///   - promptMessage: Prompt message for biometric authentication (optional)
-	/// - Returns: The document issued. It is saved in storage.
-	@discardableResult public func issueDocument(docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
-		let usedKeyOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
-		try await prepareIssuing(id: UUID().uuidString, docTypeIdentifier: docTypeIdentifier, displayName: nil, credentialOptions: usedKeyOptions, keyOptions: keyOptions, disablePrompt: false, promptMessage: promptMessage)
-		let data = try await issueDocument(docTypeIdentifier: docTypeIdentifier, promptMessage: promptMessage)
-		return try await finalizeIssuing(issueOutcome: data.0, docType: docTypeIdentifier.docType, format: data.1, issueReq: issueReq)
 	}
 
 	/// Issue multiple documents using OpenId4Vci protocol
@@ -365,34 +338,6 @@ public actor OpenId4VCIService {
 		}
 		// Delegate to issueDocumentsByOfferUrl
 		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: nil, promptMessage: promptMessage)
-	}
-
-	func issueByDocType(_ docTypeIdentifier: DocTypeIdentifier, promptMessage: String? = nil) async throws -> (IssuanceOutcome, DocDataFormat) {
-		let (credentialIssuerIdentifier, metaData) = try await getIssuerMetadata()
-		if let authorizationServer = metaData.authorizationServers?.first {
-			let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)).resolve(url: authorizationServer)
-			let authorizationServerMetadata = try authServerMetadata.get()
-			let configuration = try getCredentialConfiguration(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString.replacingOccurrences(of: "https://", with: ""), issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: docTypeIdentifier.configurationIdentifier, docType: docTypeIdentifier.docType, vct: docTypeIdentifier.vct, batchCredentialIssuance: metaData.batchCredentialIssuance, dpopSigningAlgValuesSupported: authorizationServerMetadata.dpopSigningAlgValuesSupported?.map(\.name), clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map(\.name))
-			let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration)
-			let offer = try CredentialOffer(credentialIssuerIdentifier: credentialIssuerIdentifier, credentialIssuerMetadata: metaData, credentialConfigurationIdentifiers: [configuration.configurationIdentifier], grants: nil, authorizationServerMetadata: authorizationServerMetadata)
-			// Authorize with auth code flow
-			let issuer = try await getIssuer(offer: offer)
-			let authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
-			if case .presentation_request(let url) = authorizedOutcome, let authRequested {
-				logger.info("Dynamic issuance request with url: \(url)")
-				let uuid = UUID().uuidString
-				Self.credentialOfferCache[uuid] = offer
-				let outcome = IssuanceOutcome.pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: authRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: authRequested.pkceVerifier.codeVerifierMethod ))
-				return (outcome, configuration.format)
-			}
-			guard case .authorized(let authorized) = authorizedOutcome else {
-				throw PresentationSession.makeError(str: "Invalid authorized request outcome")
-			}
-			let outcome = try await submissionUseCase(authorized, issuer: issuer, configuration: configuration, bindingKeys: bindingKeys, publicKeys: publicKeys)
-			return (outcome, configuration.format)
-		} else {
-			throw PresentationSession.makeError(str: "Invalid authorization server - no authorization server found")
-		}
 	}
 
 	/// Issue documents by offer URI.
