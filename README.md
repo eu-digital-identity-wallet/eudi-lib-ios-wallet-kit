@@ -64,8 +64,7 @@ The library provides the following functionality:
         - [x] ClienID scheme: preregistered, x509_san_uri, x509_san_dns, redirect_uri
         - [x] DCQL
 
-The library is written in Swift and is compatible with iOS 16 or higher. It is distributed as a Swift package
-and can be included in any iOS project.
+The library is written in Swift and is compatible with iOS 16 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
 
 It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
@@ -103,25 +102,33 @@ dependencies: [
 Detailed documentation is provided in the DocC documentation [here](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/)
 
 ## Initialization
-The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/eudiwallet) class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
+The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-wallet-kit/documentation/eudiwalletkit/eudiwallet) class provides a unified API for the two user attestation presentation flows. It is initialized with an `EudiWalletConfiguration` instance that consolidates all wallet settings. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
 The wallet developer can customize cryptographic key operations by passing `SecureArea` instances to the wallet, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas. The wallet developer can specify key create options per doc-type such as curve type, secure area name, and key unlock policy.
 
 ```swift
-// Basic initialization
-let wallet = try! EudiWallet(
+// Basic initialization with EudiWalletConfiguration
+let config = EudiWalletConfiguration(
     serviceName: "my_wallet_app",
     trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
 )
+let wallet = try! EudiWallet(eudiWalletConfig: config)
 
-// With OpenID4VP configuration
+// With additional configuration options
+let config = EudiWalletConfiguration(
+    serviceName: "my_wallet_app",
+    userAuthenticationRequired: true,
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    deviceAuthMethod: .deviceSignature,
+    uiCulture: "en",
+    logFileName: "wallet.log"
+)
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri]
 )
 let wallet = try! EudiWallet(
-    serviceName: "my_wallet_app",
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
-    openId4VpConfiguration: openId4VpConfig
+    eudiWalletConfig: config,
+    openID4VpConfig: openId4VpConfig
 )
 ```
 
@@ -145,9 +152,11 @@ let issuerConfigurations: [String: OpenId4VciConfiguration] = [
     )
 ]
 
+let config = EudiWalletConfiguration(
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
+)
 let wallet = try! EudiWallet(
-    serviceName: "my_wallet_app",
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    eudiWalletConfig: config,
     openID4VciConfigurations: issuerConfigurations
 )
 
@@ -174,10 +183,11 @@ struct MyAttestationProvider: WalletAttestationsProvider {
         return try await attestationService.getWalletAttestation(for: key)
     }
     
-    func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
-        // Obtain key attestation JWT for multiple keys
-        // The nonce parameter should be included if provided by the issuer
-        return try await attestationService.getKeysAttestation(for: keys, nonce: nonce)
+  public func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
+        var params: [String: Any] =  ["jwkSet": ["keys": try keys.map { try $0.toDictionary() }]]
+        if let nonce { params["nonce"] = nonce }
+        let attestation = try await issueWalletUnitAttestation(dictionary: params)
+        return attestation.walletUnitAttestation
     }
 }
 
@@ -197,9 +207,11 @@ let config = OpenId4VciConfiguration(
     useDpopIfSupported: true
 )
 
+let walletConfig = EudiWalletConfiguration(
+    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
+)
 let wallet = try! EudiWallet(
-    serviceName: "my_wallet_app",
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    eudiWalletConfig: walletConfig,
     openID4VciConfigurations: ["attested_issuer": config]
 )
 ```
@@ -317,9 +329,9 @@ let metadata = try await wallet.getIssuerMetadata(issuerName: "eudi_pid_issuer")
 // Use configuration identifier
 let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
 let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-let doc = try await userWallet.issueDocument(
+let doc = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
-  docTypeIdentifier: .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt"),
+  docTypeIdentifiers: [.identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: credentialOptions,
   keyOptions: keyOptions
 )
@@ -328,13 +340,39 @@ let doc = try await userWallet.issueDocument(
 For SD-JWT credentials, use the `.sdJwt` identifier:
 
 ```swift
-let doc = try await userWallet.issueDocument(
+let doc = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
-  docTypeIdentifier: .sdJwt(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt"),
+  docTypeIdentifiers: [.identifier(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
   keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
 )
 ```
+
+### Issue multiple documents
+
+You can issue multiple documents in a single operation using the `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:)` method:
+
+```swift
+do {
+  let credentialOptions = CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1)
+  let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
+  let documents = try await wallet.issueDocuments(
+    issuerName: "eudi_pid_issuer",
+    docTypeIdentifiers: [
+       .identifier("eu.europa.ec.eudi.pid_mdoc"),
+       .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")
+    ],
+    credentialOptions: credentialOptions,
+    keyOptions: keyOptions
+  )
+  // all documents have been added to wallet storage
+}
+catch {
+  // display error
+}
+```
+
+This method efficiently issues multiple documents from the same issuer by creating a single credential offer with all requested document types.
 
 #### Get Default Credential Options
 
@@ -409,7 +447,7 @@ When the transaction code is provided, the issuance process can be resumed by ca
 
 Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digital-identity-wallet/eudi-wallet-product-roadmap/issues/82)
 
-After calling `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:configuration:)` the wallet application need to check if the doc is pending and has an `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` method should be called with the authorization URL provided by the server.
+After calling `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)`, `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:)`, or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:configuration:)` the wallet application need to check if the doc is pending and has an `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` method should be called with the authorization URL provided by the server.
 
 ```swift
 if let urlString = newDocs.last?.authorizePresentationUrl { 

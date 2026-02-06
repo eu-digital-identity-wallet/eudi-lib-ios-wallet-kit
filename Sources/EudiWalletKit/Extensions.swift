@@ -299,6 +299,9 @@ extension IdentityAndAccessManagementMetadata {
 
 extension ECPublicKey: @retroactive @unchecked Sendable {}
 
+// to be fixed in mdoc security library to avoid unchecked sendable
+extension DeviceAuthMethod: @retroactive @unchecked Sendable {}
+
 extension CoseEcCurve {
 	init?(crvName: String) {
 		switch crvName {

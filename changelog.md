@@ -1,3 +1,76 @@
+## v0.20.0
+
+### Dependency Update
+  - Updated `eudi-lib-sdjwt-swift` to version [0.13.0](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.13.0)
+  - Updated `eudi-lib-ios-openid4vci-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.20.0)
+  - Updated `eudi-lib-openid4vp-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift/releases/tag/v0.20.0)
+  - Updated `eudi-lib-statium-swift` to version [0.3.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.3.0)
+
+### Breaking Changes
+
+- **Swift Version Requirement**: Updated minimum Swift version to 6.2
+  - Updated `Package.swift` swift-tools-version from 6.0 to 6.2
+
+- **EudiWallet Initialization Refactoring**: Introduced `EudiWalletConfiguration` struct for consolidated wallet configuration
+  - **New struct**: `EudiWalletConfiguration` consolidates all wallet-level configuration parameters:
+    - `serviceName: String` - The service name for the keychain (default: "eudiw")
+    - `accessGroup: String?` - The access group for keychain sharing
+    - `userAuthenticationRequired: Bool` - Whether user authentication is required (default: false)
+    - `trustedReaderCertificates: [Data]?` - Trusted reader certificates
+    - `deviceAuthMethod: DeviceAuthMethod` - Device authentication method (default: .deviceSignature)
+    - `uiCulture: String?` - UI culture for localization
+    - `logFileName: String?` - Log file name for logging
+
+  - **Updated initializer**: `EudiWallet` now takes `eudiWalletConfig: EudiWalletConfiguration` parameter instead of individual configuration parameters
+  
+  ```swift
+  let config = EudiWalletConfiguration(
+      serviceName: "my_wallet_app",
+      userAuthenticationRequired: true,
+      trustedReaderCertificates: certs
+  )
+  let wallet = try! EudiWallet(eudiWalletConfig: config)
+  ```
+
+- **Document Issuance API Changes**:
+  - **Removed** single document issuance method signature that accepted individual parameters
+  - Use `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)` instead for issuing one or more documents
+  
+  ```swift
+  let docs = try await wallet.issueDocuments(
+      issuerName: "eudi_pid_issuer",
+      docTypeIdentifiers: [.msoMdoc(docType: EuPidModel.euPidDocType)],
+      credentialOptions: credentialOptions,
+      keyOptions: keyOptions
+  )
+  let pidDoc = docs.first!
+  ```
+
+- **OpenId4VciConfiguration Changes**:
+  - **Removed** `cacheIssuerMetadata: Bool` parameter (issuer metadata is now always cached)
+ 
+### New Features
+
+- **Multiple Document Issuance**: Added `issueDocuments` method for issuing multiple documents in a single operation
+  - Method signature: `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:) async throws -> [WalletStorage.Document]`
+  - Efficiently issues multiple documents from the same issuer by creating a single credential offer
+  - Supports mixed document types (mso_mdoc and sd-jwt-vc)
+  
+  ```swift
+  let documents = try await wallet.issueDocuments(
+      issuerName: "eudi_pid_issuer",
+    docTypeIdentifiers: [
+       .identifier("eu.europa.ec.eudi.pid_mdoc"),
+       .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")
+    ],
+      credentialOptions: credentialOptions,
+      keyOptions: keyOptions
+  )
+  ```
+
+### Bug fixes
+- Fixed keys attestation (WUA)
+
 ## v0.19.4
 - **Dependency Updates**:
   - Updated `eudi-lib-sdjwt-swift` to version [0.12.1](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.12.1)

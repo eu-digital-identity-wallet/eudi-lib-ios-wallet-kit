@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import Copyable
 import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
@@ -63,8 +64,17 @@ public enum ClientIdScheme: Sendable {
 /// This structure contains the necessary configuration parameters for implementing
 /// the OpenID4VP specification, which enables the presentation of verifiable credentials
 /// to relying parties in a standardized way.
+@Copyable
 public struct OpenId4VpConfiguration: Sendable {
+	/// Supported client identifier schemes for verifier authentication
+	///
+	/// Determines which authentication methods are accepted when validating verifiers.
+	/// Multiple schemes can be configured to support different types of verifiers.
 	public let clientIdSchemes: [ClientIdScheme]
+	/// Configuration for encrypting the presentation response
+	///
+	/// When provided, the wallet will encrypt the presentation response using the specified
+	/// encryption parameters before sending it to the verifier.
 	public let responseEncryptionConfiguration: ResponseEncryptionConfiguration?
 
 	public init() {
