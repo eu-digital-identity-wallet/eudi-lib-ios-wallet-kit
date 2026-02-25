@@ -277,11 +277,11 @@ extension JSON {
 			let stringValue = self[Keys.sdAlg.rawValue].stringValue
 			let algorithIdentifier = HashingAlgorithmIdentifier.allCases.first(where: {$0.rawValue == stringValue})
 			guard let algorithIdentifier else {
-				throw SDJWTVerifierError.missingOrUnknownHashingAlgorithm
+				return "sha-256"
 			}
 			return algorithIdentifier.rawValue
 		} else {
-			throw SDJWTVerifierError.missingOrUnknownHashingAlgorithm
+			return "sha-256"
 		}
 	}
 }
@@ -298,6 +298,20 @@ extension IdentityAndAccessManagementMetadata {
 }
 
 extension ECPublicKey: @retroactive @unchecked Sendable {}
+
+// to be fixed in mdoc security library to avoid unchecked sendable
+extension DeviceAuthMethod: @retroactive @unchecked Sendable {}
+
+extension CoseEcCurve {
+	init?(crvName: String) {
+		switch crvName {
+		case "P-256": self = .P256
+		case "P-384": self = .P384
+		case "P-512": self = .P521
+		default: return nil
+		}
+	}
+}
 
 extension BindingKey {
 

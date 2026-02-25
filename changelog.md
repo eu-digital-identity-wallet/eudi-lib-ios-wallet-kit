@@ -1,3 +1,156 @@
+## v0.20.4
+
+Fixed bug when more than one identical attestation is successfully presented to the verifier. Previously, only a single entry per "type" appears in the Transactions tab.
+For example, the screenshots show 2 mDL and 3 PID attestations, all successfully presented, but only 1 of each is listed in the Transactions.
+
+## v0.20.3
+
+* Enhance OpenID4VCI service registration with fallback to the first available configuration by @phisakel in https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/288
+
+When the issuer doesn't match any pre-configured service, fall back to the first available service's configuration (inheriting client auth, attestation config, etc.) with the issuer URL overridden. This mirrors the Android wallet behavior where the fallback manager strategy carries over to unknown issuers.
+
+## v0.20.2
+
+-  Wallet storage document deletion **bug fix**
+
+## v0.20.1
+
+### Breaking change
+
+`authFlowRedirectionURI` parameter added to `resolveOfferUrlDocTypes` method of `EudiWallet`
+
+``` swift
+public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) 
+```
+
+## v0.20.0
+
+### Dependency Update
+  - Updated `eudi-lib-sdjwt-swift` to version [0.13.0](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.13.0)
+  - Updated `eudi-lib-ios-openid4vci-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift/releases/tag/v0.20.0)
+  - Updated `eudi-lib-openid4vp-swift` to version [0.20.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift/releases/tag/v0.20.0)
+  - Updated `eudi-lib-statium-swift` to version [0.3.0](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.3.0)
+
+### Breaking Changes
+
+- **Swift Version Requirement**: Updated minimum Swift version to 6.2
+  - Updated `Package.swift` swift-tools-version from 6.0 to 6.2
+
+- **EudiWallet Initialization Refactoring**: Introduced `EudiWalletConfiguration` struct for consolidated wallet configuration
+  - **New struct**: `EudiWalletConfiguration` consolidates all wallet-level configuration parameters:
+    - `serviceName: String` - The service name for the keychain (default: "eudiw")
+    - `accessGroup: String?` - The access group for keychain sharing
+    - `userAuthenticationRequired: Bool` - Whether user authentication is required (default: false)
+    - `trustedReaderCertificates: [Data]?` - Trusted reader certificates
+    - `deviceAuthMethod: DeviceAuthMethod` - Device authentication method (default: .deviceSignature)
+    - `uiCulture: String?` - UI culture for localization
+    - `logFileName: String?` - Log file name for logging
+
+  - **Updated initializer**: `EudiWallet` now takes `eudiWalletConfig: EudiWalletConfiguration` parameter instead of individual configuration parameters
+  
+  ```swift
+  let config = EudiWalletConfiguration(
+      serviceName: "my_wallet_app",
+      userAuthenticationRequired: true,
+      trustedReaderCertificates: certs
+  )
+  let wallet = try! EudiWallet(eudiWalletConfig: config)
+  ```
+
+- **Document Issuance API Changes**:
+  - **Removed** single document issuance method signature that accepted individual parameters
+  - Use `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)` instead for issuing one or more documents
+  
+  ```swift
+  let docs = try await wallet.issueDocuments(
+      issuerName: "eudi_pid_issuer",
+      docTypeIdentifiers: [.msoMdoc(docType: EuPidModel.euPidDocType)],
+      credentialOptions: credentialOptions,
+      keyOptions: keyOptions
+  )
+  let pidDoc = docs.first!
+  ```
+
+- **OpenId4VciConfiguration Changes**:
+  - **Removed** `cacheIssuerMetadata: Bool` parameter (issuer metadata is now always cached)
+ 
+### New Features
+
+- **Multiple Document Issuance**: Added `issueDocuments` method for issuing multiple documents in a single operation
+  - Method signature: `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:) async throws -> [WalletStorage.Document]`
+  - Efficiently issues multiple documents from the same issuer by creating a single credential offer
+  - Supports mixed document types (mso_mdoc and sd-jwt-vc)
+  
+  ```swift
+  let documents = try await wallet.issueDocuments(
+      issuerName: "eudi_pid_issuer",
+    docTypeIdentifiers: [
+       .identifier("eu.europa.ec.eudi.pid_mdoc"),
+       .identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")
+    ],
+      credentialOptions: credentialOptions,
+      keyOptions: keyOptions
+  )
+  ```
+
+### Bug fixes
+- Fixed keys attestation (WUA)
+
+## v0.19.4
+- **Dependency Updates**:
+  - Updated `eudi-lib-sdjwt-swift` to version [0.12.1](https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift/releases/tag/v0.12.1)
+  - Updated `eudi-lib-ios-statium-swift` to version [0.3.1](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift/releases/tag/v0.3.1)
+
+- **Document Status Service Enhancements**:
+  - Added `clockSkew` parameter to `DocumentStatusService` initializer (default: 60 seconds) to handle time differences when validating status list tokens
+  - Updated status verification to use `clockSkew` parameter for improved reliability
+
+- **Client Attestation Refactoring**:
+  - Refactored PoP (Proof-of-Possession) constructor method in `OpenId4VciConfiguration`
+  - Renamed `makeDPoPConstructor` to `makePoPConstructor` and added a `PopUsage` parameter. Use attestation key options instead of DPoP-specific key options for the `.clientAttestation` case.
+  
+## v0.19.3
+- Fixed device authentication for OpenID4VP. Session transcript calculation was fixed.
+
+## v0.19.2
+- Removed SIOPv2 support.
+- Fixed OpenID4VP bug for direct post response mode.
+- DCQL query handling improvements (supports claim_sets and credentials_sets).
+
+## v0.19.1
+- SD-JWT data model: Include index in path for array child elements
+
+## v.0.19.0
+- **Client Attestation Support**: Added support for Wallet Instance Attestation and Wallet Unit Attestation
+  - **New struct**: `KeyAttestationConfig` for configuring client attestation
+    - Property `walletAttestationsProvider: WalletAttestationsProvider` - Provider for wallet and key attestations
+    - Property `popKeyOptions: KeyOptions?` - Optional key options for PoP key generation
+    - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
+  
+  - **New protocol**: `WalletAttestationsProvider` with two required methods:
+    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet instance attestation JWT for a given public key
+    - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain unit attestation JWT for multiple keys 
+
+- **OpenId4VciConfiguration changes**:
+  - **Removed** `client: Client` parameter
+  - **Added** `clientId: String?` parameter (defaults to "wallet-dev")
+  - **Added** `keyAttestationsConfig: KeyAttestationConfig?` parameter for client attestation configuration
+
+```swift
+let config = OpenId4VciConfiguration(
+  credentialIssuerURL: "https://issuer.example.com",
+  clientId: "my-wallet-client",
+  keyAttestationsConfig: KeyAttestationConfig(
+    walletAttestationsProvider: MyAttestationProvider(),
+    popKeyDuration: 300
+  )
+)
+```
+
+## v0.18.5
+- VP Handover and SessionTranscript by @craigaps 
+- eudi-lib-sdjwt-swift dependency updated to version 0.10.1
+
 ## v0.18.4
 
 ### Breaking Changes to Public API

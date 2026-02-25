@@ -131,7 +131,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	func handleRequestData(_ rrd: ResolvedRequestData) throws -> UserRequestInfo {
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
-		var jwkThumbprint: String?  = nil
+		var jwkThumbprint: Data?  = nil
 
 		if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}),
 			let x = key.x, let xd = Data(base64URLEncoded: x),
@@ -143,15 +143,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
 			// Generate a jwkThumbprint if possible.
 			let publicKey = ECPublicKey(crv: ecCrvType, x: x , y: y)
-			jwkThumbprint = try? publicKey.thumbprint(algorithm: .SHA256)
-			logger.info("Generated jwkThumbprint: \(jwkThumbprint ?? "Failed")")
+			jwkThumbprint = (try? publicKey.thumbprint(algorithm: .SHA256)).flatMap { Data(base64URLEncoded: $0) }
+
 		}
 		// Add support for directPost.
 		let responseUri = if case .directPostJWT(let uri) = vp.responseMode { uri.absoluteString } else if case .directPost(let uri) = vp.responseMode { uri.absoluteString } else { "" }
 
 		vpNonce = vp.nonce; vpClientId = vp.client.id.originalClientId
 		mdocGeneratedNonce = OpenId4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
-		sessionTranscript = OpenId4VpUtils.generateSessionTranscript(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint)
+		sessionTranscript = SessionTranscript(handOver: OpenId4VpUtils.generateOpenId4VpHandover(clientId: vp.client.id.originalClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint?.byteArray))
 
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		var requestItems: RequestItems?; var deviceRequestBytes: Data?
@@ -235,7 +235,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
 	}
 
-/// Send response via openid4vp
+	/// Send response via openid4vp
 	///
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
@@ -306,11 +306,23 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			throw PresentationSession.makeError(str: reason)
 		}
 		if let vpTokens, dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
-			let docIds = vpTokens.compactMap { $0.1 }
-			let data_formats: [DocDataFormat]? = if let dcql, case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent { vp.keys.map { dcql.findQuery(id: $0.value)!.dataFormat} } else { nil }
-			let responseMetadata: [Data?] = docIds.map { docMetadata[$0].flatMap { $0 } }
-			let vpTokenValues: [String]? = if case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent {  vp.values.flatMap { $0.map { $0.getString() } } } else  { nil }
-			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues!, data_formats: data_formats, transaction_data: transactionData)
+			let data_formats: [DocDataFormat]? = if let dcql, case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent { vp.flatMap { (queryId, vps) in Array(repeating: dcql.findQuery(id: queryId.value)!.dataFormat, count: vps.count) } } else { nil }
+			// Build responseMetadata and vpTokenValues aligned by iterating vp in the same order
+			var responseMetadata = [Data?]()
+			var vpTokenValues = [String]()
+			if case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent {
+				for (queryId, vps) in vp {
+					for vp in vps {
+						vpTokenValues.append(vp.getString())
+					}
+					// Find doc IDs for this query by matching inputDescriptorMap
+					let queryDocIds = vpTokens.filter { try! QueryId(value: $0.0) == queryId }.compactMap { $0.1 }
+					for docId in queryDocIds {
+						responseMetadata.append(docMetadata[docId].flatMap { $0 })
+					}
+				}
+			}
+			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues, data_formats: data_formats, transaction_data: transactionData)
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, transactionLog: &transactionLog)
 		} else if case let .negative(message) = consent {
 			transactionLog = transactionLog.copy(status: .failed, errorMessage: message)
