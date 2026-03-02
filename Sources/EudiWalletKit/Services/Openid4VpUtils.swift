@@ -172,7 +172,7 @@ extension CredentialQuery {
 	}
 
 	public var dataFormat: DocDataFormat {
-		format.format == "mso_mdoc"  ? .cbor : .sdjwt
+		format.format == "mso_mdoc" || format.format == "mso_mdoc_zk" ? .cbor : .sdjwt
 	}
 }
 
