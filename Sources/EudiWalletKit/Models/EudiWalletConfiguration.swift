@@ -27,7 +27,7 @@ public struct EudiWalletConfiguration: Sendable {
     /// Whether user authentication via biometrics or passcode is required before sending user data
 	public let userAuthenticationRequired: Bool
 	/// Trusted root certificates to validate the reader authentication certificate
-	public let trustedReaderRootCertificates: [[Data]]?
+	public let trustedReaderRootCertificates: [x5chain]?
 	/// Method to perform mdoc authentication (MAC or signature). Defaults to device signature
 	public let deviceAuthMethod: DeviceAuthMethod
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
@@ -36,7 +36,7 @@ public struct EudiWalletConfiguration: Sendable {
 	public let logFileName: String?
 	static let defaultServiceName: String = "eudiw"
 
-	public init(serviceName: String? = nil, accessGroup: String? = nil, userAuthenticationRequired: Bool = false, trustedReaderRootCertificates: [[Data]]? = nil, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, uiCulture: String? = nil, logFileName: String? = nil) {
+	public init(serviceName: String? = nil, accessGroup: String? = nil, userAuthenticationRequired: Bool = false, trustedReaderRootCertificates: [x5chain]? = nil, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, uiCulture: String? = nil, logFileName: String? = nil) {
 		self.serviceName = serviceName ?? Self.defaultServiceName
 		self.accessGroup = accessGroup
         self.userAuthenticationRequired = userAuthenticationRequired
