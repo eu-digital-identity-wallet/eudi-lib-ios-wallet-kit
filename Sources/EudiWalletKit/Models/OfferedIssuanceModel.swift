@@ -46,7 +46,7 @@ public struct OfferedIssuanceModel: Sendable {
 @Copyable
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String, identifier: String?, displayName: String, algValuesSupported: [String], claims: [Claim], credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
+	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String?, identifier: String?, displayName: String, algValuesSupported: [String], claims: [Claim], credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct
@@ -65,7 +65,7 @@ public struct OfferedDocModel: Sendable {
 	/// vct (for sdJwt credential offers)
 	public let vct: String?
 	/// Scope
-	public let scope: String
+	public let scope: String?
 	/// issuer configuration identifier
 	public let identifier: String?
 	/// Display name for document type
