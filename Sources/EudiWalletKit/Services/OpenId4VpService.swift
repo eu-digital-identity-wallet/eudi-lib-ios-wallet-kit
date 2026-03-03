@@ -331,7 +331,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
 		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootCerts: transferInfo.iaca)
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: transferInfo.iaca)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		self.certificateChain = certsData
