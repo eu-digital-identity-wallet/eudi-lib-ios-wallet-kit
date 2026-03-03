@@ -321,18 +321,21 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 	}
 
-	lazy var chainVerifier: CertificateTrust = { [weak self] certificates in
+	lazy var chainVerifier: CertificateTrust = { [weak self] certificates async in
 		guard let self else { return false }
+		let isValid: Bool; let validationMessages: [String]; var isValid2 = false; var validationMessages2: [String] = [];
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
 		let certsDer = certsData.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
 		guard certsDer.count > 0, certsDer.count == b64certs.count else { return false }
-		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.first!)) else { return false }
+		guard let x509leaf = try? X509.Certificate(derEncoded: [UInt8](certsData.first!)) else { return false }
+		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.last!)) else { return false }
 		let policy = SecPolicyCreateBasicX509(); var trust: SecTrust?; var result: OSStatus
 		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
 		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: transferInfo.iaca)
-		self.readerAuthValidated = isValid
+		(isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: transferInfo.iaca)
+		if !isValid { (isValid2, validationMessages2, _) = await SecurityHelpers.isChainFound(secCerts: certsDer, rootIaca: transferInfo.iaca) }
+		self.readerAuthValidated = isValid || isValid2
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		self.certificateChain = certsData
 		return isValid
