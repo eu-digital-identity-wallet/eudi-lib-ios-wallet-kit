@@ -170,7 +170,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: transferInfo.docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: transferInfo.privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested)
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: transferInfo.docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: transferInfo.privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: transferInfo.zkSystemRepository)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
