@@ -17,7 +17,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.10.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.10.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.13.0"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift.git", exact: "0.20.0"),
+		.package(url: "https://github.com/niscy-eudiw/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.9.6"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.20.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git", exact: "0.3.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git", from: "0.0.3")
@@ -30,7 +30,7 @@ let package = Package(
 			dependencies: [
 				.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
-				.product(name: "OpenID4VP", package: "eudi-lib-ios-openid4vp-swift"),
+				.product(name: "OpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
 				.product(name: "OpenID4VCI", package: "eudi-lib-ios-openid4vci-swift"),
 				.product(name: "eudi-lib-sdjwt-swift", package: "eudi-lib-sdjwt-swift"),
 				.product(name: "FileLogging", package: "swift-log-file"),

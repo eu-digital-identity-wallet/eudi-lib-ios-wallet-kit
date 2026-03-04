@@ -11,6 +11,10 @@
 * BLE peripheral manager now uses `CBPeripheralManagerOptionShowPowerAlertKey` to automatically prompt the user to enable Bluetooth if it is turned off when starting a BLE presentation.
 * `getIssuerMetadata`, `issueDocuments`, `getDefaultCredentialOptions`, `requestDeferredIssuance`, and `resumePendingIssuance` now fall back to resolving the VCI service by issuer URL when the name-based lookup fails, improving service discovery for dynamically registered issuers. Also, offer resolution was modified to register credential issuer url directly instead of host name.
 
+### Breaking Changes
+
+- **`EudiWalletConfiguration.trustedReaderCertificates` renamed and retyped**: The property `trustedReaderCertificates: [Data]?` has been replaced by `trustedReaderRootCertificates: [x5chain]?`. A x5chain is usually a root `SecCertificate` but may include intermediate certificates.
+
 ### Dependency Update
 * Updated "eudi-lib-ios-iso18013-data-transfer" and "eudi-lib-ios-wallet-storage" package dependencies to version 0.10.0
 
