@@ -323,7 +323,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates async -> Bool in
 		guard let self else { return false }
-		print(certificates)
 		var isValid: Bool = false; var validationMessages: [String] = []
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
 		let certsDer = certsData.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
@@ -339,7 +338,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		self.certificateChain = certsData
 		return isValid
-
 	}
 
 	/// OpenId4VP wallet configuration
