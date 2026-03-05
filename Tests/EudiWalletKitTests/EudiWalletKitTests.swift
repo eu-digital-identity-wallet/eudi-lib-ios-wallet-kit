@@ -118,7 +118,7 @@ struct EudiWalletKitTests {
 		let numberClaims = jsonNumber.toClaimsArray(pathPrefix: [], claimMetadata, uiCulture)?.0
 		let numberSex = numberClaims?.first(where: { $0.name == "sex" })
 		#expect(numberSex != nil)
-		#expect(numberSex?.stringValue == "1") // raw value preserved
+		#expect(numberSex?.stringValue == "male") // raw value preserved
 		if case .string(let display) = numberSex?.dataValue {
 			#expect(display == "male")
 		} else {
@@ -131,7 +131,7 @@ struct EudiWalletKitTests {
 		let stringClaims = jsonString.toClaimsArray(pathPrefix: [], claimMetadata, uiCulture)?.0
 		let stringSex = stringClaims?.first(where: { $0.name == "sex" })
 		#expect(stringSex != nil)
-		#expect(stringSex?.stringValue == "1")
+		#expect(stringSex?.stringValue == "male")
 		if case .string(let display) = stringSex?.dataValue {
 			#expect(display == "male")
 		} else {
