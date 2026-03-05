@@ -29,6 +29,7 @@ import OpenID4VP
 import enum OpenID4VP.ClaimPathElement
 import struct OpenID4VP.ClaimPath
 import SwiftyJSON
+import struct WalletStorage.Document
 
 class OpenId4VpUtils {
 	//  example path: "$['eu.europa.ec.eudiw.pid.1']['family_name']"
@@ -62,19 +63,24 @@ class OpenId4VpUtils {
 	}
 
 	/// Parse DCQL into request items (docType -> namespaced items), formats requested (docType -> dataFormat) and input descriptor map (docType -> credentialQueryId)
-	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [String: String], dataFormats: [String: DocDataFormat], docDisplayNames: [String: [String: [String: String]]?], logger: Logger? = nil) throws -> ([String: DocDataFormat], [String: String]) {
-		var inputDescriptorMap = [String: String]()
-		var formatsRequested = [String: DocDataFormat]()
+	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [Document.ID: DocType], logger: Logger? = nil) throws -> (formatsRequested: [DocType: DocDataFormat], inputDescriptorMap: [DocType: String], zkSpecsRequested: [DocType: [ZkSystemSpec]]?) {
+		var inputDescriptorMap = [DocType: String]()
+		var formatsRequested = [DocType: DocDataFormat]()
+		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
 			guard let docType = credQuery.docType else { continue }
 			if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
 			inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
+			if let zkSpecs = credQuery.zkSpecs {
+				if zkSpecsRequested == nil { zkSpecsRequested = [:] }
+				zkSpecsRequested![docType] = zkSpecs
+			}
 		}
-		return (formatsRequested, inputDescriptorMap)
+		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
 	}
 
-	static func getRequestItems(_ credentialMaps: [String: [ClaimsQuery]], idsToDocTypes: [String: String], formatsRequested: [String: DocDataFormat]) -> RequestItems {
+	static func getRequestItems(_ credentialMaps: [Document.ID: [ClaimsQuery]], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
 		var requestItems = RequestItems()
 		for (id, claims) in credentialMaps {
 			guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
@@ -157,9 +163,16 @@ extension CredentialQuery {
 		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
 		return docType
 	}
+	
+	// https://developers.google.com/wallet/identity/verify/accepting-ids-from-wallet-online#zkp
+	public var zkSpecs: [ZkSystemSpec]? {
+		let zk_system_type = meta["zk_system_type"]
+		guard zk_system_type.type == .array, let zkArray = zk_system_type.array else { return nil }
+		return zkArray.compactMap { try? ZkSystemSpec(jsonObject:$0) }
+	}
 
 	public var dataFormat: DocDataFormat {
-		format.format == "mso_mdoc"  ? .cbor : .sdjwt
+		format.format == "mso_mdoc" || format.format == "mso_mdoc_zk" ? .cbor : .sdjwt
 	}
 }
 
@@ -196,13 +209,13 @@ extension OpenId4VpUtils {
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable) throws -> [String: [ClaimsQuery]] {
 		var result: [String: [ClaimsQuery]] = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: (matchedCredId: String, claimQueries: [ClaimsQuery])] = [:]
+		var credentialQueryResults: [QueryId: (matchedCredId: Document.ID, claimQueries: [ClaimsQuery])] = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
 			let format = credQuery.dataFormat
 			// Find matching credentials
-			let matchingCredIds = queryable.getCredential(docOrVctType: docType, docDataFormat: format)
+			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
 			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.") }
 			// Try to find a credential that satisfies the claim requirements
 			for credId in matchingCredIds {

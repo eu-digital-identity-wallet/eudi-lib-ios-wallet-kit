@@ -1,3 +1,35 @@
+## v0.21.0
+
+### ZKP (Zero-Knowledge Proof) Support
+* Supports zero-knowledge proof generation by using a provided `ZkSystemRepository`
+* Extracts ZKP specs from DCQL request.
+* Tracks ZKP document IDs through presentation flow. Skip deleting credentials used as ZKP documents
+
+### Improvements
+* Add optional `zkSystemRepository: ZkSystemRepository?` parameter to `EudiWallet` initializer. When provided, it is used during the presentation flow to enable zero-knowledge proof operations. 
+* Add `waitForDisconnect` method to `PresentationSession` to prevent the session from being disposed while the remote device is still connected. This method should be called after `sendResponse`. In BLE presentations, it awaits until the remote verifier disconnects; in OpenID4VP presentations, it returns immediately.
+* BLE peripheral manager now uses `CBPeripheralManagerOptionShowPowerAlertKey` to automatically prompt the user to enable Bluetooth if it is turned off when starting a BLE presentation.
+* `getIssuerMetadata`, `issueDocuments`, `getDefaultCredentialOptions`, `requestDeferredIssuance`, and `resumePendingIssuance` now fall back to resolving the VCI service by issuer URL when the name-based lookup fails, improving service discovery for dynamically registered issuers. Also, offer resolution was modified to register credential issuer url directly instead of host name.
+
+### Breaking Changes
+
+- **`EudiWalletConfiguration.trustedReaderCertificates` renamed and retyped**: The property `trustedReaderCertificates: [Data]?` has been replaced by `trustedReaderRootCertificates: [x5chain]?`. A x5chain is usually a root `SecCertificate` but may include intermediate certificates.
+
+### Dependency Update
+* Updated "eudi-lib-ios-iso18013-data-transfer" and "eudi-lib-ios-wallet-storage" package dependencies to version 0.10.0
+
+### Refactorings
+- Refactored document handling in OpenId4VP and related services to use `Document.ID` for improved type safety and clarity
+- Introduce `zkpDocumentIds` property on `PresentationService` and concrete services (`BlePresentationService`, `FaultPresentationService`, `OpenId4VpService`)
+  - `generateCborVpToken` now returns ZKP document IDs; `OpenId4VpService` aggregates them
+  - `PresentationSession.updateKeyBatchInfoAndDeleteCredentialIfNeeded` now accepts `Document.ID`s and an optional `zkpDocumentIds` list
+
+## v0.20.5
+* Fixed bug in https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/291 when more than one identical attestation is successfully presented to the verifier. Previously, only a single entry per "type" appears in the Transactions tab.
+For example, the screenshots show 2 mDL and 3 PID attestations, all successfully presented, but only 1 of each is listed in the Transactions.
+
+* Fallback to sha-256 hashing algorithm if sd-alg does not exist by @dtsiflit in https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/293
+
 ## v0.20.4
 
 Fixed bug when more than one identical attestation is successfully presented to the verifier. Previously, only a single entry per "type" appears in the Transactions tab.
