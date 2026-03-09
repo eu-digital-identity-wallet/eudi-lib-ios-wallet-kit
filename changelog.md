@@ -1,3 +1,8 @@
+## v0.21.1
+
+* Update `eudi-lib-ios-openid4vci-swift` dependency to version 0.30.0
+* Fix for issue #296
+
 ## v0.21.0
 
 ### ZKP (Zero-Knowledge Proof) Support
