@@ -412,14 +412,14 @@ public actor OpenId4VCIService {
 		logger.info("--> [AUTHORIZATION] Placing Request to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
 		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer)
 
-		if case let .success(request) = parPlaced, case let .prepared(authRequested) = request {
+		if case let .success(authRequested) = parPlaced {
 			self.authRequested = authRequested
 			logger.info("--> [AUTHORIZATION] Placed Request. Authorization code URL is: \(authRequested.authorizationCodeURL)")
 			let authResult = try await loginUserAndGetAuthCode(authorizationCodeURL: authRequested.authorizationCodeURL.url)
 			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
 			switch authResult {
 			case .code(let authorizationCode):
-				return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: request, authorizationCode: authorizationCode))
+				return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: authRequested, authorizationCode: authorizationCode))
 			case .presentation_request(let url):
 				return .presentation_request(url)
 			}
@@ -429,7 +429,7 @@ public actor OpenId4VCIService {
 		throw PresentationSession.makeError(str: "Failed to get push authorization code request")
 	}
 
-	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequestPrepared, authorizationCode: String) async throws -> AuthorizedRequest {
+	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String) async throws -> AuthorizedRequest {
 		let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
 		let unAuthorized = await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
 		switch unAuthorized {
@@ -448,9 +448,6 @@ public actor OpenId4VCIService {
 	}
 
 	private static func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], logger: Logger) async throws -> IssuanceOutcome {
-		var configuration = configuration
-		configuration.accessToken = authorized.accessToken
-		configuration.refreshToken = authorized.refreshToken
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
 		switch requestOutcome {
@@ -572,7 +569,7 @@ public actor OpenId4VCIService {
 		let issuer = try await getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: .authorizationCode(AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil)), grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))).get()
+		let authorized = try await issuer.authorizeWithAuthorizationCode(request: AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil), grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))).get()
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration)
 		let res = try await Self.submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys, publicKeys: publicKeys, logger: logger)
 		return res
