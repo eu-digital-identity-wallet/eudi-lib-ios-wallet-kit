@@ -192,6 +192,27 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
 	}
 
+	/// Reissue a document using an already-known credential configuration
+	///
+	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	/// - Parameters:
+	///   - issuerName: The name of the issuer service
+	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults from the configuration are used.
+	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
+	///   - promptMessage: Prompt message for biometric authentication (optional)
+	/// - Returns: Array of issued documents. They are saved in storage.
+	@discardableResult func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+		guard let document = try await storage.storageService.loadDocument(id: documentId, status: .issued) else {
+			throw PresentationSession.makeError(str: "Document not found in storage with id: \(documentId)")
+		}
+		guard let docMetadata = DocMetadata(from: document.metadata) else {
+			throw PresentationSession.makeError(str: "Document metadata not found for document: \(documentId)")
+		}
+		let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: docMetadata.credentialIssuerIdentifier) 
+			guard let vciService else { throw WalletError(description: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)") }
+		return try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
+	}
+
 	/// Get default credential options (batch-size and credential policy) for a document type
 	///
 	/// Queries the issuer's metadata to retrieve recommended credential configuration. The returned `CredentialOptions` contains:
@@ -284,7 +305,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///  - configuration: Optional OpenId4VciConfiguration to override the default one for this issuance
 	/// - Returns: Array of issued and stored documents
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
@@ -294,7 +315,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
 			}
 			if let configuration {	await vciService.setConfiguration(configuration) }
-			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
+			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, txCodeValue: txCodeValue, promptMessage: promptMessage)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}

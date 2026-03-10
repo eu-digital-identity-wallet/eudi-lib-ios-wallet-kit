@@ -32,11 +32,10 @@ struct CredentialConfiguration: Codable, Sendable {
     let credentialSigningAlgValuesSupported: [String]
 	let dpopSigningAlgValuesSupported: [String]?
 	let clientAttestationPopSigningAlgValuesSupported: [String]?
-	let issuerDisplay: [DisplayMetadata]    //public let proofTypesSupported: [String: ProofTypeSupportedMeta]?
+	let issuerDisplay: [DisplayMetadata]    
     let display: [DisplayMetadata]
     let claims: [Claim]
    	let format: DocDataFormat
-	var batchSize: Int?
 	let defaultCredentialOptions: CredentialOptions
 
 	init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, supportsAttestationProofType: Bool, supportsJwtProofTypeWithAttestation: Bool, supportsJwtProofTypeWithoutAttestation: Bool,  credentialSigningAlgValuesSupported: [String], dpopSigningAlgValuesSupported: [String]?, clientAttestationPopSigningAlgValuesSupported: [String]?, issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
