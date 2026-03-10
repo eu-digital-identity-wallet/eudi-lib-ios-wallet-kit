@@ -75,7 +75,7 @@ public struct PresentationLogData: Sendable {
 	public let timestamp: Date
 	public let status: TransactionLog.Status
 	public let relyingParty: TransactionLog.RelyingParty
-	public let documents: [DocClaimsDecodable]
+	public let documents: [any DocClaimsDecodable]
 
 	public init(_ transactionLog: TransactionLog, uiCulture: String?) {
 		timestamp = Date(timeIntervalSince1970: TimeInterval(transactionLog.timestamp))

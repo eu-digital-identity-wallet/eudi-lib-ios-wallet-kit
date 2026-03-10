@@ -704,7 +704,7 @@ public actor OpenId4VCIService {
 	}
 
 	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest) async throws -> WalletStorage.Document  {
-		var dataToSave: Data; var docTypeToSave: String?
+		var dataToSave: Data; var docTypeToSave = ""
 		var docMetadata: DocMetadata?; var displayName: String?
 		let pds = issueOutcome.pendingOrDeferredStatus
 		var batch: [WalletStorage.Document]?
@@ -715,7 +715,7 @@ public actor OpenId4VCIService {
 			guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
 			dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 			docMetadata = cc.convertToDocMetadata()
-			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope
+			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
 			dkInfo.batchSize = dataPair.count
 			docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
 			displayName = cc.display.getName(uiCulture)
