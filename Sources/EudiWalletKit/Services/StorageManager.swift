@@ -94,7 +94,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			if var mdoc {
 				mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: doc.id)
 				await MainActor.run { docModels.append(mdoc) }
-			} else { logger.error("Could not decode claims of \(doc.docType ?? "")") }
+			} else { logger.error("Could not decode claims of \(doc.docType)") }
 			return mdoc
 		case .deferred:
 			await MainActor.run { deferredDocuments.append(doc) }
@@ -151,7 +151,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			case IsoMdlModel.isoDocType: IsoMdlModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 			default: nil
 			}
-			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType ?? docMetadata?.docType ?? d.0, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
+			retModel = defModel ?? GenericMdocModel(id: d.0, createdAt: doc.createdAt, issuerSigned: iss, docType: doc.docType, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		}
 		return retModel
 	}
@@ -168,7 +168,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		let validFrom: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.issuedAt})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let validUntil: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.expirationTime})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let statusIdentifier: StatusIdentifier? = if let sd = recreatedClaims.json["status"].dictionary, let sld = sd["status_list"]?.dictionary, let uri = sld["uri"]?.string, let idx = sld["idx"]?.int32 { StatusIdentifier(idx: Int(idx), uriString: uri) } else { nil }
-		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType ?? type, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
+		return GenericMdocModel(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
 	}
 
 	public static func getHashingAlgorithm(doc: WalletStorage.Document) -> String? {

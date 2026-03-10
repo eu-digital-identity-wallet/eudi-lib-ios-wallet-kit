@@ -325,7 +325,7 @@ public actor OpenId4VCIService {
 			makeOfferedDocModel(from: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		}
 		// Delegate to issueDocumentsByOfferUrl
-		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, credentialConfigurations: credentialConfigurations, txCodeValue: nil, promptMessage: promptMessage)
+		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, txCodeValue: nil, promptMessage: promptMessage)
 	}
 
 	/// Issue documents by offer URI.
@@ -340,7 +340,7 @@ public actor OpenId4VCIService {
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw PresentationSession.makeError(str: "Offer URI not resolved: \(offerUri)")
 		}
-		
+
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
@@ -363,23 +363,25 @@ public actor OpenId4VCIService {
 			return result
 		}
 		return documents
-	}	
-	
+	}
+
 	func getCredentialConfiguration(credentialIssuerIdentifier: String, issuerDisplay: [Display], credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], identifier: String?, docType: String?, vct: String?, batchCredentialIssuance: BatchCredentialIssuance?, dpopSigningAlgValuesSupported: [String]?, clientAttestationPopSigningAlgValuesSupported: [String]?) throws -> CredentialConfiguration {
-		if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, docType != nil || identifier != nil, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value, let scope = msoMdocConf.scope {
-			logger.info("msoMdoc with docType: \(msoMdocConf.docType), identifier: \(credential.key.value), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
+			if let credential = credentialsSupported.first(where: { if case .msoMdoc(let msoMdocCred) = $0.value, docType != nil || identifier != nil, msoMdocCred.docType == docType || docType == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .msoMdoc(msoMdocConf) = credential.value {
+			logger.info("msoMdoc with scope \(String(describing: msoMdocConf.scope)), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
 			let jwtProofType = msoMdocConf.proofTypesSupported?["jwt"]
 			let attestProofType = msoMdocConf.proofTypesSupported?["attestation"]
 			let supportsJwtProofTypeWithoutAttestation = jwtProofType != nil && (jwtProofType?.keyAttestationRequirement == nil || jwtProofType?.keyAttestationRequirement == .notRequired)
 			let supportsJwtProofTypeWithAttestation = jwtProofType != nil && !supportsJwtProofTypeWithoutAttestation
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: msoMdocConf.docType, vct: nil, scope: scope, supportsAttestationProofType: attestProofType != nil, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation, supportsJwtProofTypeWithoutAttestation: supportsJwtProofTypeWithoutAttestation, credentialSigningAlgValuesSupported: jwtProofType?.algorithms ?? [], dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: msoMdocConf.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: msoMdocConf.credentialMetadata?.claims ?? [], format: .cbor, defaultCredentialOptions: getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance))
-		} else if let credential = credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, vct != nil || identifier != nil, sdJwtVc.vct == vct || vct == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value, let scope = sdJwtVc.scope {
+
+			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: msoMdocConf.docType, vct: nil, scope: msoMdocConf.scope, supportsAttestationProofType: attestProofType != nil, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation, supportsJwtProofTypeWithoutAttestation: supportsJwtProofTypeWithoutAttestation, credentialSigningAlgValuesSupported: jwtProofType?.algorithms ?? [], dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: msoMdocConf.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: msoMdocConf.credentialMetadata?.claims ?? [], format: .cbor, defaultCredentialOptions: getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance))
+		} else if let credential =  credentialsSupported.first(where: { if case .sdJwtVc(let sdJwtVc) = $0.value, vct != nil || identifier != nil, sdJwtVc.vct == vct || vct == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), case let .sdJwtVc(sdJwtVc) = credential.value {
 			logger.info("sdJwtVc with vct \(sdJwtVc.vct ?? ""), identifier: \(credential.key.value), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
 			let jwtProofType = sdJwtVc.proofTypesSupported?["jwt"]
 			let attestProofType = sdJwtVc.proofTypesSupported?["attestation"]
 			let supportsJwtProofTypeWithoutAttestation = jwtProofType != nil && (jwtProofType?.keyAttestationRequirement == nil || jwtProofType?.keyAttestationRequirement == .notRequired)
 			let supportsJwtProofTypeWithAttestation = jwtProofType != nil && !supportsJwtProofTypeWithoutAttestation
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: scope,  supportsAttestationProofType: attestProofType != nil, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation,  supportsJwtProofTypeWithoutAttestation: supportsJwtProofTypeWithoutAttestation, credentialSigningAlgValuesSupported: jwtProofType?.algorithms ?? [], dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: sdJwtVc.credentialMetadata?.claims ?? [], format: .sdjwt, defaultCredentialOptions: getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance))
+
+			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: sdJwtVc.scope,  supportsAttestationProofType: attestProofType != nil, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation,  supportsJwtProofTypeWithoutAttestation: supportsJwtProofTypeWithoutAttestation, credentialSigningAlgValuesSupported: jwtProofType?.algorithms ?? [], dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: sdJwtVc.credentialMetadata?.claims ?? [], format: .sdjwt, defaultCredentialOptions: getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance))
 		}
 		let requestedParams = [docType.map { "docType: \($0)" }, vct.map { "vct: \($0)" }, identifier.map { "identifier: \($0)" }].compactMap { $0 }.joined(separator: ", ")
 		logger.error("No credential configuration found with \(requestedParams). Available credential identifiers: \(credentialsSupported.keys.map(\.value).joined(separator: ", "))")
@@ -444,10 +446,10 @@ public actor OpenId4VCIService {
 		)
 	}
 
-	func getCredentialOfferedModels(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], batchCredentialIssuance: BatchCredentialIssuance?) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String, offered: OfferedDocModel)] {
+	func getCredentialOfferedModels(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], batchCredentialIssuance: BatchCredentialIssuance?) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String?, offered: OfferedDocModel)] {
 			let credentialInfos = credentialsSupported.compactMap {
-				if case .msoMdoc(let msoMdocCred) = $0.value, let scope = msoMdocCred.scope, case let dco = getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, vct: nil, scope: scope, identifier: $0.key.value, displayName: msoMdocCred.credentialMetadata?.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported, claims: msoMdocCred.credentialMetadata?.claims ?? [], credentialOptions: dco, keyOptions: nil) { (identifier: $0.key, scope: scope, offered: offered) }
-				else if case .sdJwtVc(let sdJwtVc) = $0.value, let scope = sdJwtVc.scope, case let dco = getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, vct: sdJwtVc.vct, scope: scope, identifier: $0.key.value, displayName: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata).getName(uiCulture) ?? scope, algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, claims: sdJwtVc.credentialMetadata?.claims ?? [], credentialOptions: dco, keyOptions: nil) { (identifier: $0.key, scope: scope, offered: offered) }
+				if case .msoMdoc(let msoMdocCred) = $0.value, case let dco = getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: msoMdocCred.docType, vct: nil, scope: msoMdocCred.scope, identifier: $0.key.value, displayName: msoMdocCred.credentialMetadata?.display.map(\.displayMetadata).getName(uiCulture) ?? msoMdocCred.docType, algValuesSupported: msoMdocCred.credentialSigningAlgValuesSupported, claims: msoMdocCred.credentialMetadata?.claims ?? [], credentialOptions: dco, keyOptions: nil) { (identifier: $0.key, scope: msoMdocCred.scope, offered: offered) }
+				else if case .sdJwtVc(let sdJwtVc) = $0.value, case let dco = getDefaultCredentialOptions(batchCredentialIssuance: batchCredentialIssuance), case let offered = OfferedDocModel(credentialConfigurationIdentifier: $0.key.value, docType: nil, vct: sdJwtVc.vct, scope: sdJwtVc.scope, identifier: $0.key.value, displayName: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata).getName(uiCulture) ?? "", algValuesSupported: sdJwtVc.credentialSigningAlgValuesSupported, claims: sdJwtVc.credentialMetadata?.claims ?? [], credentialOptions: dco, keyOptions: nil) { (identifier: $0.key, scope: sdJwtVc.scope, offered: offered) }
 				else { nil } }
 			return credentialInfos
 	}
@@ -748,7 +750,7 @@ public actor OpenId4VCIService {
 	}
 
 	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest) async throws -> WalletStorage.Document  {
-		var dataToSave: Data; var docTypeToSave: String?
+		var dataToSave: Data; var docTypeToSave = ""
 		var docMetadata: DocMetadata?; var displayName: String?
 		let pds = issueOutcome.pendingOrDeferredStatus
 		var batch: [WalletStorage.Document]?
@@ -759,7 +761,7 @@ public actor OpenId4VCIService {
 			guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
 			dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 			docMetadata = cc.convertToDocMetadata()
-			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope
+			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
 			dkInfo.batchSize = dataPair.count
 			docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
 			displayName = cc.display.getName(uiCulture)
@@ -792,12 +794,11 @@ public actor OpenId4VCIService {
 	func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {
 		let pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
 		guard pkCoseKeys.count == publicKeys.count else { throw PresentationSession.makeError(str: "Failed to parse public keys") }
-		for (index, doc) in (batch ?? [issued]).enumerated() {
+		for doc in (batch ?? [issued]) {
 			do {
 				if doc.docDataFormat == .cbor {
 					let iss = try IssuerSigned(data: [UInt8](doc.data))
-					guard let docType = doc.docType else { throw PresentationSession.makeError(str: "Document type missing at index \(index)") }
-					try iss.validate(docType: docType)
+					try iss.validate(docType: doc.docType)
 				}
 			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
 		}
