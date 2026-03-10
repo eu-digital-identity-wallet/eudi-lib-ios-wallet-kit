@@ -184,7 +184,7 @@ extension Array where Element == DocClaimMetadata {
 extension CredentialConfiguration {
 	func convertToDocMetadata() -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata)
 	}
 }
 
