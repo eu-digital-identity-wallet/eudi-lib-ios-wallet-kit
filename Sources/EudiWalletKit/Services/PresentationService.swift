@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
+import struct WalletStorage.Document
 
 /// [Doc Types to [Namespace to Items]] dictionary
 public typealias RequestItems = MdocDataTransfer18013.RequestItems
@@ -34,12 +35,17 @@ public protocol PresentationService: Sendable {
 	func receiveRequest() async throws -> UserRequestInfo
 
 	var transactionLog: TransactionLog { get }
+	
+	var  zkpDocumentIds: [Document.ID]? { get }
 
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces (see ``RequestItems``)
 	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws
+	
+	/// wait for disconnect
+	func waitForDisconnect() async throws
 }
 
 public protocol NetworkingProtocol: Sendable {

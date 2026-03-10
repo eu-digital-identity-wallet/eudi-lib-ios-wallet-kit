@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
+import struct WalletStorage.Document
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
@@ -26,10 +27,12 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var bleServerTransfer: MdocGattServer
 	public var status: TransferStatus = .initializing
 	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
+	var continuationDisconnect: CheckedContinuation<Void, Error>?
 	var handleSelected: ((Bool, RequestItems?) async -> Void)?
 	var deviceEngagement: String?
 	var request: UserRequestInfo?
 	public var transactionLog: TransactionLog
+	public var zkpDocumentIds: [Document.ID]?
 	public var flow: FlowType { .ble }
 
 	public init(parameters: InitializeTransferData) throws {
@@ -79,8 +82,16 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend)
+		zkpDocumentIds = bleServerTransfer.zkpDocumentIds
 		handleSelected = nil
 		TransactionLogUtils.setCborTransactionLogResponseInfo(bleServerTransfer, transactionLog: &transactionLog)
+	}
+	
+	public func waitForDisconnect() async throws {
+		if bleServerTransfer.status == .disconnected { return }
+		try await withCheckedThrowingContinuation { c in
+			continuationDisconnect = c
+		}
 	}
 }
 
@@ -90,16 +101,22 @@ extension BlePresentationService: MdocOfflineDelegate {
 	/// - Parameter newStatus: New status
 	public func didChangeStatus(_ newStatus: MdocDataTransfer18013.TransferStatus) {
 		status = if let st = TransferStatus(rawValue: newStatus.rawValue) { st } else { .error }
+		logger.info("Ble changed status to \(status)")
 		switch newStatus {
 		case .qrEngagementReady:
 			if let qrCode = self.bleServerTransfer.qrCodePayload { deviceEngagement = qrCode }
+		case .disconnected:
+			continuationDisconnect?.resume(returning: ())
+			continuationDisconnect = nil
 		default: break
 		}
 	}
 	/// Transfer finished with error
 	/// - Parameter error: The error description
 	public func didFinishedWithError(_ error: Error) {
+		logger.info("Ble finished with error: \(error)")
 		continuationRequest?.resume(throwing: error); continuationRequest = nil
+		continuationDisconnect?.resume(throwing: error); continuationDisconnect = nil
 	}
 
 	/// Received request handler

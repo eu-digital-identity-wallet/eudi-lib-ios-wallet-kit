@@ -21,7 +21,7 @@ import MdocDataModel18013
 import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
-
+import struct WalletStorage.Document
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
@@ -46,15 +46,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
 	// map of document id to (doc type, format, display name) pairs
-	public var docIdToPresentInfo: [String: DocPresentInfo]!
+	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
-	public var documentKeyIndexes: [String: Int]!
+	public var documentKeyIndexes: [Document.ID: Int]
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, storageManager: StorageManager? = nil, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, storageManager: StorageManager? = nil, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [Document.ID: DocPresentInfo], documentKeyIndexes: [Document.ID: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
 		self.storageManager = storageManager
 		self.storageService = storageService
@@ -153,8 +153,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		}
 	}
 
-	func updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: [String]) async throws {
+	func updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: [Document.ID], zkpDocumentIds: [Document.ID]?) async throws {
 		for (id, dpi) in docIdToPresentInfo where presentedIds.contains(id) {
+			if let zkpDocumentIds, zkpDocumentIds.contains(id) { continue }
 			let secureArea = SecureAreaRegistry.shared.get(name: dpi.secureAreaName)
 			guard let keyIndex = documentKeyIndexes[id] else { continue }
 			let newKeyBatchInfo = try await secureArea.updateKeyBatchInfo(id: id, keyIndex: keyIndex)
@@ -173,21 +174,39 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			await MainActor.run { status = .responseSent }
-			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys))
+			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys), zkpDocumentIds: presentationService.zkpDocumentIds)
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
 			await setError(error.localizedDescription)
 			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
 			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
+			throw error
 		}
 	}
 
+	/// Wait for disconnect
+	
+	/// If current status is not `responseSent` this method will return immediately, otherwise it will wait for disconnection and set status to `disconnected`
+	public func waitForDisconnect() async {
+		logger.info("Wait for disconnect, current status: \(status)")
+		if status != .responseSent {
+			logger.warning("This method should be called after response has been sent")
+			return
+		}
+		do {
+			try await presentationService.waitForDisconnect()
+			await MainActor.run { status = .disconnected }
+		} catch {
+			await setError(error.localizedDescription)
+		}
+		
+	}
 
 
 }

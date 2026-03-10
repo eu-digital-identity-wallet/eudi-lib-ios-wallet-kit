@@ -50,7 +50,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	let networkingVp: OpenID4VPNetworking
 	/// Optional model factory type to create custom stronly-typed models
 	public private(set) var modelFactory: (any DocClaimsDecodableFactory)?
-
+	public var zkSystemRepository: ZkSystemRepository?
 	//public static let defaultOpenId4VCIConfig =
 	/// Initialize a wallet instance using a configuration object.
 	/// - Parameters:
@@ -69,7 +69,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// let config = EudiWalletConfiguration(trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!])
 	/// let wallet = try! EudiWallet(eudiWalletConfig: config)
 	/// ```
-	public init(eudiWalletConfig: EudiWalletConfiguration, storageService: (any DataStorageService)? = nil, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil) throws {
+	public init(eudiWalletConfig: EudiWalletConfiguration, storageService: (any DataStorageService)? = nil, openID4VpConfig: OpenId4VpConfiguration? = nil, openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil, networking: (any NetworkingProtocol)? = nil, secureAreas: [any SecureArea]? = nil, transactionLogger: (any TransactionLogger)? = nil, modelFactory: (any DocClaimsDecodableFactory)? = nil, zkSystemRepository: ZkSystemRepository? = nil) throws {
 		try Self.validateServiceParams(serviceName: eudiWalletConfig.serviceName)
 		self.eudiWalletConfig = eudiWalletConfig
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
@@ -79,6 +79,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.networkingVp = OpenID4VPNetworking(networking: networking ?? URLSession.shared)
 		let storageServiceObj = storageService ?? KeyChainStorageService(serviceName: self.eudiWalletConfig.serviceName, accessGroup: self.eudiWalletConfig.accessGroup)
 		self.modelFactory = modelFactory
+		self.zkSystemRepository = zkSystemRepository
 		storage = StorageManager(storageService: storageServiceObj, modelFactory: modelFactory)
 		if let secureAreas, !secureAreas.isEmpty {
 			for asa in secureAreas { SecureAreaRegistry.shared.register(secureArea: asa) }
@@ -164,7 +165,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter issuerName: The name of the issuer service
 	/// - Returns: The issuer metadata
 	public func getIssuerMetadata(issuerName: String) async throws -> CredentialIssuerMetadata {
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+		var vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName)
+		if vciService == nil { vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerName) }
+		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		return try await vciService.getIssuerMetadata()
@@ -181,7 +184,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
 	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+		var vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName)
+		if vciService == nil { vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerName) }
+		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		return try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
@@ -197,7 +202,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - docTypeIdentifier: Document type identifier (msoMdoc, sdJwt, or configuration identifier)
 	/// - Returns: Issuer-recommended credential options
 	public func getDefaultCredentialOptions(issuerName: String, docTypeIdentifier: DocTypeIdentifier) async throws -> CredentialOptions {
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+		var vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName)
+		if vciService == nil { vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerName) }
+		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		return try await vciService.getMetadataDefaultCredentialOptions(docTypeIdentifier)
@@ -213,7 +220,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
 	@discardableResult public func requestDeferredIssuance(issuerName: String, deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+		var vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName)
+		if vciService == nil { vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerName) }
+		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		return try await vciService.requestDeferredIssuance(deferredDoc: deferredDoc, credentialOptions: credentialOptions, keyOptions: keyOptions)
@@ -230,7 +239,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(issuerName: String, pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
+		var vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName)
+		if vciService == nil { vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerName) }
+		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		return try await vciService.resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl, credentialOptions: credentialOptions, keyOptions: keyOptions)
@@ -245,18 +256,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
-			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
-			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
-			var vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: credentialIssuerIdentifier.url.absoluteString)
+			let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
+			let urlString = credentialIssuerIdentifier.url.absoluteString
+			var vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString)
 			if vciService == nil {
-				let issuerURL = credentialIssuerIdentifier.url.absoluteString
 				let fallbackService = OpenId4VCIServiceRegistry.shared.getAllServices().first
 				var config: OpenId4VciConfiguration
 				if let fallbackService {
-					config = await fallbackService.config.copy(credentialIssuerURL: issuerURL)
+					config = await fallbackService.config.copy(credentialIssuerURL: urlString)
 					if let authFlowRedirectionURI { config = config.copy(authFlowRedirectionURI: authFlowRedirectionURI) }
 				} else {
-					config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL)
+					config = OpenId4VciConfiguration(credentialIssuerURL: urlString)
 				}
 				vciService = try registerOpenId4VciService(name: urlString, config: config)
 			}
@@ -278,9 +288,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networkingVci), credentialIssuerMetadataResolver: OpenId4VCIService.makeMetadataResolver(networkingVci), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networkingVci), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networkingVci))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
 		switch result {
 		case .success(let offer):
-			let urlString = offer.credentialIssuerIdentifier.url.getBaseUrl()
-			let credentialIssuerIdentifier = try CredentialIssuerId(urlString)
-			let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: credentialIssuerIdentifier.url.absoluteString)
+			let urlString = offer.credentialIssuerIdentifier.url.absoluteString
+			let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString)
 			guard let vciService else {
 				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
 			}
@@ -440,7 +449,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.filter({$0.docType != nil}).map { ($0.id, $0.docType!) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(eudiWalletConfig.uiCulture)) })
 		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, StorageManager.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
-		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt)), documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, trustedCertificates: eudiWalletConfig.trustedReaderCertificates ?? [], deviceAuthMethod: eudiWalletConfig.deviceAuthMethod.rawValue, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs)
+		let iaca = eudiWalletConfig.trustedReaderRootCertificates ?? []
+		parameters = InitializeTransferData(dataFormats: Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt)), documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, iaca: iaca, deviceAuthMethod: eudiWalletConfig.deviceAuthMethod.rawValue, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, zkSystemRepository: zkSystemRepository)
 		return (parameters, docs)
 	}
 
