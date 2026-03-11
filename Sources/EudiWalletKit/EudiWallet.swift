@@ -208,7 +208,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			throw PresentationSession.makeError(str: "Document metadata not found for document: \(documentId)")
 		}
 		let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: docMetadata.credentialIssuerIdentifier) 
-			guard let vciService else { throw WalletError(description: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)") }
+		guard let vciService else { throw PresentationSession.makeError(str: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)", localizationKey: nil) }
 		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
 			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
 			.map { $0.toAuthorizedRequest() }
