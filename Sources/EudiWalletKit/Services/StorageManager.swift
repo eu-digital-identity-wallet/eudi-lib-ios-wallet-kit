@@ -68,7 +68,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		case .issued:
 			let models = await docs.asyncCompactMap { d -> DocClaimsModel? in
 				let mdoc = Self.toClaimsModel(doc:d, uiCulture: uiCulture, modelFactory: modelFactory)
-				if var mdoc = mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
+				if let mdoc = mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
 				return mdoc
 			}
 			await MainActor.run { docModels = models }
@@ -91,7 +91,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		switch doc.status {
 		case .issued:
 			let mdoc: DocClaimsModel? = Self.toClaimsModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
-			if var mdoc {
+			if let mdoc {
 				mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: doc.id)
 				await MainActor.run { docModels.append(mdoc) }
 			} else { logger.error("Could not decode claims of \(doc.docType)") }
@@ -119,7 +119,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	///   - usageCount: The usage count information
 	///   - id: The document identifier
 	public func setUsageCount(_ usageCount: CredentialsUsageCounts?, id: String) {
-		var docModel = docModels.first(where: { $0.id == id })
+		let docModel = docModels.first(where: { $0.id == id })
 		docModel?.credentialsUsageCounts = usageCount
 	}
 

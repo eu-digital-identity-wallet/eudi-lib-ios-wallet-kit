@@ -26,7 +26,6 @@ import SwiftCBOR
 import Logging
 // ios specific imports
 #if canImport(UIKit)
-import FileLogging
 import UIKit
 #endif
 import protocol OpenID4VCI.Networking
@@ -201,7 +200,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
-	@discardableResult func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
 		guard let document = try await storage.storageService.loadDocument(id: documentId, status: .issued) else {
 			throw PresentationSession.makeError(str: "Document not found in storage with id: \(documentId)")
 		}
@@ -210,7 +209,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 		let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: docMetadata.credentialIssuerIdentifier) 
 			guard let vciService else { throw WalletError(description: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)") }
-		return try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
+		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
+			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
+			.map { $0.toAuthorizedRequest() }
+		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: credentialOptions ?? docMetadata.credentialOptions, keyOptions: keyOptions ?? docMetadata.keyOptions, promptMessage: promptMessage)
+		try await storage.deleteDocument(id: documentId, status: .issued)
+		return reissued
 	}
 
 	/// Get default credential options (batch-size and credential policy) for a document type
@@ -413,7 +417,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let id = UUID().uuidString
 			_ = try await pkCose.secureArea.createKeyBatch(id: id, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: nil)
 			let displayName = dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType)
-			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [])
+			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [], claims: nil, authorizedRequestData: nil, keyOptions: nil, credentialOptions: nil)
 			let dki = DocKeyInfo(secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, batchSize: 1, credentialPolicy: .rotateUse)
 			let docSample = Document(id: id, docType: dsd.docType, docDataFormat: .cbor, data: dsd.issData, docKeyInfo: dki.toData(), createdAt: Date.distantPast, metadata: docMetadata.toData(), displayName: displayName, status: .issued)
 			try await storage.storageService.saveDocument(docSample, batch: nil, allowOverwrite: true)

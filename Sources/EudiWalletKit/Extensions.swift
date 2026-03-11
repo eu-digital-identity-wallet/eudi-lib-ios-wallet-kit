@@ -181,10 +181,28 @@ extension Array where Element == DocClaimMetadata {
 	}
 }
 
+/// Codable wrapper to persist the essential fields of AuthorizedRequest
+struct AuthorizedRequestData: Codable {
+	let accessToken: IssuanceAccessToken
+	let refreshToken: IssuanceRefreshToken?
+	let timeStamp: TimeInterval
+
+	init(from authorized: AuthorizedRequest) {
+		self.accessToken = authorized.accessToken
+		self.refreshToken = authorized.refreshToken
+		self.timeStamp = authorized.timeStamp
+	}
+
+	func toAuthorizedRequest() -> AuthorizedRequest {
+		AuthorizedRequest(accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: nil, timeStamp: timeStamp, dPopNonce: nil, grantType: nil)
+	}
+}
+
 extension CredentialConfiguration {
-	func convertToDocMetadata() -> DocMetadata {
+	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata)
+		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
 	}
 }
 

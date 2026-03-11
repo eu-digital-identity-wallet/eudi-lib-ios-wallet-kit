@@ -1,6 +1,5 @@
 import Foundation
 import Logging
-import XCGLogger
 import MdocDataModel18013
 import OpenID4VP
 import Copyable

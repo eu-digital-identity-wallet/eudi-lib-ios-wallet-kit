@@ -82,7 +82,7 @@ struct PendingIssuanceModel: Codable {
 }
 
 enum IssuanceOutcome {
-	case issued([(data: Data, pk: Data)], CredentialConfiguration)
+	case issued([(data: Data, pk: Data)], CredentialConfiguration, AuthorizedRequest)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }
@@ -109,13 +109,13 @@ extension IssuanceOutcome {
 	}
 
 	func getDataToSave(index: Int, format: DocDataFormat) -> Data {
-		guard case let .issued(dataPairs, _) = self, dataPairs.count > index else { return Data() }
+		guard case let .issued(dataPairs, _, _) = self, dataPairs.count > index else { return Data() }
 		let (data, _) = dataPairs[index]
 		return data
 	}
 
 	func getPublicKey(index: Int) -> Data {
-		guard case let .issued(dataPairs, _) = self, dataPairs.count > index else { return Data() }
+		guard case let .issued(dataPairs, _, _) = self, dataPairs.count > index else { return Data() }
 		let (_, pk) = dataPairs[index]
 		return pk
 	}
