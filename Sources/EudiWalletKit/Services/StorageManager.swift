@@ -194,10 +194,73 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			let (_, payload, _) = extractJWTParts(sdJwt.jwt.compactSerialization)
 			guard let paylodData = Data(base64URLEncoded: payload), let payload = try? JSON(data: paylodData) else { logger.error("Failed to base64url decode payload"); return nil }
 			hashingAlg = try payload.extractDigestAlgorithm()
-			recreatedClaims = result.recreatedClaims
+			recreatedClaims = resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: hashingAlg ?? "sha-256")
 		} catch { logger.error("Failed to recreate claims from SDJWT: \(error)") }
 		guard let recreatedClaims, let hashingAlg else { return nil }
 		return (recreatedClaims, hashingAlg)
+	}
+
+	/// Recursively resolve any remaining `_sd` digest arrays in the JSON tree using the raw disclosures.
+	static func resolveNestedSdClaims(_ json: JSON, disclosures: [String], hashingAlg: String) -> JSON {
+		// Build a map from base64url-encoded hash → decoded disclosure JSON
+		var hashToDisclosure: [String: JSON] = [:]
+		for disclosure in disclosures {
+			guard let hash = computeDisclosureHash(disclosure, alg: hashingAlg) else { continue }
+			guard let decoded = Data(base64URLEncoded: disclosure), let dJson = try? JSON(data: decoded) else { continue }
+			hashToDisclosure[hash] = dJson
+		}
+		return resolveNode(json, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+	}
+
+	private static func resolveNode(_ json: JSON, hashToDisclosure: [String: JSON], hashingAlg: String) -> JSON {
+		switch json.type {
+		case .dictionary:
+			var dict = json.dictionaryValue
+			// If this object has an _sd array, resolve the hashes into actual claims
+			if let sdArray = dict["_sd"]?.array {
+				for hashJson in sdArray {
+					let hashStr = hashJson.stringValue
+					if let disclosure = hashToDisclosure[hashStr], disclosure.arrayValue.count >= 3 {
+						let claimName = disclosure[1].stringValue
+						let claimValue = disclosure[2]
+						dict[claimName] = claimValue
+					}
+				}
+				dict.removeValue(forKey: "_sd")
+			}
+			dict.removeValue(forKey: "_sd_alg")
+			// Recursively resolve children
+			var result = JSON([:])
+			for (key, value) in dict {
+				result[key] = resolveNode(value, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+			}
+			return result
+		case .array:
+			let resolved = json.arrayValue.map { element -> JSON in
+				// Handle array elements with "..." (decoy digests)
+				if element.type == .dictionary, let dots = element["..."].string {
+					if let disclosure = hashToDisclosure[dots], disclosure.arrayValue.count >= 2 {
+						return resolveNode(disclosure[1], hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+					}
+				}
+				return resolveNode(element, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+			}
+			return JSON(resolved)
+		default:
+			return json
+		}
+	}
+
+	private static func computeDisclosureHash(_ disclosure: String, alg: String) -> String? {
+		guard let data = disclosure.data(using: .ascii) else { return nil }
+		let digest: Data
+		switch alg {
+		case "sha-256": digest = Data(SHA256.hash(data: data))
+		case "sha-384": digest = Data(SHA384.hash(data: data))
+		case "sha-512": digest = Data(SHA512.hash(data: data))
+		default: digest = Data(SHA256.hash(data: data))
+		}
+		return digest.base64URLEncodedString()
 	}
 
 	static func extractJWTParts(_ jwt: String) -> (String, String, String) {

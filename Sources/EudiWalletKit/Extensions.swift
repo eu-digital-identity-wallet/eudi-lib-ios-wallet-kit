@@ -259,6 +259,7 @@ extension JSON {
 	}
 
 	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?, _ displayName: String?, _ mandatory: Bool?) -> DocClaim? {
+		if key == "_sd" || key == "_sd_alg" || key == "..." { return nil } // internal SD-JWT digest elements
 		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
 		if key == "assurance_level" || key == JWTClaimNames.issuer || key == JWTClaimNames.audience, type == .string {  return nil }
