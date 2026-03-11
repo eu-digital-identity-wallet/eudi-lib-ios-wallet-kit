@@ -217,8 +217,9 @@ public actor OpenId4VCIService {
 		}
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
 		let authorizedOutcome: AuthorizeRequestOutcome
-		if let authorized {
-			// If authorized is provided, it means the authorization step has already been completed
+		if var authorized {
+			let resRefresh = await issuer.refresh(clientId: config.clientId, authorizedRequest: authorized)
+			authorized = try resRefresh.get()
 			authorizedOutcome = .authorized(authorized)
 			logger.info("Using provided authorized request to create authorized outcome for offer \(offerUri)")
 		}
@@ -301,7 +302,7 @@ public actor OpenId4VCIService {
 		let offerUri = UUID().uuidString
 		Self.credentialOfferCache[offerUri] = offer
 		let docTypes = [makeOfferedDocModel(from: credentialConfiguration, credentialOptions: credentialOptions, keyOptions: keyOptions)]
-		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage)
+		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, documentId: nil, txCodeValue: nil, promptMessage: promptMessage)
 	}
 
 	/// Issue multiple documents using OpenId4Vci protocol
