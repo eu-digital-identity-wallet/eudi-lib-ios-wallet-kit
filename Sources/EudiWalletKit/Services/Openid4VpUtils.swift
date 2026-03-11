@@ -112,7 +112,7 @@ class OpenId4VpUtils {
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found") }
 		let allPaths = Array(allPathsDict.keys)
-		let query = Set(allPaths.filter { path in requestItems.contains(where: { r in r.claimPath == path && allPathsDict[path]?.count == 1 }) })
+		let query = Set(allPaths.filter { path in requestItems.contains(where: { r in r.claimPath == path }) })
 		for q in query { print(q.value.map(\.description) ) }
 		let presentedSdJwt = try sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
