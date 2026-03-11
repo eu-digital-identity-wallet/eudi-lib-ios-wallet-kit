@@ -200,6 +200,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
+	@available(*, deprecated, message: "Does not work yet")
 	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
 		guard let document = try await storage.storageService.loadDocument(id: documentId, status: .issued) else {
 			throw PresentationSession.makeError(str: "Document not found in storage with id: \(documentId)")
