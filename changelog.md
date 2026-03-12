@@ -1,3 +1,12 @@
+## v0.21.2
+
+### SD-JWT Nested Disclosure fixes
+* `StorageManager.recreateSdJwtClaims` now recursively resolves nested `_sd` digest arrays in SD-JWT claims. Previously, only top-level disclosures were resolved; nested objects inside arrays (e.g., `address[0]`) retained raw `_sd` hashes instead of the actual claim values.
+* SD-JWT presentations via OpenID4VP now selectively disclose only the claims requested in the DCQL query
+
+### `StorageManager.docModels`
+* `docModels` is a `@Published` property holding an array of concrete `DocClaimsModel` objects representing all issued documents currently loaded in the wallet.
+
 ## v0.21.1
 
 * Update `eudi-lib-ios-openid4vci-swift` dependency to version 0.30.0
