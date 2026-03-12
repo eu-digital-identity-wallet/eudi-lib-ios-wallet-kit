@@ -191,33 +191,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
 	}
 
-	/// Reissue a document using an already-known credential configuration
-	///
-	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
-	/// - Parameters:
-	///   - issuerName: The name of the issuer service
-	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults from the configuration are used.
-	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
-	///   - promptMessage: Prompt message for biometric authentication (optional)
-	/// - Returns: Array of issued documents. They are saved in storage.
-	@available(*, deprecated, message: "Does not work yet")
-	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		guard let document = try await storage.storageService.loadDocument(id: documentId, status: .issued) else {
-			throw PresentationSession.makeError(str: "Document not found in storage with id: \(documentId)")
-		}
-		guard let docMetadata = DocMetadata(from: document.metadata) else {
-			throw PresentationSession.makeError(str: "Document metadata not found for document: \(documentId)")
-		}
-		let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: docMetadata.credentialIssuerIdentifier) 
-		guard let vciService else { throw PresentationSession.makeError(str: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)", localizationKey: nil) }
-		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
-			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
-			.map { $0.toAuthorizedRequest() }
-		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: credentialOptions ?? docMetadata.credentialOptions, keyOptions: keyOptions ?? docMetadata.keyOptions, promptMessage: promptMessage)
-		try await storage.deleteDocument(id: documentId, status: .issued)
-		return reissued
-	}
-
 	/// Get default credential options (batch-size and credential policy) for a document type
 	///
 	/// Queries the issuer's metadata to retrieve recommended credential configuration. The returned `CredentialOptions` contains:
