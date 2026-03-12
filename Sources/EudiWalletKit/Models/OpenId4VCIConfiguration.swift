@@ -90,7 +90,7 @@ extension OpenId4VciConfiguration {
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
 				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
 			jwsAlgorithm = jwsAlg
-			let publicCoseKey: CoseKey = if let privateKeyId, popUsage != .dpop, let keyInfo = try? await secureArea.getKeyBatchInfo(id: privateKeyId), keyOptions.secureAreaName == keyInfo.secureAreaName, keyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) { pck } else {
+			let publicCoseKey: CoseKey = if let privateKeyId, let keyInfo = try? await secureArea.getKeyBatchInfo(id: privateKeyId), keyOptions.secureAreaName == keyInfo.secureAreaName, keyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) { pck } else {
 				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first! }
 			let unlockData = try await secureArea.unlockKey(id: keyId)
 			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
@@ -106,7 +106,7 @@ extension OpenId4VciConfiguration {
 			// EC supported bit sizes are 256, 384, or 521. RS256 is 2048 bits.
 			let bits: Int = switch jwsAlgorithm.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; case JWSAlgorithm(.RS256).name: 2048; default: throw WalletError(description: "Unsupported DPoP algorithm: \(jwsAlgorithm.name)") }
 			let type: SecKey.KeyType = switch jwsAlgorithm.name { case JWSAlgorithm(.RS256).name: .rsa; default: .ellipticCurve }
-			let privateKey: SecKey = if let privateKeyId, popUsage != .dpop, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
+			let privateKey: SecKey = if let privateKeyId, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
 			privateKeyProxy = .secKey(privateKey)
 			publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		}

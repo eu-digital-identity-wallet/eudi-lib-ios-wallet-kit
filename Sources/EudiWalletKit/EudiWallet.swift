@@ -26,7 +26,6 @@ import SwiftCBOR
 import Logging
 // ios specific imports
 #if canImport(UIKit)
-import FileLogging
 import UIKit
 #endif
 import protocol OpenID4VCI.Networking
@@ -294,7 +293,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
 			}
 			if let configuration {	await vciService.setConfiguration(configuration) }
-			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, txCodeValue: txCodeValue, promptMessage: promptMessage)
+			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
@@ -392,7 +391,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let id = UUID().uuidString
 			_ = try await pkCose.secureArea.createKeyBatch(id: id, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: nil)
 			let displayName = dsd.docType == EuPidModel.euPidDocType ? "PID" : (dsd.docType == IsoMdlModel.isoDocType ? "mDL" : dsd.docType)
-			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [])
+			let docMetadata = DocMetadata(credentialIssuerIdentifier: "", configurationIdentifier: "", docType: dsd.docType, display: [DisplayMetadata(name: displayName, localeIdentifier: "en_US")], issuerDisplay: [], claims: nil, authorizedRequestData: nil, keyOptions: nil, credentialOptions: nil)
 			let dki = DocKeyInfo(secureAreaName: SecureAreaRegistry.DeviceSecureArea.software.rawValue, batchSize: 1, credentialPolicy: .rotateUse)
 			let docSample = Document(id: id, docType: dsd.docType, docDataFormat: .cbor, data: dsd.issData, docKeyInfo: dki.toData(), createdAt: Date.distantPast, metadata: docMetadata.toData(), displayName: displayName, status: .issued)
 			try await storage.storageService.saveDocument(docSample, batch: nil, allowOverwrite: true)
