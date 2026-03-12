@@ -1,4 +1,4 @@
-## v0.21.2
+## v0.22.0
 
 ### SD-JWT Nested Disclosure fixes
 * `StorageManager.recreateSdJwtClaims` now recursively resolves nested `_sd` digest arrays in SD-JWT claims. Previously, only top-level disclosures were resolved; nested objects inside arrays (e.g., `address[0]`) retained raw `_sd` hashes instead of the actual claim values.
