@@ -200,13 +200,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
-	@available(*, deprecated, message: "Does not work yet")
 	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		guard let document = try await storage.storageService.loadDocument(id: documentId, status: .issued) else {
-			throw PresentationSession.makeError(str: "Document not found in storage with id: \(documentId)")
-		}
-		guard let docMetadata = DocMetadata(from: document.metadata) else {
-			throw PresentationSession.makeError(str: "Document metadata not found for document: \(documentId)")
+		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
+			throw PresentationSession.makeError(str: "Document metadata not found in storage with id: \(documentId)")
 		}
 		let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: docMetadata.credentialIssuerIdentifier) 
 		guard let vciService else { throw PresentationSession.makeError(str: "No OpenId4VCI service registered for issuer URL \(docMetadata.credentialIssuerIdentifier)", localizationKey: nil) }
@@ -214,7 +210,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
 			.map { $0.toAuthorizedRequest() }
 		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: credentialOptions ?? docMetadata.credentialOptions, keyOptions: keyOptions ?? docMetadata.keyOptions, promptMessage: promptMessage)
-		try await storage.deleteDocument(id: documentId, status: .issued)
 		return reissued
 	}
 
@@ -320,7 +315,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				throw WalletError(description: "No OpenId4VCI service registered for name \(urlString)")
 			}
 			if let configuration {	await vciService.setConfiguration(configuration) }
-			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
+			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}
