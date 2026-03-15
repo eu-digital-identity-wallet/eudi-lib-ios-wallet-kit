@@ -218,7 +218,7 @@ public actor OpenId4VCIService {
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
-			let resRefresh = await issuer.refresh(clientId: vciConfig.client.id, authorizedRequest: authorized)
+			let resRefresh = await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
 			do {
 				authorized = try resRefresh.get()
 				authorizedOutcome = .authorized(authorized)

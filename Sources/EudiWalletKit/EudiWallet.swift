@@ -200,7 +200,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
-	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
 		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
 			throw PresentationSession.makeError(str: "Document metadata not found in storage with id: \(documentId)")
 		}
@@ -210,7 +210,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
 			.map { $0.toAuthorizedRequest() }
 		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: credentialOptions ?? docMetadata.credentialOptions, keyOptions: keyOptions ?? docMetadata.keyOptions, promptMessage: promptMessage)
-		return reissued
+		return reissued.first!
 	}
 
 	/// Get default credential options (batch-size and credential policy) for a document type
@@ -434,7 +434,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	@available(*, deprecated, message: "Use credentialsUsageCount property of the DocClaimDecodable model instead")
 	public func getCredentialsUsageCount(id: String) async throws -> CredentialsUsageCounts? {
 		let uc = try await storage.getCredentialsUsageCount(id: id)
-		storage.setUsageCount(uc, id: id)
+		await storage.setUsageCount(uc, id: id)
 		return uc
 	}
 
