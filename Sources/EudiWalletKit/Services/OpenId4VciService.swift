@@ -351,6 +351,7 @@ public actor OpenId4VCIService {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
 			let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: docTypeModel.credentialOptions, offer: offer)
 			let svc = try OpenId4VCIService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService)
+			if let documentId { logger.info("Resolve offer to update document with id \(documentId)") }
 			let id = UUID().uuidString //(i == 0 ? documentId : nil) ?? UUID().uuidString
 			try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: usedCredentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage)
 			openId4VCIServices.append(svc)
