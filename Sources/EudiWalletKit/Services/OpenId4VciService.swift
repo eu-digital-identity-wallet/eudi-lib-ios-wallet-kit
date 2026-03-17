@@ -674,12 +674,12 @@ public actor OpenId4VCIService {
 				lock.lock()
 				defer { lock.unlock() }
 				if let error {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authRequestFailed(error))
+					nillableContinuation?.resume(throwing: WalletError.authRequestFailed(error: error))
 					nillableContinuation = nil
 					return
 				}
 				guard let url else {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl)
+					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a url"))
 					nillableContinuation = nil
 					return
 				}
@@ -693,7 +693,7 @@ public actor OpenId4VCIService {
 					nillableContinuation?.resume(returning: .code(code))
 					nillableContinuation = nil
 				} else {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoCode)
+					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a code"))
 					nillableContinuation = nil
 				}
 			}
@@ -829,38 +829,16 @@ fileprivate extension URL {
 	}
 }
 
-public enum OpenId4VCIError: LocalizedError {
-	case authRequestFailed(Error)
-	case authorizeResponseNoUrl
-	case authorizeResponseNoCode
-	case tokenRequestFailed(Error)
-	case tokenResponseNoData
-	case tokenResponseInvalidData(String)
-	case dataNotValid
-
-	public var localizedDescription: String {
-		switch self {
-		case .authRequestFailed(let error):
-			if let wae = error as? ASWebAuthenticationSessionError {
-				if wae.code == .canceledLogin { return "The login has been canceled." }
-				else if wae.code == .presentationContextNotProvided { return "Web authentication presenentation context not provided." }
-				else if wae.code == .presentationContextInvalid { return "Web authentication presenentation context invalid." }
-				else { return wae.localizedDescription}
-			}
-			return "Authorization request failed: \(error.localizedDescription)"
-		case .authorizeResponseNoUrl:
-			return "Authorization response does not include a url"
-		case .authorizeResponseNoCode:
-			return "Authorization response does not include a code"
-		case .tokenRequestFailed(let error):
-			return "Token request failed: \(error.localizedDescription)"
-		case .tokenResponseNoData:
-			return "No data received as part of token response"
-		case .tokenResponseInvalidData(let reason):
-			return "Invalid data received as part of token response: \(reason)"
-		case .dataNotValid:
-			return "Issued data not valid"
+extension WalletError {
+	public static func authRequestFailed(error: Error) -> WalletError {
+		if let wae = error as? ASWebAuthenticationSessionError {
+			if wae.code == .canceledLogin { return WalletError(description: "The login has been cancelled.", localizationKey: "login_cancelled")  }
+			else if wae.code == .presentationContextNotProvided { return WalletError(description: "Web authentication presentation context not provided.") }
+			else if wae.code == .presentationContextInvalid { return WalletError(description: "Web authentication presentation context invalid.") }
+			else { return WalletError(description: wae.localizedDescription) }
 		}
+		return WalletError(description:"Authorization request failed: \(error.localizedDescription)")
+		
 	}
 }
 
