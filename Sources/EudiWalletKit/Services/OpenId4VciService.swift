@@ -392,7 +392,7 @@ public actor OpenId4VCIService {
 		}
 		let requestedParams = [docType.map { "docType: \($0)" }, vct.map { "vct: \($0)" }, identifier.map { "identifier: \($0)" }].compactMap { $0 }.joined(separator: ", ")
 		logger.error("No credential configuration found with \(requestedParams). Available credential identifiers: \(credentialsSupported.keys.map(\.value).joined(separator: ", "))")
-		throw WalletError(description: "Issuer does not support the requested credential with \(requestedParams).")
+		throw PresentationSession.makeError(str: "Issuer does not support the requested credential with \(requestedParams).")
 	}
 
 	func buildCredentialOffer(for docTypeIdentifiers: [DocTypeIdentifier]) async throws -> ([CredentialConfiguration], CredentialOffer) {

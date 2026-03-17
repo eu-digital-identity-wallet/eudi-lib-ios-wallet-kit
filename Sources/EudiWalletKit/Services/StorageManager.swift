@@ -385,7 +385,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			case .pending: pendingDocuments.firstIndex(where: { $0.id == id});
 			default: deferredDocuments.firstIndex(where: { $0.id == id})
 			}
-		guard let index else { throw WalletError(description: "Document to delete \(id) not found") }
+		guard let index else { throw PresentationSession.makeError(str: "Document to delete \(id) not found") }
 		do {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
