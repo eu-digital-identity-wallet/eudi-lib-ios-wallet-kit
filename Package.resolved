@@ -1,15 +1,6 @@
 {
-  "originHash" : "70397e0de8c836e81fbc20150bdbbd9bd61e19a628048e363387669971daef38",
+  "originHash" : "e098e174b41079cf0efa1ee8f2b4de488c76b40ab37ab1f3cf2e7154c6c16467",
   "pins" : [
-    {
-      "identity" : "blueecc",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/niscy-eudiw/BlueECC.git",
-      "state" : {
-        "revision" : "15e525cfff2da9b7429285346248e2c67ba0bd12",
-        "version" : "1.2.4"
-      }
-    },
     {
       "identity" : "cryptoswift",
       "kind" : "remoteSourceControl",
@@ -87,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git",
       "state" : {
-        "revision" : "a55fbaa6417881e9409306d0d9405ca20bf64147",
-        "version" : "0.13.0"
+        "revision" : "7bcae6b2ec0f8b9ce3c34a9b78a50be131419514",
+        "version" : "0.14.1"
       }
     },
     {
