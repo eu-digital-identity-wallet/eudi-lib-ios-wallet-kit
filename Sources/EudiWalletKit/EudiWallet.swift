@@ -207,7 +207,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Array of issued documents. They are saved in storage.
 	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
 		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
-			throw PresentationSession.makeError(str: "Document metadata not found in storage with id: \(documentId)")
+			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found")
 		}
 		let vciService = try await resolveVCIService(issuerName: docMetadata.credentialIssuerIdentifier)
 		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
