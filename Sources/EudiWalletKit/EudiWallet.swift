@@ -196,15 +196,19 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
 	}
 
-	/// Reissue a document using an already-known credential configuration
+	/// Reissue an existing document using previously stored issuance metadata and authorization data.
 	///
-	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	/// This method retrieves the document's metadata from storage and uses its credential issuer identifier
+	/// to resolve the appropriate OpenID4VCI service. If the document's metadata contains persisted authorization
+	/// data, it is forwarded to the service to avoid re-authentication when possible.
+	///
 	/// - Parameters:
-	///   - issuerName: The name of the issuer service
-	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults from the configuration are used.
-	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
-	///   - promptMessage: Prompt message for biometric authentication (optional)
-	/// - Returns: Array of issued documents. They are saved in storage.
+	///   - documentId: The unique identifier of the previously issued document to reissue.
+	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, the options from the original issuance metadata are used.
+	///   - keyOptions: Key options (secure area name and other options) for the document. If nil, the options from the original issuance metadata are used.
+	///   - promptMessage: Prompt message for biometric authentication (optional).
+	/// - Returns: The reissued document, saved in storage.
+	/// - Throws: An error if the document metadata is not found or reissuance fails.
 	@discardableResult public func reissueDocument(documentId: WalletStorage.Document.ID, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document {
 		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
 			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found")
