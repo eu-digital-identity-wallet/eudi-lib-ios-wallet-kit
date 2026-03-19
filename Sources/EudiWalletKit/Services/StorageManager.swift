@@ -68,7 +68,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		case .issued:
 			let models = await docs.asyncCompactMap { d -> DocClaimsModel? in
 				let mdoc = Self.toClaimsModel(doc:d, uiCulture: uiCulture, modelFactory: modelFactory)
-				if let mdoc = mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
+				if let mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
 				return mdoc
 			}
 			await MainActor.run { docModels = models }
@@ -118,6 +118,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - usageCount: The usage count information
 	///   - id: The document identifier
+	@MainActor
 	public func setUsageCount(_ usageCount: CredentialsUsageCounts?, id: String) {
 		let docModel = docModels.first(where: { $0.id == id })
 		docModel?.credentialsUsageCounts = usageCount
@@ -270,7 +271,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 
 	public func getDocIdsToPresentInfo(documents: [WalletStorage.Document]? = nil) async throws -> [String: DocPresentInfo] {
 		let docs = if let documents { documents } else { try? await storageService.loadDocuments(status: .issued) }
-		let dictValues = await docModels.filter { $0.docType != nil}.asyncCompactMap { m -> (String, DocPresentInfo)? in
+		let dictValues = await docModels.asyncCompactMap { m -> (String, DocPresentInfo)? in
 			guard let doc = docs?.first(where: { $0.id == m.id }), let dki = DocKeyInfo(from: doc.docKeyInfo) else { return nil }
 			let bValid = (try? await hasAnyCredential(id: m.id)) ?? false
 			guard bValid else { return nil }
@@ -279,7 +280,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 				case .sdjwt: if let serString = String(data: doc.data, encoding: .utf8), let sd = try? CompactParser().getSignedSdJwt(serialisedString: serString) { .sdJwt(sd) } else { nil }
 			}
 			guard let docTypedData else { return nil }
-			let presentInfo = DocPresentInfo(docType: m.docType!, secureAreaName: dki.secureAreaName, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
+			let presentInfo = DocPresentInfo(docType: m.docType, secureAreaName: dki.secureAreaName, docDataFormat: m.docDataFormat, displayName: m.displayName, docClaims: m.docClaims, typedData: docTypedData)
 			return (m.id, presentInfo)
 		}
 		return Dictionary(uniqueKeysWithValues: dictValues)
@@ -384,7 +385,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			case .pending: pendingDocuments.firstIndex(where: { $0.id == id});
 			default: deferredDocuments.firstIndex(where: { $0.id == id})
 			}
-		guard let index else { throw WalletError(description: "Document not found") }
+		guard let index else { throw PresentationSession.makeError(str: "Document to delete \(id) not found") }
 		do {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {

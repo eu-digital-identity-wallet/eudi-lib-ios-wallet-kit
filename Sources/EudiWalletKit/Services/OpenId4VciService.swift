@@ -218,12 +218,18 @@ public actor OpenId4VCIService {
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
-			let resRefresh = await issuer.refresh(clientId: config.clientId, authorizedRequest: authorized)
-			authorized = try resRefresh.get()
-			authorizedOutcome = .authorized(authorized)
-			logger.info("Using provided authorized request to create authorized outcome for offer \(offerUri)")
+			let resRefresh = await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
+			do {
+				authorized = try resRefresh.get()
+				authorizedOutcome = .authorized(authorized)
+				logger.info("Refreshed authorized request for offer \(offerUri)")
+				return (authorizedOutcome, issuer, credentialInfos)
+			}
+			catch {
+				logger.error("Failed to refresh provided authorized request: \(error).")
+			}
 		}
-		else if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) {
+		if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) {
 			let authorized = try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: vciConfig.client, transactionCode: txCodeValue).get()
 			authorizedOutcome = .authorized(authorized)
 		} else {
@@ -302,7 +308,7 @@ public actor OpenId4VCIService {
 		let offerUri = UUID().uuidString
 		Self.credentialOfferCache[offerUri] = offer
 		let docTypes = [makeOfferedDocModel(from: credentialConfiguration, credentialOptions: credentialOptions, keyOptions: keyOptions)]
-		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, documentId: nil, txCodeValue: nil, promptMessage: promptMessage)
+		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage)
 	}
 
 	/// Issue multiple documents using OpenId4Vci protocol
@@ -325,7 +331,7 @@ public actor OpenId4VCIService {
 			makeOfferedDocModel(from: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		}
 		// Delegate to issueDocumentsByOfferUrl
-		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, txCodeValue: nil, promptMessage: promptMessage)
+		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil,  txCodeValue: nil, promptMessage: promptMessage)
 	}
 
 	/// Issue documents by offer URI.
@@ -335,18 +341,18 @@ public actor OpenId4VCIService {
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued and stored documents
-	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, documentId: String? = nil, txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, documentId: String?, txCodeValue: String? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
 		if docTypes.isEmpty { return [] }
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw PresentationSession.makeError(str: "Offer URI not resolved: \(offerUri)")
 		}
-
 		var openId4VCIServices = [OpenId4VCIService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
 			let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: docTypeModel.credentialOptions, offer: offer)
 			let svc = try OpenId4VCIService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService)
-			let id = (i == 0 ? documentId : nil) ?? UUID().uuidString
+			if let documentId { logger.info("Resolve offer to update document with id \(documentId)") }
+			let id = UUID().uuidString //(i == 0 ? documentId : nil) ?? UUID().uuidString
 			try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: usedCredentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage)
 			openId4VCIServices.append(svc)
 		}
@@ -356,7 +362,7 @@ public actor OpenId4VCIService {
 				group.addTask {
 					let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(credentialInfos[i])
 					let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage)
-					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq)
+					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId)
 				}
 			}
 			var result =  [WalletStorage.Document]()
@@ -386,7 +392,7 @@ public actor OpenId4VCIService {
 		}
 		let requestedParams = [docType.map { "docType: \($0)" }, vct.map { "vct: \($0)" }, identifier.map { "identifier: \($0)" }].compactMap { $0 }.joined(separator: ", ")
 		logger.error("No credential configuration found with \(requestedParams). Available credential identifiers: \(credentialsSupported.keys.map(\.value).joined(separator: ", "))")
-		throw WalletError(description: "Issuer does not support the requested credential with \(requestedParams).")
+		throw PresentationSession.makeError(str: "Issuer does not support the requested credential with \(requestedParams).")
 	}
 
 	func buildCredentialOffer(for docTypeIdentifiers: [DocTypeIdentifier]) async throws -> ([CredentialConfiguration], CredentialOffer) {
@@ -570,7 +576,7 @@ public actor OpenId4VCIService {
 		issueReq = try IssueRequest(id: deferredDoc.id, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		let data = try await requestDeferredIssuance(deferredDoc: deferredDoc)
 		guard case .issued(_, _, _) = data else { return deferredDoc }
-		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq)
+		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, deleteId: nil)
 	}
 
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
@@ -596,7 +602,7 @@ public actor OpenId4VCIService {
 		try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, credentialOptions: usedCredentialOptions, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
 		let outcome = try await resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 		if case .pending(_) = outcome { return pendingDoc }
-		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: issueReq)
+		let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: issueReq, deleteId: nil)
 		return res
 	}
 
@@ -668,12 +674,12 @@ public actor OpenId4VCIService {
 				lock.lock()
 				defer { lock.unlock() }
 				if let error {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authRequestFailed(error))
+					nillableContinuation?.resume(throwing: WalletError.authRequestFailed(error: error))
 					nillableContinuation = nil
 					return
 				}
 				guard let url else {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoUrl)
+					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a url"))
 					nillableContinuation = nil
 					return
 				}
@@ -687,7 +693,7 @@ public actor OpenId4VCIService {
 					nillableContinuation?.resume(returning: .code(code))
 					nillableContinuation = nil
 				} else {
-					nillableContinuation?.resume(throwing: OpenId4VCIError.authorizeResponseNoCode)
+					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a code"))
 					nillableContinuation = nil
 				}
 			}
@@ -750,7 +756,7 @@ public actor OpenId4VCIService {
 		}
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?) async throws -> WalletStorage.Document  {
 		var dataToSave: Data; var docTypeToSave = ""
 		var docMetadata: DocMetadata; var displayName: String?
 		let pds = issueOutcome.pendingOrDeferredStatus
@@ -785,6 +791,7 @@ public actor OpenId4VCIService {
 		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata.toData(), displayName: displayName, status: newDocStatus)
 		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
 		if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys) }
+		if let deleteId, storage.getDocumentModel(id: deleteId) != nil { try await storage.deleteDocument(id: deleteId, status: .issued) }
 		try await endIssueDocument(newDocument, batch: batch)
 		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 		await storage.refreshPublishedVars()
@@ -822,38 +829,16 @@ fileprivate extension URL {
 	}
 }
 
-public enum OpenId4VCIError: LocalizedError {
-	case authRequestFailed(Error)
-	case authorizeResponseNoUrl
-	case authorizeResponseNoCode
-	case tokenRequestFailed(Error)
-	case tokenResponseNoData
-	case tokenResponseInvalidData(String)
-	case dataNotValid
-
-	public var localizedDescription: String {
-		switch self {
-		case .authRequestFailed(let error):
-			if let wae = error as? ASWebAuthenticationSessionError {
-				if wae.code == .canceledLogin { return "The login has been canceled." }
-				else if wae.code == .presentationContextNotProvided { return "Web authentication presenentation context not provided." }
-				else if wae.code == .presentationContextInvalid { return "Web authentication presenentation context invalid." }
-				else { return wae.localizedDescription}
-			}
-			return "Authorization request failed: \(error.localizedDescription)"
-		case .authorizeResponseNoUrl:
-			return "Authorization response does not include a url"
-		case .authorizeResponseNoCode:
-			return "Authorization response does not include a code"
-		case .tokenRequestFailed(let error):
-			return "Token request failed: \(error.localizedDescription)"
-		case .tokenResponseNoData:
-			return "No data received as part of token response"
-		case .tokenResponseInvalidData(let reason):
-			return "Invalid data received as part of token response: \(reason)"
-		case .dataNotValid:
-			return "Issued data not valid"
+extension WalletError {
+	public static func authRequestFailed(error: Error) -> WalletError {
+		if let wae = error as? ASWebAuthenticationSessionError {
+			if wae.code == .canceledLogin { return WalletError(description: "The login has been cancelled.", localizationKey: "login_cancelled")  }
+			else if wae.code == .presentationContextNotProvided { return WalletError(description: "Web authentication presentation context not provided.") }
+			else if wae.code == .presentationContextInvalid { return WalletError(description: "Web authentication presentation context invalid.") }
+			else { return WalletError(description: wae.localizedDescription) }
 		}
+		return WalletError(description:"Authorization request failed: \(error.localizedDescription)")
+		
 	}
 }
 

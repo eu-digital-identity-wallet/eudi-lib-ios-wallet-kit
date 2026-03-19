@@ -187,3 +187,17 @@ let issuedDoc = try await wallet.requestDeferredIssuance(
 	keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
 )
 ```
+
+### Document Reissuance
+- Added `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:)` method to `EudiWallet` for reissuing an existing document using previously stored issuance metadata and authorization data.
+  - Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
+  - If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.
+  - Falls back to the original issuance metadata for `credentialOptions` and `keyOptions` when not explicitly provided.
+
+```swift
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    credentialOptions: credentialOptions,  // optional, defaults to original
+    keyOptions: keyOptions,                // optional, defaults to original
+)
+```

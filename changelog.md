@@ -1,4 +1,20 @@
-## v0.21.2
+## v0.23.0
+
+### Document Reissuance
+- Added `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:)` method to `EudiWallet` for reissuing an existing document using previously stored issuance metadata and authorization data.
+  - Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
+  - If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.
+  - Falls back to the original issuance metadata for `credentialOptions` and `keyOptions` when not explicitly provided.
+
+```swift
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    credentialOptions: credentialOptions,  // optional, defaults to original
+    keyOptions: keyOptions,                // optional, defaults to original
+)
+```
+
+## v0.22.0
 
 ### SD-JWT Nested Disclosure fixes
 * `StorageManager.recreateSdJwtClaims` now recursively resolves nested `_sd` digest arrays in SD-JWT claims. Previously, only top-level disclosures were resolved; nested objects inside arrays (e.g., `address[0]`) retained raw `_sd` hashes instead of the actual claim values.
