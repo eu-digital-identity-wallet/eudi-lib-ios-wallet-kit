@@ -199,10 +199,10 @@ struct AuthorizedRequestData: Codable {
 }
 
 extension CredentialConfiguration {
-	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil) -> DocMetadata {
+	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil, dpopKeyId: String? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
 		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
 	}
 }
 
