@@ -189,15 +189,25 @@ let issuedDoc = try await wallet.requestDeferredIssuance(
 ```
 
 ### Document Reissuance
-- Added `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:)` method to `EudiWallet` for reissuing an existing document using previously stored issuance metadata and authorization data.
-  - Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
-  - If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.
-  - Falls back to the original issuance metadata for `credentialOptions` and `keyOptions` when not explicitly provided.
+
+Use the `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:backgroundOnly:)` method to reissue an existing document using previously stored issuance metadata and authorization data.
+
+- Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
+- If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.
+- Falls back to the original issuance metadata for `credentialOptions` and `keyOptions` when not explicitly provided.
+- When `backgroundOnly` is set to `true`, reissuance only proceeds if stored authorization data is available. If no stored authorization exists, an error is thrown. This is useful for automatic credential refresh without user interaction.
 
 ```swift
+// Interactive reissuance (default) - may prompt the user for authentication
 let reissued = try await wallet.reissueDocument(
     documentId: existingDocument.id,
     credentialOptions: credentialOptions,  // optional, defaults to original
     keyOptions: keyOptions,                // optional, defaults to original
+)
+
+// Background reissuance - only succeeds if stored authorization exists
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    backgroundOnly: true,
 )
 ```

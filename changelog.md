@@ -1,3 +1,38 @@
+## v0.23.1
+
+### Background Reissuance and DPoP Propagation
+- Added `backgroundOnly` parameter to `reissueDocument` method. When set to `true`, reissuance only proceeds if stored authorization data is available; otherwise it throws an error. This enables automatic credential refresh without user interaction.
+- DPoP key ID is now propagated through the issuance flow and persisted in document metadata, enabling DPoP-protected refresh and reissuance flows.
+
+```swift
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    backgroundOnly: true,                  // only reissue if stored auth exists
+    credentialOptions: credentialOptions,   // optional, defaults to original
+    keyOptions: keyOptions,                 // optional, defaults to original
+)
+
+
+// Background reissuance - only succeeds if stored authorization exists
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    backgroundOnly: true,
+)
+
+```
+
+
+
+### KB-JWT Fix for Decentralized Identifier Scheme
+- Fixed issue where KB-JWT `aud` claim used a stripped DID instead of the full `client_id` for the `decentralized_identifier` scheme. The session transcript and KB-JWT now correctly include the resolved client identifier. Fixes [#308](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/308).
+
+### Dependency Updates
+- `eudi-lib-sdjwt-swift` updated to 0.14.1
+- `eudi-lib-ios-siop-openid4vp-swift` updated to 0.30.1
+- `eudi-lib-ios-iso18013-data-transfer` updated to 0.11.2
+- `eudi-lib-ios-statium-swift` updated to 0.4.0
+
+
 ## v0.23.0
 
 ### Document Reissuance

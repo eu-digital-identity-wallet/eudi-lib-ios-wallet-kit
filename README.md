@@ -424,6 +424,8 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
 )
 ```
 
+
+
 ### Authorization code flow
 
 For the authorization code flow to work, the redirect URI must be specified specified by setting the the `openID4VciRedirectUri` property.
