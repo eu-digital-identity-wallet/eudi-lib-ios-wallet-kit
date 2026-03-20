@@ -111,9 +111,9 @@ extension WalletStorage.Document {
 	}
 
 	public var docTypeIdentifier: DocTypeIdentifier? {
-		if docDataFormat == .cbor, let docType = docType { return .msoMdoc(docType: docType) }
-		else if docDataFormat == .sdjwt, let vct = docType { return .sdJwt(vct: vct) }
-		return nil
+		if docDataFormat == .cbor  { return .msoMdoc(docType: docType) }
+		else if docDataFormat == .sdjwt { return .sdJwt(vct: docType) }
+		else { return nil }
 	}
 }
 
@@ -122,10 +122,9 @@ extension MdocDataModel18013.CoseKeyPrivate {
 	public static func from(base64: String) async -> MdocDataModel18013.CoseKeyPrivate? {
 		guard let d = Data(base64Encoded: base64), let obj = try? CBOR.decode([UInt8](d)), let coseKey = try? CoseKey(cbor: obj), let cd = obj[-4], case let CBOR.byteString(rd) = cd else { return nil }
 		let storage = await SecureAreaRegistry.shared.defaultSecurityArea!.getStorage()
-		let sampleSA = SampleDataSecureArea.create(storage: storage)
 		let keyData = NSMutableData(bytes: [0x04], length: [0x04].count)
 		keyData.append(Data(coseKey.x)); keyData.append(Data(coseKey.y));	keyData.append(Data(rd))
-		sampleSA.x963Key = keyData as Data
+		let sampleSA = SampleDataSecureArea(storage: storage, x963Key: keyData as Data)
 		let res = MdocDataModel18013.CoseKeyPrivate(secureArea: sampleSA)
 		return res
 	}
@@ -182,10 +181,28 @@ extension Array where Element == DocClaimMetadata {
 	}
 }
 
+/// Codable wrapper to persist the essential fields of AuthorizedRequest
+struct AuthorizedRequestData: Codable {
+	let accessToken: IssuanceAccessToken
+	let refreshToken: IssuanceRefreshToken?
+	let timeStamp: TimeInterval
+
+	init(from authorized: AuthorizedRequest) {
+		self.accessToken = authorized.accessToken
+		self.refreshToken = authorized.refreshToken
+		self.timeStamp = authorized.timeStamp
+	}
+
+	func toAuthorizedRequest() -> AuthorizedRequest {
+		AuthorizedRequest(accessToken: accessToken, refreshToken: refreshToken, credentialIdentifiers: nil, timeStamp: timeStamp, dPopNonce: nil, grantType: nil)
+	}
+}
+
 extension CredentialConfiguration {
-	func convertToDocMetadata() -> DocMetadata {
+	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil, dpopKeyId: String? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata)
+		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
 	}
 }
 
@@ -216,7 +233,10 @@ extension JSON {
 	func getDataValue(name: String) -> (DocDataValue, String)? {
 		switch type {
 		case .number:
-			if name == "sex", let isex = Int(stringValue), isex <= 2 { return (.string(NSLocalizedString(isex == 1 ? "male" : "female", comment: "")), stringValue) }
+			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
+				let locSexValue = NSLocalizedString(isex == 1 ? "male" : "female", comment: "")
+				return (.string(locSexValue), locSexValue)
+			}
 			if name == JWTClaimNames.issuedAt || name == JWTClaimNames.expirationTime {
 				let date = Date(timeIntervalSince1970: TimeInterval(intValue))
 				let isoDateStr = ISO8601DateFormatter().string(from: date)
@@ -225,6 +245,10 @@ extension JSON {
 			return (.integer(UInt64(intValue)), stringValue)
 		case .string:
 			if name == "portrait" || name == "signature_usual_mark", let d = Data(base64urlEncoded: stringValue) { return (.bytes(d.bytes), "\(d.count) bytes") }
+			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
+				let locSexValue = NSLocalizedString(isex == 1 ? "male" : "female", comment: "")
+				return (.string(locSexValue), locSexValue)
+			}
 			return (.string(stringValue), stringValue)
 		case .bool: return (.boolean(boolValue), boolValue ? "Y" : "N")
 		case .array: return (.array, stringValue)
@@ -235,6 +259,7 @@ extension JSON {
 	}
 
 	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?, _ displayName: String?, _ mandatory: Bool?) -> DocClaim? {
+		if key == "_sd" || key == "_sd_alg" || key == "..." { return nil } // internal SD-JWT digest elements
 		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
 		if key == "assurance_level" || key == JWTClaimNames.issuer || key == JWTClaimNames.audience, type == .string {  return nil }
@@ -298,9 +323,6 @@ extension IdentityAndAccessManagementMetadata {
 }
 
 extension ECPublicKey: @retroactive @unchecked Sendable {}
-
-// to be fixed in mdoc security library to avoid unchecked sendable
-extension DeviceAuthMethod: @retroactive @unchecked Sendable {}
 
 extension CoseEcCurve {
 	init?(crvName: String) {

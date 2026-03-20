@@ -88,9 +88,9 @@ extension OpenId4VciConfiguration {
 			let ecCurve = keyOptions.curve
 			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: keyOptions.curve)
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
-				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
+				throw PresentationSession.makeError(str: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))") }
 			jwsAlgorithm = jwsAlg
-			let publicCoseKey: CoseKey = if let privateKeyId, popUsage != .dpop, let keyInfo = try? await secureArea.getKeyBatchInfo(id: privateKeyId), keyOptions.secureAreaName == keyInfo.secureAreaName, keyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) { pck } else {
+			let publicCoseKey: CoseKey = if let privateKeyId, let keyInfo = try? await secureArea.getKeyBatchInfo(id: privateKeyId), keyOptions.secureAreaName == keyInfo.secureAreaName, keyOptions.curve == ecCurve, keyInfo.usedCounts.count == 1, let pck = try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) { pck } else {
 				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first! }
 			let unlockData = try await secureArea.unlockKey(id: keyId)
 			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
@@ -99,14 +99,14 @@ extension OpenId4VciConfiguration {
 		} else {
 			let setCommonJwsAlgorithmNames = Array(Set(algorithms.map(\.name)).intersection(Self.supportedDPoPAlgorithms.map(\.name))).sorted()
 			guard let algName = setCommonJwsAlgorithmNames.first else {
-				throw WalletError(description: "No wallet supported DPoP algorithm found in the server supported algorithms \(algorithms.map(\.name)). Wallet supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
+				throw PresentationSession.makeError(str: "No wallet supported DPoP algorithm found in the server supported algorithms \(algorithms.map(\.name)). Wallet supported algorithms are: \(Self.supportedDPoPAlgorithms.map(\.name))")
 			}
 			jwsAlgorithm = JWSAlgorithm(name: algName)
 			logger.info("Signing algorithm for DPoP constructor to be used is: \(jwsAlgorithm.name)")
 			// EC supported bit sizes are 256, 384, or 521. RS256 is 2048 bits.
-			let bits: Int = switch jwsAlgorithm.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; case JWSAlgorithm(.RS256).name: 2048; default: throw WalletError(description: "Unsupported DPoP algorithm: \(jwsAlgorithm.name)") }
+			let bits: Int = switch jwsAlgorithm.name { case JWSAlgorithm(.ES256).name: 256; case JWSAlgorithm(.ES384).name: 384; case JWSAlgorithm(.ES512).name: 521; case JWSAlgorithm(.RS256).name: 2048; default: throw  PresentationSession.makeError(str: "Unsupported DPoP algorithm: \(jwsAlgorithm.name)") }
 			let type: SecKey.KeyType = switch jwsAlgorithm.name { case JWSAlgorithm(.RS256).name: .rsa; default: .ellipticCurve }
-			let privateKey: SecKey = if let privateKeyId, popUsage != .dpop, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
+			let privateKey: SecKey = if let privateKeyId, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
 			privateKeyProxy = .secKey(privateKey)
 			publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		}
@@ -126,10 +126,10 @@ extension OpenId4VciConfiguration {
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
 		let keyId = generatePopKeyId(credentialIssuerId: credentialIssuerId)
-		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else { throw WalletError(description: "Failed to create DPoP constructor for client attestation") }
+		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else { throw PresentationSession.makeError(str: "Failed to create DPoP constructor for client attestation") }
 		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: popConstructor.jwk)
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: popConstructor.algorithm.name) else {
-			throw WalletError(description: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation")
+			throw PresentationSession.makeError(str: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation")
 		}
 		let popJwtSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt", signingKey: popConstructor.privateKey)
 		let client: Client = .attested(attestationJWT: try .init(jws: .init(compactSerialization: attestation)), popJwtSpec: popJwtSpec)

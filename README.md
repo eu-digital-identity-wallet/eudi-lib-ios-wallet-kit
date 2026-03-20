@@ -393,8 +393,8 @@ user.
 The following example shows how to resolve a credential offer:
 
 ```swift
- func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssuanceModel {
-    return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer)
+ func resolveOfferUrlDocTypes(uriOffer: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
+    return try await wallet.resolveOfferUrlDocTypes(uriOffer: uriOffer, authFlowRedirectionURI: authFlowRedirectionURI)
   }
 ```
 
@@ -423,6 +423,8 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
   txCodeValue: txCode
 )
 ```
+
+
 
 ### Authorization code flow
 
