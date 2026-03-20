@@ -616,7 +616,125 @@ struct DcqlQueryTests {
 		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
 	}
 
+	// MARK: - Structured WalletError.Code tests
+
+	@Test("WalletError has .claimNotFound code when claim is missing", arguments: ["dcql-vehicle"])
+	func testErrorCodeClaimNotFound(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let wrapper = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcql = try DCQL(credentials: wrapper.credentials)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: ["cred1": ("org.iso.7367.1.mVRC", DocDataFormat.cbor)],
+			claimPaths: [
+				"cred1": [
+					ClaimPath([.claim(name: "org.iso.7367.1"), .claim(name: "vehicle_holder")])
+					// Missing first_name claim
+				]
+			]
+		)
+		do {
+			_ = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+			Issue.record("Expected WalletError to be thrown")
+		} catch let error as WalletError {
+			#expect(error.code == .claimNotFound, "Error code should be .claimNotFound")
+			#expect(error.context["claimPath"] == "org.iso.18013.5.1/first_name", "Context should contain the missing claim path")
+		}
+	}
+
+	@Test("WalletError has .credentialNotFound code when docType is missing", arguments: ["dcql-vehicle"])
+	func testErrorCodeCredentialNotFound(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let wrapper = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcql = try DCQL(credentials: wrapper.credentials)
+		// No credentials at all
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [:],
+			claimPaths: [:]
+		)
+		do {
+			_ = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+			Issue.record("Expected WalletError to be thrown")
+		} catch let error as WalletError {
+			#expect(error.code == .credentialNotFound, "Error code should be .credentialNotFound")
+			#expect(error.context["docType"] == "org.iso.7367.1.mVRC", "Context should contain the missing docType")
+		}
+	}
+
+	@Test("WalletError has .claimValueMismatch code when value doesn't match", arguments: ["dcql-query-values"])
+	func testErrorCodeClaimValueMismatch(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "first_name")]),
+					ClaimPath([.claim(name: "address"), .claim(name: "street_address")]),
+					ClaimPath([.claim(name: "postal_code")])
+				]
+			],
+			claimValues: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]): ["Smith"],  // Wrong value
+					ClaimPath([.claim(name: "postal_code")]): ["90210"]
+				]
+			]
+		)
+		do {
+			_ = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+			Issue.record("Expected WalletError to be thrown")
+		} catch let error as WalletError {
+			#expect(error.code == .claimValueMismatch, "Error code should be .claimValueMismatch")
+			#expect(error.context["claimPath"] == "last_name", "Context should contain the mismatched claim path")
+		}
+	}
+
+	@Test("WalletError has .claimSetNotSatisfied code when no claim_set option works", arguments: ["dcql-claim-sets"])
+	func testErrorCodeClaimSetNotSatisfied(dcqlFile: String) throws {
+		let dcqlData = try loadTestResource(fileName: dcqlFile)
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)
+			],
+			claimPaths: [
+				"pid_cred": [
+					ClaimPath([.claim(name: "last_name")]),
+					ClaimPath([.claim(name: "date_of_birth")])
+					// Missing locality, region from set 1
+					// Missing postal_code from set 2
+				]
+			]
+		)
+		do {
+			_ = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+			Issue.record("Expected WalletError to be thrown")
+		} catch let error as WalletError {
+			#expect(error.code == .claimSetNotSatisfied, "Error code should be .claimSetNotSatisfied")
+			#expect(error.context["claimPath"] != nil, "Context should contain the first missing claim path")
+		}
+	}
+
+	@Test("WalletError backward compatibility — code and context default to nil and empty")
+	func testWalletErrorBackwardCompatibility() throws {
+		let error = WalletError(description: "Some legacy error")
+		#expect(error.code == nil, "Code should default to nil")
+		#expect(error.context.isEmpty, "Context should default to empty")
+		#expect(error.errorDescription == "Some legacy error", "Description should still work")
+	}
+
+	@Test("WalletError with code and context preserves all fields")
+	func testWalletErrorStructuredFields() throws {
+		let error = WalletError(
+			description: "Claim not found: family_name_birth",
+			code: .claimNotFound,
+			context: ["claimPath": "family_name_birth"]
+		)
+		#expect(error.code == .claimNotFound)
+		#expect(error.context["claimPath"] == "family_name_birth")
+		#expect(error.errorDescription == "Claim not found: family_name_birth")
+	}
 }
-
-
-
