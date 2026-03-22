@@ -57,10 +57,16 @@ public class DefaultDcqlQueryable: DcqlQueryable {
 	}
 
 	public func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [String]) -> Bool {
-		guard let claimValueMap = claimValues[id],
-		      let availableValues = claimValueMap[claimPath] else {
-			return false
+		guard let claimValueMap = claimValues[id] else { return false }
+		// Use contains2 for wildcard-aware matching (e.g., allArrayElements matches any element)
+		// instead of exact ClaimPath dictionary lookup
+		for (storedPath, availableValues) in claimValueMap {
+			if storedPath.value == claimPath.value || claimPath.contains2(storedPath) {
+				if values.contains(where: { availableValues.contains($0) }) {
+					return true
+				}
+			}
 		}
-		return values.contains { availableValues.contains($0) }
+		return false
 	}
 }
