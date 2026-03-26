@@ -31,9 +31,16 @@ public struct WalletError: LocalizedError {
 		case credentialSetNotSatisfied
 		/// The DCQL query could not be satisfied (general)
 		case dcqlQueryNotSatisfied
+		/// Bluetooth is not authorized by the user
+		case bleNotAuthorized
+		/// Bluetooth is not supported on this device
+		case bleNotSupported
+		/// No documents available for presentation
+		case noDocumentsAvailable
 	}
 
 	public let description: String
+	/// Deprecated: prefer using `code` for programmatic error handling
 	public let localizationKey: String?
 	/// Structured error code for programmatic handling. `nil` for legacy errors.
 	public let code: Code?
