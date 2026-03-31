@@ -61,6 +61,8 @@ struct PresentationSessionTests {
         #expect(error.context.isEmpty)
     }
 
+    @Test("WalletError init with claimNotFound code")
+    func testWalletErrorInitWithClaimNotFound() {
         let error = WalletError(description: "test", code: .claimNotFound)
         #expect(error.code == .claimNotFound)
         #expect(error.localizationKey == nil)
@@ -130,6 +132,8 @@ struct PresentationSessionTests {
         let error = PresentationSession.makeError(str: "no docs", localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
         #expect(error.code == .noDocumentsAvailable)
         #expect(error.localizationKey == "request_data_no_document")
+    }
+
     // MARK: - IssuingParty
 
     @Test("IssuingParty stores issuer info")
