@@ -28,13 +28,6 @@ import MdocDataTransfer18013
 @Suite("PresentationSession tests")
 struct PresentationSessionTests {
     // MARK: - WalletError init backward compatibility
-
-    @Test("WalletError init without code preserves backward compatibility")
-    func testWalletErrorInitWithoutCode() {
-// - mapTransferError (requires BLE error codes feature branch)
-
-@Suite("PresentationSession and TransactionLog tests")
-struct PresentationSessionTests {
     // MARK: - WalletError backward compatibility
 
     @Test("WalletError init without optional params preserves backward compatibility")
