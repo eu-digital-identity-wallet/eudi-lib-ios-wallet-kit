@@ -220,9 +220,8 @@ public actor OpenId4VCIService {
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
-			let resRefresh = await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
 			do {
-				authorized = try resRefresh.get()
+				authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
 				authorizedOutcome = .authorized(authorized)
 				logger.info("Refreshed authorized request for offer \(offerUri)")
 				return (authorizedOutcome, issuer, credentialInfos)
@@ -235,7 +234,7 @@ public actor OpenId4VCIService {
 			}
 		}
 		if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) {
-			let authorized = try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: vciConfig.client, transactionCode: txCodeValue).get()
+			let authorized = try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: vciConfig.client, transactionCode: txCodeValue)
 			authorizedOutcome = .authorized(authorized)
 		} else {
 			authorizedOutcome = try await authorizeRequestWithAuthCodeUseCase(issuer: issuer, offer: offer)
@@ -475,70 +474,52 @@ public actor OpenId4VCIService {
 		logger.info("--> [AUTHORIZATION] Placing Request to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
 		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer)
 
-		if case let .success(authRequested) = parPlaced {
-			self.authRequested = authRequested
-			logger.info("--> [AUTHORIZATION] Placed Request. Authorization code URL is: \(authRequested.authorizationCodeURL)")
-			let authResult = try await loginUserAndGetAuthCode(authorizationCodeURL: authRequested.authorizationCodeURL.url)
-			logger.info("--> [AUTHORIZATION] Authorization code retrieved")
-			switch authResult {
-			case .code(let authorizationCode):
-				return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: authRequested, authorizationCode: authorizationCode))
-			case .presentation_request(let url):
-				return .presentation_request(url)
-			}
-		} else if case let .failure(failure) = parPlaced {
-			throw PresentationSession.makeError(str: "Authorization error: \(failure.localizedDescription)")
+		self.authRequested = parPlaced
+		logger.info("--> [AUTHORIZATION] Placed Request. Authorization code URL is: \(parPlaced.authorizationCodeURL)")
+		let authResult = try await loginUserAndGetAuthCode(authorizationCodeURL: parPlaced.authorizationCodeURL.url)
+		logger.info("--> [AUTHORIZATION] Authorization code retrieved")
+		switch authResult {
+		case .code(let authorizationCode):
+			return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: parPlaced, authorizationCode: authorizationCode))
+		case .presentation_request(let url):
+			return .presentation_request(url)
 		}
-		throw PresentationSession.makeError(str: "Failed to get push authorization code request")
 	}
 
 	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String) async throws -> AuthorizedRequest {
 		let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
-		let unAuthorized = await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
-		switch unAuthorized {
-		case .success(let request):
-			let authorizedRequest = await issuer.authorizeWithAuthorizationCode(request: request, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
-			if case let .success(authorized) = authorizedRequest {
-				let at = authorized.accessToken
-				logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
-				_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
-				return authorized
-			}
-			throw PresentationSession.makeError(str: "Failed to get access token")
-		case .failure(let error):
-			throw PresentationSession.makeError(str: "Authorization code handling failed: \(error.localizedDescription)")
-		}
+		let codeRetrieved = try await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(request: codeRetrieved, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
+		let at = authorized.accessToken
+		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
+		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
+		return authorized
 	}
 
 	private static func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], logger: Logger) async throws -> IssuanceOutcome {
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
 		switch requestOutcome {
-		case .success(let request):
-			switch request {
-			case .success(let response):
-				if let result = response.credentialResponses.first {
-					switch result {
-					case .deferred(let transactionId, let interval):
-						logger.info("Credential issuance deferred with transactionId: \(transactionId), interval: \(interval) seconds")
-						// Prepare model for deferred issuance
-						let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey { try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data } else { nil }
-						let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
-						return .deferred(deferredModel)
-					case .issued(let format, _, _, _):
-						let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
-						return try await Self.handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, format: format, configuration: configuration, authorized: authorized, logger: logger)
-					}
-				} else {
-					throw PresentationSession.makeError(str: "No credential response results available")
+		case .success(let response):
+			if let result = response.credentialResponses.first {
+				switch result {
+				case .deferred(let transactionId, let interval):
+					logger.info("Credential issuance deferred with transactionId: \(transactionId), interval: \(interval) seconds")
+					// Prepare model for deferred issuance
+					let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey { try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data } else { nil }
+					let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
+					return .deferred(deferredModel)
+				case .issued(let format, _, _, _):
+					let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
+					return try await Self.handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, format: format, configuration: configuration, authorized: authorized, logger: logger)
 				}
-			case .invalidProof(let errorDescription):
-				throw PresentationSession.makeError(str: "Issuer error: " + (errorDescription ?? "The proof is invalid"))
-			case .failed(let error):
-				throw PresentationSession.makeError(str: error.localizedDescription)
+			} else {
+				throw PresentationSession.makeError(str: "No credential response results available")
 			}
-		case .failure(let error):
-			throw PresentationSession.makeError(str: "Credential submission use case failed: \(error.localizedDescription)")
+		case .invalidProof(let errorDescription):
+			throw PresentationSession.makeError(str: "Issuer error: " + (errorDescription ?? "The proof is invalid"))
+		case .failed(let error):
+			throw PresentationSession.makeError(str: error.localizedDescription)
 		}
 	}
 
@@ -632,7 +613,7 @@ public actor OpenId4VCIService {
 		let issuer = try await getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil), grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))).get()
+		let authorized = try await issuer.authorizeWithAuthorizationCode(request: AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil), grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration)
 		let res = try await Self.submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys, publicKeys: publicKeys, logger: logger)
 		return res
@@ -646,23 +627,18 @@ public actor OpenId4VCIService {
 		}
 		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
 		switch deferredRequestResponse {
-		case .success(let response):
-			switch response {
-			case .issued(let credential):
-				return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, format: nil, configuration: configuration, authorized: authorized, logger: logger)
-			case .issuancePending(let transactionId, let interval):
-				logger.info("Credential not ready yet. Try after \(interval)")
-				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
-				return .deferred(deferredModel)
-			case .issuanceStillPending(let interval):
-				logger.info("Credential still not ready. Try again after \(interval)")
-				let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
-				return .deferred(deferredModel)
-			case .errored(_, let errorDescription):
-				throw PresentationSession.makeError(str: "\(errorDescription ?? "Something went wrong with your deferred request response")")
-			}
-		case .failure(let error):
-			throw PresentationSession.makeError(str: error.localizedDescription)
+		case .issued(let credential):
+			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, format: nil, configuration: configuration, authorized: authorized, logger: logger)
+		case .issuancePending(let transactionId, let interval):
+			logger.info("Credential not ready yet. Try after \(interval)")
+			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
+			return .deferred(deferredModel)
+		case .issuanceStillPending(let interval):
+			logger.info("Credential still not ready. Try again after \(interval)")
+			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, accessToken: authorized.accessToken, refreshToken: authorized.refreshToken, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, configuration: configuration, timeStamp: authorized.timeStamp)
+			return .deferred(deferredModel)
+		case .errored(_, let errorDescription):
+			throw PresentationSession.makeError(str: "\(errorDescription ?? "Something went wrong with your deferred request response")")
 		}
 	}
 

@@ -160,7 +160,9 @@ extension ClaimPathElement {
 
 extension CredentialQuery {
 	public var docType: String? {
-		let metaDocType = meta.dictionaryObject?.first?.value
+		let mdocTypeValue = meta.dictionaryObject?["doctype_value"]
+		let vctValues = meta.dictionaryObject?["vct_values"]
+		let metaDocType = mdocTypeValue ?? vctValues ?? meta.dictionaryObject?.first?.value
 		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
 		return docType
 	}

@@ -28,13 +28,6 @@ import MdocDataTransfer18013
 @Suite("PresentationSession tests")
 struct PresentationSessionTests {
     // MARK: - WalletError init backward compatibility
-
-    @Test("WalletError init without code preserves backward compatibility")
-    func testWalletErrorInitWithoutCode() {
-// - mapTransferError (requires BLE error codes feature branch)
-
-@Suite("PresentationSession and TransactionLog tests")
-struct PresentationSessionTests {
     // MARK: - WalletError backward compatibility
 
     @Test("WalletError init without optional params preserves backward compatibility")
@@ -68,6 +61,8 @@ struct PresentationSessionTests {
         #expect(error.context.isEmpty)
     }
 
+    @Test("WalletError init with claimNotFound code")
+    func testWalletErrorInitWithClaimNotFound() {
         let error = WalletError(description: "test", code: .claimNotFound)
         #expect(error.code == .claimNotFound)
         #expect(error.localizationKey == nil)
@@ -137,6 +132,8 @@ struct PresentationSessionTests {
         let error = PresentationSession.makeError(str: "no docs", localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
         #expect(error.code == .noDocumentsAvailable)
         #expect(error.localizationKey == "request_data_no_document")
+    }
+
     // MARK: - IssuingParty
 
     @Test("IssuingParty stores issuer info")
