@@ -168,7 +168,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Register an OpenId4VCI service with a given name and configuration.
 	@discardableResult func registerOpenId4VciService(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VCIService {
-		let vciService = try OpenId4VCIService(uiCulture: eudiWalletConfig.uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService)
+		let vciService = try OpenId4VCIService(uiCulture: eudiWalletConfig.uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService, transactionLogger: transactionLogger)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
 		return vciService
 	}
@@ -526,7 +526,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public func parseTransactionLog(_ transactionLog: TransactionLog) -> TransactionLogData {
 		switch transactionLog.type {
 			case .presentation: .presentation(log: PresentationLogData(transactionLog, uiCulture: eudiWalletConfig.uiCulture))
-			case .issuance: .issuance
+			case .issuance: .issuance(log: IssuanceLogData(transactionLog))
 			case .signing: .signing
 		}
 	}

@@ -31,10 +31,19 @@ struct PresentationSessionTests {
 
     @Test("WalletError init without code preserves backward compatibility")
     func testWalletErrorInitWithoutCode() {
+// - mapTransferError (requires BLE error codes feature branch)
+
+@Suite("PresentationSession and TransactionLog tests")
+struct PresentationSessionTests {
+    // MARK: - WalletError backward compatibility
+
+    @Test("WalletError init without optional params preserves backward compatibility")
+    func testWalletErrorInitBackwardCompat() {
         let error = WalletError(description: "test error")
         #expect(error.description == "test error")
         #expect(error.localizationKey == nil)
         #expect(error.code == nil)
+        #expect(error.context.isEmpty)
     }
 
     @Test("WalletError init with localizationKey only")
@@ -57,6 +66,11 @@ struct PresentationSessionTests {
         #expect(error.localizationKey == "key")
         #expect(error.code == .noDocumentsAvailable)
         #expect(error.context.isEmpty)
+    }
+
+        let error = WalletError(description: "test", code: .claimNotFound)
+        #expect(error.code == .claimNotFound)
+        #expect(error.localizationKey == nil)
     }
 
     @Test("WalletError init with context")
@@ -123,5 +137,95 @@ struct PresentationSessionTests {
         let error = PresentationSession.makeError(str: "no docs", localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
         #expect(error.code == .noDocumentsAvailable)
         #expect(error.localizationKey == "request_data_no_document")
+    // MARK: - IssuingParty
+
+    @Test("IssuingParty stores issuer info")
+    func testIssuingParty() {
+        let party = TransactionLog.IssuingParty(name: "Test Issuer", identifier: "https://issuer.example.com", logoUrl: "https://issuer.example.com/logo.png")
+        #expect(party.name == "Test Issuer")
+        #expect(party.identifier == "https://issuer.example.com")
+        #expect(party.logoUrl == "https://issuer.example.com/logo.png")
+    }
+
+    @Test("IssuingParty with nil logoUrl")
+    func testIssuingPartyWithoutLogo() {
+        let party = TransactionLog.IssuingParty(name: "Issuer", identifier: "https://issuer.example.com", logoUrl: nil)
+        #expect(party.logoUrl == nil)
+    }
+
+    // MARK: - IssuanceLogData
+
+    @Test("IssuanceLogData parses from TransactionLog")
+    func testIssuanceLogData() {
+        let issuingParty = TransactionLog.IssuingParty(name: "Test Issuer", identifier: "https://issuer.example.com", logoUrl: nil)
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            issuingParty: issuingParty,
+            type: .issuance,
+            dataFormat: .cbor
+        )
+        let data = IssuanceLogData(log)
+        #expect(data.status == .completed)
+        #expect(data.issuingParty.name == "Test Issuer")
+        #expect(data.issuingParty.identifier == "https://issuer.example.com")
+        #expect(data.dataFormat == .cbor)
+        #expect(data.errorMessage == nil)
+    }
+
+    @Test("IssuanceLogData with failed status and error message")
+    func testIssuanceLogDataFailed() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .failed,
+            errorMessage: "Proof invalid",
+            type: .issuance,
+            dataFormat: .json
+        )
+        let data = IssuanceLogData(log)
+        #expect(data.status == .failed)
+        #expect(data.errorMessage == "Proof invalid")
+        #expect(data.issuingParty.name == "Unknown Issuer")
+    }
+
+    @Test("IssuanceLogData without issuingParty falls back to Unknown Issuer")
+    func testIssuanceLogDataFallback() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            type: .issuance,
+            dataFormat: .cbor
+        )
+        let data = IssuanceLogData(log)
+        #expect(data.issuingParty.name == "Unknown Issuer")
+        #expect(data.issuingParty.identifier == "")
+    }
+
+    // MARK: - TransactionLog with issuance type
+
+    @Test("TransactionLog with issuance type and issuingParty")
+    func testTransactionLogIssuance() {
+        let issuingParty = TransactionLog.IssuingParty(name: "Issuer", identifier: "https://issuer.example.com", logoUrl: nil)
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            issuingParty: issuingParty,
+            type: .issuance,
+            dataFormat: .cbor
+        )
+        #expect(log.type == .issuance)
+        #expect(log.issuingParty?.name == "Issuer")
+        #expect(log.relyingParty == nil)
+    }
+
+    @Test("TransactionLog backward compatibility — issuingParty defaults to nil")
+    func testTransactionLogIssuingPartyDefault() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            type: .presentation,
+            dataFormat: .cbor
+        )
+        #expect(log.issuingParty == nil)
     }
 }
