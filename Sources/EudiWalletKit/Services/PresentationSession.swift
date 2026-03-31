@@ -99,15 +99,16 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerCertValidationMessage = request.readerCertificateValidationMessage
 		}
 		readerLegalName = request.readerLegalName
-		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document") }
+		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
+		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 		status = .requestReceived
 	}
 
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
-	public static func makeError(str: String, localizationKey: String? = nil) -> WalletError {
+	public static func makeError(str: String, localizationKey: String? = nil, code: WalletError.Code? = nil) -> WalletError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
-		return WalletError(description: str, localizationKey: localizationKey)
+		return WalletError(description: str, localizationKey: localizationKey, code: code)
 	}
 
 	public static func makeError(err: LocalizedError) -> WalletError {
@@ -120,20 +121,35 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async throws {
-		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document"); return }
+		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
+		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
 		do {
 			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
 			await MainActor.run {
 				deviceEngagement = data
 				status = .qrEngagementReady
 			}
-		} catch { await setError(error.localizedDescription) }
+		} catch {
+			let walletCode = Self.mapTransferError(error)
+			await setError(error.localizedDescription, code: walletCode)
+		}
+	}
+
+	/// Maps transfer-layer errors (MdocDataTransfer18013.ErrorCode) to structured WalletError.Code
+	static func mapTransferError(_ error: Error) -> WalletError.Code? {
+		let nsError = error as NSError
+		guard let errorCode = ErrorCode(rawValue: nsError.code) else { return nil }
+		switch errorCode {
+		case .bleNotAuthorized: return .bleNotAuthorized
+		case .bleNotSupported: return .bleNotSupported
+		default: return nil
+		}
 	}
 
 	@MainActor
-	func setError(_ description: String, localizationKey: String? = nil) {
+	func setError(_ description: String, localizationKey: String? = nil, code: WalletError.Code? = nil) {
 		status = .error
-		uiError = WalletError(description: description, localizationKey: localizationKey)
+		uiError = WalletError(description: description, localizationKey: localizationKey, code: code)
 	}
 
 	/// Receive request from verifer

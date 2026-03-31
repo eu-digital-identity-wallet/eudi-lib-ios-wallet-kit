@@ -41,10 +41,11 @@ public actor OpenId4VCIService {
 	var keyBatchSize: Int { issueReq.credentialOptions.batchSize }
 	var storage: StorageManager
 	var storageService: any DataStorageService
+	var transactionLogger: (any TransactionLogger)?
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
-	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService) throws {
+	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService, transactionLogger: (any TransactionLogger)? = nil) throws {
 		logger = Logger(label: "OpenId4VCI")
 		guard config.credentialIssuerURL != nil else { throw PresentationSession.makeError(str: "credentialIssuerURL must be set in OpenId4VciConfiguration") }
 		self.uiCulture = uiCulture
@@ -52,6 +53,7 @@ public actor OpenId4VCIService {
 		self.storage = storage
 		self.storageService = storageService
 		self.config = config
+		self.transactionLogger = transactionLogger
 	}
 
 	/// Prepare issuing by creating an issue request (id, private key) and an OpenId4VCI service instance
@@ -360,12 +362,15 @@ public actor OpenId4VCIService {
 			openId4VCIServices.append(svc)
 		}
 		let (auth, issuer, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, backgroundOnly: backgroundOnly, dpopKeyId: dpopKeyId)
+		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
+		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
+		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
 		let documents = try await withThrowingTaskGroup(of: WalletStorage.Document.self) { group in
 			for (i, openId4VCIService) in openId4VCIServices.enumerated() {
 				group.addTask {
 					let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(credentialInfos[i])
 					let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage)
-					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, dpopKeyId: dpopKeyId)
+					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, dpopKeyId: dpopKeyId, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl)
 				}
 			}
 			var result =  [WalletStorage.Document]()
@@ -759,48 +764,81 @@ public actor OpenId4VCIService {
 		}
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, dpopKeyId: String? = nil) async throws -> WalletStorage.Document  {
-		let savedDpopKeyId = dpopKeyId ?? issueReq.dpopKeyId
-		var dataToSave: Data; var docTypeToSave = ""
-		var docMetadata: DocMetadata; var displayName: String?
-		let pds = issueOutcome.pendingOrDeferredStatus
-		var batch: [WalletStorage.Document]?
-		var publicKeys: [Data] = []
-		var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialOptions.credentialPolicy)
-		switch issueOutcome {
-		case .issued(let dataPair, let cc, let authorized):
-			guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
-			dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
-			docMetadata = cc.convertToDocMetadata(authorized: authorized, keyOptions: issueReq.keyOptions, credentialOptions: issueReq.credentialOptions, dpopKeyId: savedDpopKeyId)
-			let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
-			dkInfo.batchSize = dataPair.count
-			docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
-			displayName = cc.display.getName(uiCulture)
-			if dataPair.count > 0 {
-				batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) }
-				publicKeys = dataPair.map(\.pk)
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, dpopKeyId: String? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
+		do {
+			let savedDpopKeyId = dpopKeyId ?? issueReq.dpopKeyId
+			var dataToSave: Data; var docTypeToSave = ""
+			var docMetadata: DocMetadata; var displayName: String?
+			let pds = issueOutcome.pendingOrDeferredStatus
+			var batch: [WalletStorage.Document]?
+			var publicKeys: [Data] = []
+			var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialOptions.credentialPolicy)
+			switch issueOutcome {
+			case .issued(let dataPair, let cc, let authorized):
+				guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
+				dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
+				docMetadata = cc.convertToDocMetadata(authorized: authorized, keyOptions: issueReq.keyOptions, credentialOptions: issueReq.credentialOptions, dpopKeyId: savedDpopKeyId)
+				let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
+				dkInfo.batchSize = dataPair.count
+				docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
+				displayName = cc.display.getName(uiCulture)
+				if dataPair.count > 0 {
+					batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) }
+					publicKeys = dataPair.map(\.pk)
+				}
+			case .deferred(let deferredIssuanceModel):
+				dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
+				docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata(dpopKeyId: savedDpopKeyId)
+				docTypeToSave = docType ?? "DEFERRED"
+				displayName = deferredIssuanceModel.configuration.display.getName(uiCulture)
+			case .pending(let pendingAuthModel):
+				dataToSave = try JSONEncoder().encode(pendingAuthModel)
+				docMetadata = pendingAuthModel.configuration.convertToDocMetadata(dpopKeyId: savedDpopKeyId)
+				docTypeToSave = docType ?? "PENDING"
+				displayName = pendingAuthModel.configuration.display.getName(uiCulture)
 			}
-		case .deferred(let deferredIssuanceModel):
-			dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
-			docMetadata = deferredIssuanceModel.configuration.convertToDocMetadata(dpopKeyId: savedDpopKeyId)
-			docTypeToSave = docType ?? "DEFERRED"
-			displayName = deferredIssuanceModel.configuration.display.getName(uiCulture)
-		case .pending(let pendingAuthModel):
-			dataToSave = try JSONEncoder().encode(pendingAuthModel)
-			docMetadata = pendingAuthModel.configuration.convertToDocMetadata(dpopKeyId: savedDpopKeyId)
-			docTypeToSave = docType ?? "PENDING"
-			displayName = pendingAuthModel.configuration.display.getName(uiCulture)
+			let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
+			let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata.toData(), displayName: displayName, status: newDocStatus)
+			if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
+			if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys) }
+			if let deleteId, storage.getDocumentModel(id: deleteId) != nil { try await storage.deleteDocument(id: deleteId, status: .issued) }
+			try await endIssueDocument(newDocument, batch: batch)
+			await storage.appendDocModel(newDocument, uiCulture: uiCulture)
+			await storage.refreshPublishedVars()
+			if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
+			await logIssuanceTransaction(status: .completed, format: format, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, documentId: newDocument.id, docType: newDocument.docType, docDisplayName: newDocument.displayName, docMetadata: newDocument.metadata)
+			return newDocument
+		} catch {
+			await logIssuanceTransaction(status: .failed, format: format, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, docType: docType, errorMessage: error.localizedDescription)
+			throw error
 		}
-		let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
-		let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata.toData(), displayName: displayName, status: newDocStatus)
-		if newDocStatus == .pending { await storage.appendDocModel(newDocument, uiCulture: uiCulture); return newDocument }
-		if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys) }
-		if let deleteId, storage.getDocumentModel(id: deleteId) != nil { try await storage.deleteDocument(id: deleteId, status: .issued) }
-		try await endIssueDocument(newDocument, batch: batch)
-		await storage.appendDocModel(newDocument, uiCulture: uiCulture)
-		await storage.refreshPublishedVars()
-		if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
-		return newDocument
+	}
+
+	private func logIssuanceTransaction(status: TransactionLog.Status, format: DocDataFormat, issuerName: String?, issuerIdentifier: String?, issuerLogoUrl: String?, documentId: String? = nil, docType: String? = nil, docDisplayName: String? = nil, docMetadata: Data? = nil, errorMessage: String? = nil) async {
+		guard let transactionLogger else { return }
+		let issuingParty = TransactionLog.IssuingParty(
+			name: issuerName ?? "Unknown Issuer",
+			identifier: issuerIdentifier ?? "",
+			logoUrl: issuerLogoUrl
+		)
+		let dataFormat = TransactionLog.DataFormat(format)
+		let transactionLog = TransactionLog(
+			timestamp: TransactionLogUtils.getTimestamp(),
+			status: status,
+			errorMessage: errorMessage,
+			issuingParty: issuingParty,
+			type: .issuance,
+			dataFormat: dataFormat,
+			docMetadata: docMetadata != nil ? [docMetadata] : nil,
+			documentId: documentId,
+			docType: docType,
+			displayName: docDisplayName
+		)
+		do {
+			try await transactionLogger.log(transaction: transactionLog)
+		} catch {
+			logger.error("Failed to log issuance transaction: \(error)")
+		}
 	}
 
 	func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {

@@ -219,7 +219,7 @@ extension OpenId4VpUtils {
 			let format = credQuery.dataFormat
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
-			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.") }
+			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
 			// Try to find a credential that satisfies the claim requirements
 			for credId in matchingCredIds {
 				do {
@@ -261,7 +261,7 @@ extension OpenId4VpUtils {
 				}
 				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
 				if isSetRequired, !isSetSatisfied {
-					throw WalletError(description: "Required credential_set \(credSet.options) cannot be satisfied")
+					throw WalletError(description: "Required credential_set \(credSet.options) cannot be satisfied", code: .credentialSetNotSatisfied)
 				}
 			}
 		} else {
@@ -272,7 +272,7 @@ extension OpenId4VpUtils {
 		if result.isEmpty {
 			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id] == nil }
 			if let notFoundCred {logger.warning("No credential found matching docType: \(notFoundCred.docType ?? "") with format: \(notFoundCred.format)")}
-			throw lastError ?? WalletError(description: "DCQL query could not be satisfied")
+			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
 		return result
 	}
@@ -317,7 +317,7 @@ extension OpenId4VpUtils {
 			} // next claimSetOption
 			// No claim set option could be satisfied
 			let claimPathStr = firstMissingClaimInOption?.value.map(\.claimName).joined(separator: "/") ?? "unknown"
-			throw WalletError(description: "No claim_set option satisfied. First missing claim: \(claimPathStr)")
+			throw WalletError(description: "No claim_set option satisfied. First missing claim: \(claimPathStr)", code: .claimSetNotSatisfied, context: ["claimPath": claimPathStr])
 		} else {
 			// No claim_sets: all claims must be available
 			var selectedPaths: [ClaimsQuery] = []
@@ -326,11 +326,11 @@ extension OpenId4VpUtils {
 				if let values = claim.values, !values.isEmpty {
 					if !queryable.hasClaimWithValue(id: credId, claimPath: claim.path, values: values) {
 						let claimPathStr = claim.path.value.map(\.claimName).joined(separator: "/")
-						throw WalletError(description: "Claim value mismatch for: \(claimPathStr)")
+						throw WalletError(description: "Claim value mismatch for: \(claimPathStr)", code: .claimValueMismatch, context: ["claimPath": claimPathStr])
 					}
 				} else if !queryable.hasClaim(id: credId, claimPath: claim.path) {
 					let claimPathStr = claim.path.value.map(\.claimName).joined(separator: "/")
-					throw WalletError(description: "Claim not found: \(claimPathStr)")
+					throw WalletError(description: "Claim not found: \(claimPathStr)", code: .claimNotFound, context: ["claimPath": claimPathStr])
 				}
 				selectedPaths.append(claim)
 			}
