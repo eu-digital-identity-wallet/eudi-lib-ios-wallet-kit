@@ -73,6 +73,7 @@ public struct TransactionLog: Sendable, Codable {
 		case presentation
 		case issuance
 		case signing
+		case deletion
 	}
 
 	public enum Status: Int, Sendable, Codable {
@@ -88,6 +89,7 @@ public struct TransactionLog: Sendable, Codable {
 public enum TransactionLogData: Sendable {
 	case presentation(log: PresentationLogData)
 	case issuance(log: IssuanceLogData)
+	case deletion(log: DeletionLogData)
 	case signing //todo
 }
 
@@ -119,6 +121,26 @@ public struct IssuanceLogData: Sendable {
 		timestamp = Date(timeIntervalSince1970: TimeInterval(transactionLog.timestamp))
 		status = transactionLog.status
 		issuingParty = transactionLog.issuingParty ?? TransactionLog.IssuingParty(name: "Unknown Issuer", identifier: "", logoUrl: nil)
+		documentId = transactionLog.documentId
+		docType = transactionLog.docType
+		displayName = transactionLog.displayName
+		dataFormat = transactionLog.dataFormat
+		errorMessage = transactionLog.errorMessage
+	}
+}
+
+public struct DeletionLogData: Sendable {
+	public let timestamp: Date
+	public let status: TransactionLog.Status
+	public let documentId: String?
+	public let docType: String?
+	public let displayName: String?
+	public let dataFormat: TransactionLog.DataFormat
+	public let errorMessage: String?
+
+	public init(_ transactionLog: TransactionLog) {
+		timestamp = Date(timeIntervalSince1970: TimeInterval(transactionLog.timestamp))
+		status = transactionLog.status
 		documentId = transactionLog.documentId
 		docType = transactionLog.docType
 		displayName = transactionLog.displayName

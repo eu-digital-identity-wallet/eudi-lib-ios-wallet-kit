@@ -375,7 +375,14 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Calls ``storage`` deleteDocuments
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: WalletStorage.DocumentStatus) async throws  {
-		return try await storage.deleteDocuments(status: status)
+		let docInfos = getDocumentInfos(for: status)
+		do {
+			try await storage.deleteDocuments(status: status)
+			for info in docInfos { await logDeletionTransaction(info: info, status: .completed) }
+		} catch {
+			for info in docInfos { await logDeletionTransaction(info: info, status: .failed, errorMessage: error.localizedDescription) }
+			throw error
+		}
 	}
 
 	/// Delete all documents
@@ -394,7 +401,52 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
-		try await storage.deleteDocument(id: id, status: status)
+		let info = getDocumentInfos(for: status).first(where: { $0.id == id })
+		do {
+			try await storage.deleteDocument(id: id, status: status)
+			await logDeletionTransaction(info: info, status: .completed)
+		} catch {
+			await logDeletionTransaction(info: info, status: .failed, errorMessage: error.localizedDescription)
+			throw error
+		}
+	}
+
+	private struct DocumentInfo {
+		let id: String
+		let docType: String?
+		let displayName: String?
+		let dataFormat: DocDataFormat
+	}
+
+	private func getDocumentInfos(for status: DocumentStatus) -> [DocumentInfo] {
+		switch status {
+		case .issued:
+			return storage.docModels.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+		case .pending:
+			return storage.pendingDocuments.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+		case .deferred:
+			return storage.deferredDocuments.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+		}
+	}
+
+	private func logDeletionTransaction(info: DocumentInfo?, status: TransactionLog.Status, errorMessage: String? = nil) async {
+		// TODO: Should we log the deletion event even if the document info is not found?
+		guard let transactionLogger, let info else { return }
+		let transactionLog = TransactionLog(
+			timestamp: TransactionLogUtils.getTimestamp(),
+			status: status,
+			errorMessage: errorMessage,
+			type: .deletion,
+			dataFormat: TransactionLog.DataFormat(info.dataFormat),
+			documentId: info.id,
+			docType: info.docType,
+			displayName: info.displayName
+		)
+		do {
+			try await transactionLogger.log(transaction: transactionLog)
+		} catch {
+			logger.error("Failed to log deletion transaction: \(error)")
+		}
 	}
 
 	/// Load sample data from json files
@@ -527,6 +579,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		switch transactionLog.type {
 			case .presentation: .presentation(log: PresentationLogData(transactionLog, uiCulture: eudiWalletConfig.uiCulture))
 			case .issuance: .issuance(log: IssuanceLogData(transactionLog))
+			case .deletion: .deletion(log: DeletionLogData(transactionLog))
 			case .signing: .signing
 		}
 	}
