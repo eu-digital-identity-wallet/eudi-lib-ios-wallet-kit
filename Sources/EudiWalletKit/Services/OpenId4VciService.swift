@@ -247,7 +247,7 @@ public actor OpenId4VCIService {
 			logger.info("Dynamic issuance request with url: \(url)")
 			let uuid = UUID().uuidString
 			Self.credentialOfferCache[uuid] = offer
-			return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: authRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: authRequested.pkceVerifier.codeVerifierMethod ))
+			return .pending(PendingIssuanceModel(pendingReason: .presentation_request_url(url.absoluteString), configuration: configuration, metadataKey: uuid, pckeCodeVerifier: authRequested.pkceVerifier.codeVerifier, pckeCodeVerifierMethod: authRequested.pkceVerifier.codeVerifierMethod, state: authRequested.state ))
 		}
 		guard case .authorized(let authorized) = authorizedOutcome else {
 			throw PresentationSession.makeError(str: "Invalid authorized request outcome")
@@ -489,7 +489,7 @@ public actor OpenId4VCIService {
 	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String) async throws -> AuthorizedRequest {
 		let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
 		let codeRetrieved = try await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: codeRetrieved, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
+		let authorized = try await issuer.authorizeWithAuthorizationCode(request: codeRetrieved, preparedRequest: request, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
 		let at = authorized.accessToken
 		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
@@ -613,7 +613,12 @@ public actor OpenId4VCIService {
 		let issuer = try await getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil), grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
+		let request = try AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil, state: model.state)
+		let authorizationCodeURL = try AuthorizationCodeURL(urlString: webUrl.absoluteString)
+		let preparedRequest = AuthorizationRequested(credentials: request.credentials, authorizationCodeURL: authorizationCodeURL, pkceVerifier: pkceVerifier, state: request.state, configurationIds: request.configurationIds)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(request: request, preparedRequest: preparedRequest,
+			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
+		)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration)
 		let res = try await Self.submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys, publicKeys: publicKeys, logger: logger)
 		return res
