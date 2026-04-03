@@ -448,7 +448,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			logger.error("Failed to log deletion transaction: \(error)")
 		}
 	}
-
+/*
 	/// Load sample data from json files
 	///
 	/// The mdoc data are stored in wallet storage as documents
@@ -474,7 +474,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			throw PresentationSession.makeError(str: error.localizedDescription)
 		}
 	}
-
+*/
 	/// Get a document's remaining credentials, available for presentation count
 	///
 	/// - Parameters:

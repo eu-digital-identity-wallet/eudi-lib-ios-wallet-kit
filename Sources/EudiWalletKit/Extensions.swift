@@ -117,6 +117,7 @@ extension WalletStorage.Document {
 	}
 }
 
+/*
 extension MdocDataModel18013.CoseKeyPrivate {
   // decode private key data cbor string and save private key in key chain
 	public static func from(base64: String) async -> MdocDataModel18013.CoseKeyPrivate? {
@@ -129,6 +130,7 @@ extension MdocDataModel18013.CoseKeyPrivate {
 		return res
 	}
 }
+ */
 
 extension MdocDataModel18013.SignUpResponse {
 	/// Decompose CBOR signup responses from data
@@ -148,6 +150,7 @@ extension MdocDataModel18013.SignUpResponse {
 		}
 	}
 
+	/*
 	/// Device private key decoded from base64-encoded string
 	public var devicePrivateKey: CoseKeyPrivate? {
 		get async {
@@ -155,6 +158,7 @@ extension MdocDataModel18013.SignUpResponse {
 			return await CoseKeyPrivate.from(base64: privateKey)
 		}
 	}
+	 */
 }
 
 extension Claim {
