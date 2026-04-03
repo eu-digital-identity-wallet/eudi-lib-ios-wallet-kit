@@ -79,6 +79,7 @@ struct PendingIssuanceModel: Codable {
 	let metadataKey: String
 	let pckeCodeVerifier: String
 	let pckeCodeVerifierMethod: String
+	let state: String
 }
 
 enum IssuanceOutcome {
