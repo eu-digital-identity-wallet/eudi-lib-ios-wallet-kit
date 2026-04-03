@@ -225,4 +225,77 @@ struct PresentationSessionTests {
         )
         #expect(log.issuingParty == nil)
     }
+
+    // MARK: - DeletionLogData
+
+    @Test("DeletionLogData parses from TransactionLog")
+    func testDeletionLogData() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            type: .deletion,
+            dataFormat: .cbor,
+            documentId: "doc-123",
+            docType: "eu.europa.ec.eudi.pid.1",
+            displayName: "EU PID"
+        )
+        let data = DeletionLogData(log)
+        #expect(data.status == .completed)
+        #expect(data.documentId == "doc-123")
+        #expect(data.docType == "eu.europa.ec.eudi.pid.1")
+        #expect(data.displayName == "EU PID")
+        #expect(data.dataFormat == .cbor)
+        #expect(data.errorMessage == nil)
+    }
+
+    @Test("DeletionLogData with failed status and error message")
+    func testDeletionLogDataFailed() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .failed,
+            errorMessage: "Storage error",
+            type: .deletion,
+            dataFormat: .json
+        )
+        let data = DeletionLogData(log)
+        #expect(data.status == .failed)
+        #expect(data.errorMessage == "Storage error")
+        #expect(data.documentId == nil)
+    }
+
+    @Test("DeletionLogData without optional fields defaults to nil")
+    func testDeletionLogDataDefaults() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            type: .deletion,
+            dataFormat: .cbor
+        )
+        let data = DeletionLogData(log)
+        #expect(data.documentId == nil)
+        #expect(data.docType == nil)
+        #expect(data.displayName == nil)
+        #expect(data.errorMessage == nil)
+    }
+
+    // MARK: - TransactionLog with deletion type
+
+    @Test("TransactionLog with deletion type")
+    func testTransactionLogDeletion() {
+        let log = TransactionLog(
+            timestamp: 1700000000,
+            status: .completed,
+            type: .deletion,
+            dataFormat: .cbor,
+            documentId: "doc-456",
+            docType: "org.iso.18013.5.1.mDL",
+            displayName: "Mobile Driving License"
+        )
+        #expect(log.type == .deletion)
+        #expect(log.documentId == "doc-456")
+        #expect(log.docType == "org.iso.18013.5.1.mDL")
+        #expect(log.displayName == "Mobile Driving License")
+        #expect(log.issuingParty == nil)
+        #expect(log.relyingParty == nil)
+    }
 }
