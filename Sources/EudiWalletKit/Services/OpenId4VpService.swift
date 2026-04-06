@@ -100,7 +100,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public func receiveRequest() async throws -> UserRequestInfo {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw PresentationSession.makeError(str: "Invalid link \(openid4VPlink)") }
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
-		switch await openId4Vp.authorize(url: openid4VPURI)  {
+		switch await openId4Vp.authorize(fetcher: Fetcher<String>(), url: openid4VPURI)  {
 		case .notSecured(data: let rrd):
 			if case .redirectUri = rrd.client { return try handleRequestData(rrd) }
 			else { throw PresentationSession.makeError(str: "Not secured request") }
