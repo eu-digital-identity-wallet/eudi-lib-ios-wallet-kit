@@ -93,12 +93,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 
 		}
-		if let readerAuthority = request.readerCertificateIssuer {
+		if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
 			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = request.readerAuthValidated
-			readerCertValidationMessage = request.readerCertificateValidationMessage
+			readerCertIssuerValid = authResult.isValidated
+			readerCertValidationMessage = authResult.validationMessage
 		}
-		readerLegalName = request.readerLegalName
+		readerLegalName = request.defaultReaderAuthResult?.legalName
 		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 		status = .requestReceived

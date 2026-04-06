@@ -35,8 +35,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var zkpDocumentIds: [Document.ID]?
 	public var flow: FlowType { .ble }
 
-	public init(parameters: InitializeTransferData) throws {
-		bleServerTransfer = try MdocGattServer(parameters: parameters)
+	public init(parameters: InitializeTransferData) async throws {
+		bleServerTransfer = try await MdocGattServer(parameters: parameters)
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
 		bleServerTransfer.delegate = self
 	}
