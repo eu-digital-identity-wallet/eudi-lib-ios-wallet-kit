@@ -28,6 +28,7 @@ import JOSESwift
 import SwiftyJSON
 import LocalAuthentication
 import class eudi_lib_sdjwt_swift.CompactParser
+import struct OpenID4VCI.Constants
 
 public actor OpenId4VCIService {
 	var issueReq: IssueRequest!
@@ -197,9 +198,16 @@ public actor OpenId4VCIService {
 		}
 	}
 
-	func getIssuerForDeferred(data: DeferredIssuanceModel) async throws -> Issuer {
-		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: data.configuration.credentialIssuerIdentifier, clientAttestationPopSigningAlgValuesSupported: data.configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }.compactMap { $0 })
-		return try Issuer.createDeferredIssuer(deferredCredentialEndpoint: data.deferredCredentialEndpoint, deferredRequesterPoster: Poster(session: networking), config: vciConfig)
+	func getIssuerForDeferred(data: DeferredIssuanceModel, dpopKeyId: String? = nil) async throws -> (Issuer,DPoPConstructor?) {
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: data.configuration.credentialIssuerIdentifier, clientAttestationPopSigningAlgValuesSupported: data.configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) })
+		var dpopConstructor: DPoPConstructor? = nil
+		let dpopSigningAlgValuesSupported = data.configuration.dpopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+		if config.requireDpop {
+			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: dpopKeyId ?? issueReq.dpopKeyId, algorithms: dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions)
+		}
+		let authorizationServerMetadata = IdentityAndAccessManagementMetadata.oauth( .init(authorizationEndpoint: Constants.url, tokenEndpoint: Constants.url, dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, pushedAuthorizationRequestEndpoint: Constants.url))
+		let issuer = try Issuer(authorizationServerMetadata: authorizationServerMetadata, issuerMetadata: .init(deferredCredentialEndpoint: data.deferredCredentialEndpoint), config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
+		return (issuer, dpopConstructor)
 	}
 
 	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, backgroundOnly: Bool = false, dpopKeyId: String? = nil) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration]) {
@@ -572,9 +580,10 @@ public actor OpenId4VCIService {
 
 	func requestDeferredIssuance(deferredDoc: WalletStorage.Document) async throws -> IssuanceOutcome {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
-		let issuer = try await getIssuerForDeferred(data: model)
+		let dpopKeyId = DocMetadata(from: deferredDoc.metadata)?.dpopKeyId
+		let (issuer, dpopConstructor) = try await getIssuerForDeferred(data: model, dpopKeyId: dpopKeyId)
 		let authorized = AuthorizedRequest(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil, grant: nil)
-		return try await deferredCredentialUseCase(issuer: issuer, authorized: authorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, configuration: model.configuration)
+		return try await deferredCredentialUseCase(issuer: issuer, dpopConstructor: dpopConstructor, authorized: authorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, configuration: model.configuration)
 	}
 
 
@@ -626,13 +635,16 @@ public actor OpenId4VCIService {
 		return res
 	}
 
-	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, publicKeys: [Data], derKeyData: Data?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
+	private func deferredCredentialUseCase(issuer: Issuer, dpopConstructor: DPoPConstructor?, authorized: AuthorizedRequest, transactionId: TransactionId, publicKeys: [Data], derKeyData: Data?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
+		var deferredResponseEncryptionSpec: IssuanceResponseEncryptionSpec? = nil
 		if let derKeyData {
-			let deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData)
+			deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption,  privateKeyData: derKeyData)
 			await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
 		}
-		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
+		let deferredIssuanceRequester = await IssuanceRequester(issuerMetadata: issuer.issuerMetadata, poster: Poster(session: networking), dpopConstructor: dpopConstructor)
+		let deferredRequestResponse = try await deferredIssuanceRequester.placeDeferredCredentialRequest(
+			accessToken: authorized.accessToken, transactionId: transactionId, dPopNonce: nil, maxRetries: Constants.MAX_RETRIES, issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec)
 		switch deferredRequestResponse {
 		case .issued(let credential):
 			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, format: nil, configuration: configuration, authorized: authorized, logger: logger)
