@@ -582,7 +582,11 @@ public actor OpenId4VCIService {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		let dpopKeyId = DocMetadata(from: deferredDoc.metadata)?.dpopKeyId
 		let (issuer, dpopConstructor) = try await getIssuerForDeferred(data: model, dpopKeyId: dpopKeyId)
-		let authorized = AuthorizedRequest(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil, grant: nil)
+		var authorized = AuthorizedRequest(accessToken: model.accessToken, refreshToken: model.refreshToken, credentialIdentifiers: nil, timeStamp: model.timeStamp, dPopNonce: nil, grant: nil)
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: model.configuration.credentialIssuerIdentifier, clientAttestationPopSigningAlgValuesSupported: model.configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) })
+		if authorized.isAccessTokenExpired() {
+			authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
+		}
 		return try await deferredCredentialUseCase(issuer: issuer, dpopConstructor: dpopConstructor, authorized: authorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, configuration: model.configuration)
 	}
 
