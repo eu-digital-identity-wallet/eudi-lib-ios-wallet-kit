@@ -279,19 +279,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		case .success(let offer):
 			let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
 			let urlString = credentialIssuerIdentifier.url.absoluteString
-			var vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString)
-			if vciService == nil {
-				let fallbackService = OpenId4VCIServiceRegistry.shared.getAllServices().first
-				var config: OpenId4VciConfiguration
-				if let fallbackService {
-					config = await fallbackService.config.copy(credentialIssuerURL: urlString)
-					if let authFlowRedirectionURI { config = config.copy(authFlowRedirectionURI: authFlowRedirectionURI) }
-				} else {
-					config = OpenId4VciConfiguration(credentialIssuerURL: urlString)
-				}
-				vciService = try registerOpenId4VciService(name: urlString, config: config)
-			}
-			return try await vciService!.resolveOfferUrlDocTypes(offerUri: offerUri)
+			// CHECK: Must be pre-registered in registry
+        	guard let vciService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString) else {
+            	// REJECT: Not pre-registered = untrusted
+            	throw PresentationSession.makeError(str: "Issuer must be pre-configured. Only registered issuers are allowed.", localizationKey: "issuer_not_registered", code: .issuerNotRegistered, context: ["issuer": urlString])
+        	}
+			return try await vciService.resolveOfferUrlDocTypes(offerUri: offerUri)
 		case .failure(let error):
 			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
 		}

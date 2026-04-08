@@ -37,6 +37,8 @@ public struct WalletError: LocalizedError {
 		case bleNotSupported
 		/// No documents available for presentation
 		case noDocumentsAvailable
+		/// The issuer is not registered
+		case issuerNotRegistered
 	}
 
 	public let description: String
