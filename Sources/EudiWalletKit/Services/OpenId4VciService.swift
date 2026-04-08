@@ -221,9 +221,11 @@ public actor OpenId4VCIService {
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
 			do {
-				authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
+				if authorized.isAccessTokenExpired() {
+					authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
+					logger.info("Refreshed authorized request for offer \(offerUri)")
+				}
 				authorizedOutcome = .authorized(authorized)
-				logger.info("Refreshed authorized request for offer \(offerUri)")
 				return (authorizedOutcome, issuer, credentialInfos)
 			}
 			catch {
@@ -861,7 +863,7 @@ extension WalletError {
 			else { return WalletError(description: wae.localizedDescription) }
 		}
 		return WalletError(description:"Authorization request failed: \(error.localizedDescription)")
-		
+
 	}
 }
 
