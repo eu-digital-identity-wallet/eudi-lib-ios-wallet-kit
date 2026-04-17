@@ -1,0 +1,56 @@
+[
+  {
+    "order": 0,
+    "name": "birth_date",
+    "displayName": "Date of birth",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "birth_date"],
+    "stringValue": "1964-08-12",
+    "isOptional": false
+  },
+  {
+    "order": 1,
+    "name": "issuing_authority",
+    "displayName": "Issuing authority",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "issuing_authority"],
+    "stringValue": "DE",
+    "isOptional": false
+  },
+  {
+    "order": 2,
+    "name": "resident_postal_code",
+    "displayName": "Resident Postal Code",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "resident_postal_code"],
+    "stringValue": "51147",
+    "isOptional": false
+  },
+  {
+    "order": 3,
+    "name": "source_document_type",
+    "displayName": "Document type",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "source_document_type"],
+    "stringValue": "ID",
+    "isOptional": false
+  },
+  {
+    "order": 4,
+    "name": "given_name",
+    "displayName": "Given name(s)",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "given_name"],
+    "stringValue": "ERIKA",
+    "isOptional": false
+  },
+  {
+    "order": 5,
+    "name": "age_over_12",
+    "displayName": "Age over 12",
+    "namespace": "eu.europa.ec.eudi.pid.1",
+    "path": ["eu.europa.ec.eudi.pid.1", "age_over_12"],
+    "stringValue": "true",
+    "isOptional": false
+  }
+]
