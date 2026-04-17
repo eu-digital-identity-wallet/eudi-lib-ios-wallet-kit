@@ -132,10 +132,12 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	///
 	/// - Returns: An optional `DocClaimsModel` model created from the given document.
 	public static func toClaimsModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> DocClaimsModel? {
-		switch doc.docDataFormat {
-		case .cbor:	toCborMdocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
+		let model: DocClaimsModel? = switch doc.docDataFormat {
+		case .cbor: toCborMdocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
 		case .sdjwt: toSdJwtDocModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
 		}
+		guard let model else { return nil }
+		return reorderDocClaimsByMetadata(model, doc: doc, uiCulture: uiCulture)
 	}
 
 	public static func toCborMdocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> DocClaimsModel? {
@@ -156,6 +158,35 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			retModel = defModel ?? DocClaimsModel(configuration: configuration, issuerSigned: iss, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		}
 		return retModel
+	}
+
+	static func reorderDocClaimsByMetadata(_ model: DocClaimsModel, doc: WalletStorage.Document, uiCulture: String?) -> DocClaimsModel {
+		let docMetadata = DocMetadata(from: doc.metadata)
+		guard let claimMetadata = docMetadata?.getMetadata(uiCulture: uiCulture).claimMetadata, !claimMetadata.isEmpty else { return model }
+
+		// Build order map: claim path string -> position in metadata
+		var claimOrderMap = [String: Int]()
+		for (index, meta) in claimMetadata.enumerated() {
+			let pathKey = meta.claimPath.joined(separator: "/").replacingOccurrences(of: "//", with: "/")
+			if claimOrderMap[pathKey] == nil {
+				claimOrderMap[pathKey] = index
+			}
+		}
+		// Sort docClaims by metadata order, preserving original position for unmatched claims
+		let reorderedClaims = model.docClaims.enumerated().sorted { lhs, rhs in
+			let lhsPath = lhs.element.path.joined(separator: "/").replacingOccurrences(of: "//", with: "/")
+			let rhsPath = rhs.element.path.joined(separator: "/").replacingOccurrences(of: "//", with: "/")
+			let lhsOrder = claimOrderMap[lhsPath] ?? Int.max
+			let rhsOrder = claimOrderMap[rhsPath] ?? Int.max
+			if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+			return lhs.offset < rhs.offset
+		}.enumerated().map { newOrder, pair in
+			var claim = pair.element
+			claim.order = newOrder
+			return claim
+		}.sorted(using: KeyPathComparator(\.order))
+		let configuration = DocClaimsModelConfiguration(from: model).withDocClaims(reorderedClaims)
+		return DocClaimsModel(configuration: configuration)
 	}
 
 	public static func toSdJwtDocModel(doc: WalletStorage.Document, uiCulture: String?, modelFactory: (any DocClaimsDecodableFactory)? = nil) -> DocClaimsModel? {

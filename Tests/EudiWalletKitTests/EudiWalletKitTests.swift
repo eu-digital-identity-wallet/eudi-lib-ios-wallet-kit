@@ -72,6 +72,87 @@ struct EudiWalletKitTests {
 		#expect("org.iso.18013.5.1.mDL" == iss.issuerAuth.mso.docType)
 	}
 
+	@Test("CBOR docClaims order follows metadata claim order")
+	func testCborDocClaimsRespectMetadataOrder() throws {
+		// 1. Load issuer metadata and extract claim paths for pid-mso-mdoc
+		let issuerData = try #require(Data(name: "pid-demo-openid-credential-issuer", ext: "json", from: Bundle.module))
+		let issuerJson = try JSON(data: issuerData)
+		let claimsJson = try #require(issuerJson["credential_configurations_supported"]["pid-mso-mdoc"]["credential_metadata"]["claims"].array)
+
+		let claimMetadata = claimsJson.compactMap { claimJson -> DocClaimMetadata? in
+			guard let path = claimJson["path"].array?.map(\.stringValue) else { return nil }
+			let displayArr = claimJson["display"].array?.compactMap { d -> DisplayMetadata? in
+				guard let name = d["name"].string else { return nil }
+				return DisplayMetadata(name: name, localeIdentifier: d["locale"].string, logo: nil, description: nil, backgroundColor: nil, textColor: nil)
+			}
+			return DocClaimMetadata(display: displayArr, isMandatory: claimJson["mandatory"].bool, claimPath: path)
+		}
+		#expect(!claimMetadata.isEmpty)
+
+		// 2. Load the current (pre-reorder) doc claims
+		let claimsData = try #require(Data(name: "pid_demo_current_doc_claims_order", ext: "json", from: Bundle.module))
+		let currentClaimsJson = try #require(try JSON(data: claimsData).array)
+
+		let docClaims = currentClaimsJson.enumerated().map { index, claim in
+			DocClaim(
+				name: claim["name"].stringValue,
+				path: claim["path"].arrayValue.map(\.stringValue),
+				displayName: claim["displayName"].string,
+				dataValue: .string(claim["stringValue"].stringValue),
+				stringValue: claim["stringValue"].stringValue,
+				isOptional: claim["isOptional"].boolValue,
+				order: index,
+				namespace: claim["namespace"].string
+			)
+		}
+		#expect(docClaims.count == currentClaimsJson.count)
+
+		// 3. Build model and document with metadata
+		let docType = "eu.europa.ec.eudi.pid.1"
+		let metadata = DocMetadata(
+			credentialIssuerIdentifier: issuerJson["credential_issuer"].stringValue,
+			configurationIdentifier: "pid-mso-mdoc",
+			docType: docType,
+			display: nil,
+			issuerDisplay: nil,
+			claims: claimMetadata,
+			authorizedRequestData: nil,
+			keyOptions: nil,
+			credentialOptions: nil
+		)
+
+		let model = DocClaimsModel(configuration: DocClaimsModelConfiguration(
+			id: UUID().uuidString, docType: docType, displayName: nil, display: nil,
+			credentialIssuerIdentifier: nil, configurationIdentifier: nil,
+			validFrom: nil, validUntil: nil, statusIdentifier: nil,
+			credentialsUsageCounts: nil, credentialPolicy: .rotateUse,
+			secureAreaName: nil, modifiedAt: nil,
+			docClaims: docClaims, docDataFormat: .cbor, hashingAlg: nil
+		))
+
+		let document = WalletStorage.Document(
+			id: model.id, docType: docType, docDataFormat: .cbor,
+			data: Data(), docKeyInfo: nil, createdAt: .now, modifiedAt: .now,
+			metadata: metadata.toData(), displayName: nil, status: .issued
+		)
+
+		// 4. Apply reordering
+		let reordered = StorageManager.reorderDocClaimsByMetadata(model, doc: document, uiCulture: nil)
+
+		// 5. Verify claims are now in metadata order
+		let expectedOrder = claimMetadata
+			.filter { meta in docClaims.contains { $0.path == meta.claimPath } }
+			.map { $0.claimPath.last! }
+
+		let actualOrder = reordered.docClaims.map(\.name)
+		#expect(actualOrder == expectedOrder)
+
+		// Verify order values are sequential
+		for (i, claim) in reordered.docClaims.enumerated() {
+			#expect(claim.order == i)
+		}
+	}
+
 	@Test("Generate OpenId4Vp Session Transcript with JwkThumbprint") func testGenerateOpenId4VpSessionTranscriptWithJwkThumbprint() {
 		let OPENID4VP_1_0_SESSION_TRANSCRIPT = "83f6f682714f70656e494434565048616e646f7665725820048bc053c00442af9b8eed494cefdd9d95240d254b046b11b68013722aad38ac"
 		let clientId = "x509_san_dns:example.com"
