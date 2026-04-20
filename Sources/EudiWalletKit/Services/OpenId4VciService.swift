@@ -229,15 +229,18 @@ public actor OpenId4VCIService {
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
 			do {
-				authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
-				logger.info("Refreshed authorized request for offer \(offerUri)")
-				authorizedOutcome = .authorized(authorized)
-				return (authorizedOutcome, issuer, credentialInfos)
+				if let clock = authorized.refreshToken?.expiresIn, authorized.isRefreshTokenExpired(clock: clock) { 
+					logger.info("Refresh token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + clock)).")
+				}
+					authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
+					logger.info("Refreshed authorized request for offer \(offerUri)")
+					authorizedOutcome = .authorized(authorized)
+					return (authorizedOutcome, issuer, credentialInfos)
 			}
 			catch {
 				logger.error("Failed to refresh provided authorized request: \(error).")
 				if backgroundOnly {
-					throw PresentationSession.makeError(str: "Background reissuance not possible.", localizationKey: "background_reissue_not_possible")
+					throw PresentationSession.makeError(str: "Background reissuance failed: \(error).", localizationKey: "background_reissue_not_possible")
 				}
 			}
 		}
