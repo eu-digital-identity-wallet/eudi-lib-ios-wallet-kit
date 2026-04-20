@@ -498,9 +498,13 @@ public actor OpenId4VCIService {
 	}
 
 	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String) async throws -> AuthorizedRequest {
-		let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
-		let codeRetrieved = try await issuer.handleAuthorizationCode(request: request, authorizationCode: issuanceAuthorization)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: codeRetrieved, preparedRequest: request, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
+		let typedAuthorizationCode = try AuthorizationCode(value: authorizationCode)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(
+			request: request,
+			authorizationCode: typedAuthorizationCode,
+			authorizationDetailsInTokenRequest: .doNotInclude,
+			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
+		)
 		let at = authorized.accessToken
 		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
@@ -625,10 +629,15 @@ public actor OpenId4VCIService {
 		let issuer = try await getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let request = try AuthorizationCodeRetrieved(credentials: [.init(value: model.configuration.configurationIdentifier.value)], authorizationCode: IssuanceAuthorization(authorizationCode: authorizationCode), pkceVerifier: pkceVerifier, configurationIds: [model.configuration.configurationIdentifier], dpopNonce: nil, state: model.state)
 		let authorizationCodeURL = try AuthorizationCodeURL(urlString: webUrl.absoluteString)
-		let preparedRequest = AuthorizationRequested(credentials: request.credentials, authorizationCodeURL: authorizationCodeURL, pkceVerifier: pkceVerifier, state: request.state, configurationIds: request.configurationIds)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(request: request, preparedRequest: preparedRequest,
+		let request = AuthorizationRequested(
+			credentials: [try .init(value: model.configuration.configurationIdentifier.value)],
+			authorizationCodeURL: authorizationCodeURL, pkceVerifier: pkceVerifier, state: model.state,
+			configurationIds: [model.configuration.configurationIdentifier]
+		)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(
+			request: request,
+			authorizationCode: try AuthorizationCode(value: authorizationCode),
 			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
 		)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration)
