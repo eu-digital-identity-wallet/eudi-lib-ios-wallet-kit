@@ -76,15 +76,22 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// When provided, the wallet will encrypt the presentation response using the specified
 	/// encryption parameters before sending it to the verifier.
 	public let responseEncryptionConfiguration: ResponseEncryptionConfiguration?
+	/// Allows presentation to continue when a requested claim is missing from an otherwise matching credential.
+	///
+	/// When enabled, claims that are not present are skipped instead of failing the DCQL resolution.
+	/// By default, all requested claims remain mandatory.
+	public let allowPresentingPartialClaims: Bool
 
 	public init() {
 		self.clientIdSchemes = [.x509SanDns, .x509Hash, .redirectUri]
 		self.responseEncryptionConfiguration = nil
+		self.allowPresentingPartialClaims = false
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme], responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil) {
+	public init(clientIdSchemes: [ClientIdScheme], responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false) {
 		self.clientIdSchemes = clientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
+		self.allowPresentingPartialClaims = allowPresentingPartialClaims
 	}
 }
 
