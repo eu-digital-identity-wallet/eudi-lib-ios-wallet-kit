@@ -374,3 +374,37 @@ extension DocClaim {
 		if let children { children.map(\.claimPath) } else { [claimPath] }
 	}
 }
+
+extension DocClaimsModelConfiguration {
+	init(from model: DocClaimsModel) {
+		self.init(
+			id: model.id, createdAt: model.createdAt, docType: model.docType,
+			displayName: model.displayName, display: model.display, issuerDisplay: model.issuerDisplay,
+			credentialIssuerIdentifier: model.credentialIssuerIdentifier,
+			configurationIdentifier: model.configurationIdentifier,
+			validFrom: model.validFrom, validUntil: model.validUntil,
+			statusIdentifier: model.statusIdentifier,
+			credentialsUsageCounts: model.credentialsUsageCounts,
+			credentialPolicy: model.credentialPolicy, secureAreaName: model.secureAreaName,
+			modifiedAt: model.modifiedAt, ageOverXX: model.ageOverXX,
+			docClaims: model.docClaims, docDataFormat: model.docDataFormat,
+			hashingAlg: model.hashingAlg, nameSpaces: model.nameSpaces
+		)
+	}
+
+	func withDocClaims(_ docClaims: [DocClaim]) -> DocClaimsModelConfiguration {
+		DocClaimsModelConfiguration(
+			id: id, createdAt: createdAt, docType: docType,
+			displayName: displayName, display: display, issuerDisplay: issuerDisplay,
+			credentialIssuerIdentifier: credentialIssuerIdentifier,
+			configurationIdentifier: configurationIdentifier,
+			validFrom: validFrom, validUntil: validUntil,
+			statusIdentifier: statusIdentifier,
+			credentialsUsageCounts: credentialsUsageCounts,
+			credentialPolicy: credentialPolicy, secureAreaName: secureAreaName,
+			modifiedAt: modifiedAt, ageOverXX: ageOverXX,
+			docClaims: docClaims, docDataFormat: docDataFormat,
+			hashingAlg: hashingAlg, nameSpaces: nameSpaces
+		)
+	}
+}
