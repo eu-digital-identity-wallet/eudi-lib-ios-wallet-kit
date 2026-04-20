@@ -1,3 +1,53 @@
+## v0.24.0
+
+### OpenID4VP Partial Claim Presentation
+- Added `allowPresentingPartialClaims` to `OpenId4VpConfiguration` to let DCQL-based OpenID4VP presentations continue when some requested claims are missing from an otherwise matching credential.
+- When enabled, unavailable claims are skipped from the disclosed claim set instead of causing DCQL resolution to fail.
+
+```swift
+let openId4VpConfig = OpenId4VpConfiguration(
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
+    allowPresentingPartialClaims: true
+)
+```
+
+## v0.23.7
+
+### DPoP and Reissuance Improvements
+- Added DPoP support to deferred issuance flows.
+- Reissuance now always refreshes access tokens as part of the process.
+
+## v0.23.6
+
+### Access Token Refresh Handling
+- Improved access token refresh handling.
+- Updated related dependency versions to support the refreshed token flow.
+
+## v0.23.5
+
+### Dependency Updates
+- Updated `eudi-lib-ios-siop-openid4vp-swift` to version 0.31.0.
+
+## v0.23.4
+
+### Transaction Logging and OpenID4VCI Enhancements
+- Added transaction logging for document deletion in `EudiWallet`.
+- Enhanced `OpenId4VCIService`.
+- Updated `eudi-lib-ios-openid4vci-swift` to version 0.33.0.
+
+## v0.23.3
+
+### Issuance Logging, Error Handling, and DCQL Improvements
+- Added issuance transaction logging to `OpenId4VciService`.
+- Added BLE-specific error codes and mapped transfer-layer errors to `WalletError.Code`.
+- Added wildcard-aware value matching for DCQL queries.
+- Updated libraries and fixed `CredentialQuery`.
+
+## v0.23.2
+
+### Structured DCQL Error Codes
+- Added structured error codes to `WalletError` for DCQL query failures.
+
 ## v0.23.1
 
 ### Background Reissuance and DPoP Propagation
