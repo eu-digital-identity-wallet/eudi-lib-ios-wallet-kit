@@ -63,6 +63,7 @@ The library provides the following functionality:
       document transfer
         - [x] ClienID scheme: preregistered, x509_san_uri, x509_san_dns, redirect_uri
         - [x] DCQL
+        - [x] Optional partial claim presentation for DCQL requests
 
 The library is written in Swift and is compatible with iOS 16 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
 
@@ -124,13 +125,16 @@ let config = EudiWalletConfiguration(
     logFileName: "wallet.log"
 )
 let openId4VpConfig = OpenId4VpConfiguration(
-    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri]
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
+    allowPresentingPartialClaims: true
 )
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,
     openID4VpConfig: openId4VpConfig
 )
 ```
+
+Set `allowPresentingPartialClaims` to `true` when you want OpenID4VP DCQL resolution to skip claims that are missing from an otherwise matching credential. The default value is `false`, which keeps all requested claims mandatory.
 
 ### OpenID4VCI Configuration
 

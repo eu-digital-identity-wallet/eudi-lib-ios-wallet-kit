@@ -1,3 +1,16 @@
+## v0.24.0
+
+### OpenID4VP Partial Claim Presentation
+- Added `allowPresentingPartialClaims` to `OpenId4VpConfiguration` to let DCQL-based OpenID4VP presentations continue when some requested claims are missing from an otherwise matching credential.
+- When enabled, unavailable claims are skipped from the disclosed claim set instead of causing DCQL resolution to fail.
+
+```swift
+let openId4VpConfig = OpenId4VpConfiguration(
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
+    allowPresentingPartialClaims: true
+)
+```
+
 ## v0.23.7
 
 ### DPoP and Reissuance Improvements
