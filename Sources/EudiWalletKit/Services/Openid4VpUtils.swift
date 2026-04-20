@@ -209,7 +209,7 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable) throws -> [String: [ClaimsQuery]] {
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [String: [ClaimsQuery]] {
 		var result: [String: [ClaimsQuery]] = [:]
 		var lastError: WalletError?
 		var credentialQueryResults: [QueryId: (matchedCredId: Document.ID, claimQueries: [ClaimsQuery])] = [:]
@@ -223,7 +223,7 @@ extension OpenId4VpUtils {
 			// Try to find a credential that satisfies the claim requirements
 			for credId in matchingCredIds {
 				do {
-					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable)
+					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
 					credentialQueryResults[credQuery.id] = (credId, claimPaths)
 				} catch {
 					lastError = error
@@ -279,7 +279,7 @@ extension OpenId4VpUtils {
 
 	/// Resolves claims for a specific credential query and credential
 	/// - Throws: WalletError if claims cannot be satisfied, with details about the first missing claim
-	private static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) throws(WalletError) -> [ClaimsQuery] {
+	private static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool) throws(WalletError) -> [ClaimsQuery] {
 		// If no claims specified, return empty array (only mandatory claims)
 		guard let claims = credQuery.claims, !claims.isEmpty else {
 			return []
@@ -329,6 +329,7 @@ extension OpenId4VpUtils {
 						throw WalletError(description: "Claim value mismatch for: \(claimPathStr)", code: .claimValueMismatch, context: ["claimPath": claimPathStr])
 					}
 				} else if !queryable.hasClaim(id: credId, claimPath: claim.path) {
+					if allowPresentingPartialClaims { continue } // do not throw, just skip this claim
 					let claimPathStr = claim.path.value.map(\.claimName).joined(separator: "/")
 					throw WalletError(description: "Claim not found: \(claimPathStr)", code: .claimNotFound, context: ["claimPath": claimPathStr])
 				}
