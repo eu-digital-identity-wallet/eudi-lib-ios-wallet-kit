@@ -27,8 +27,11 @@ import SwiftCBOR
 import JOSESwift
 import SwiftyJSON
 import LocalAuthentication
+import class eudi_lib_sdjwt_swift.ClaimsVerifier
 import class eudi_lib_sdjwt_swift.CompactParser
-import struct OpenID4VCI.Constants
+import class eudi_lib_sdjwt_swift.SDJWTVerifier
+import class eudi_lib_sdjwt_swift.SdJwtVcIssuerMetaDataFetcher
+import class eudi_lib_sdjwt_swift.SignatureVerifier
 
 public actor OpenId4VCIService {
 	var issueReq: IssueRequest!
@@ -842,9 +845,50 @@ public actor OpenId4VCIService {
 				if doc.docDataFormat == .cbor {
 					let iss = try IssuerSigned(data: [UInt8](doc.data))
 					try iss.validate(docType: doc.docType)
+				} else if doc.docDataFormat == .sdjwt {
+					try await validateIssuedSdJwt(doc)
 				}
 			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
 		}
+	}
+
+	private func validateIssuedSdJwt(_ document: WalletStorage.Document) async throws {
+		guard let serialized = String(data: document.data, encoding: .utf8) else {
+			throw PresentationSession.makeError(str: "Failed to decode SD-JWT credential data")
+		}
+		let expectedIssuer = try expectedSdJwtIssuerURL()
+		let signedSdJwt = try CompactParser().getSignedSdJwt(serialisedString: serialized)
+		let verifier = SDJWTVerifier(sdJwt: signedSdJwt)
+		let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
+		let metadata = try await metadataFetcher.fetchIssuerMetaData(issuer: expectedIssuer)
+		guard let kid = signedSdJwt.jwt.protectedHeader.keyID else {
+			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a key identifier")
+		}
+		guard let issuerJwk = metadata?.jwks.first(where: { $0.keyID == kid }) else {
+			throw PresentationSession.makeError(str: "Unable to resolve issuer signing key for issued SD-JWT")
+		}
+		let result = try verifier.verifyIssuance(
+			issuersSignatureVerifier: { jws in
+				try SignatureVerifier(signedJWT: jws, publicKey: issuerJwk)
+			},
+			claimVerifier: { nbf, exp in
+				ClaimsVerifier(nbf: nbf, exp: exp)
+			}
+		)
+		guard case .success = result else {
+			let error = switch result {
+			case .failure(let error): error
+			case .success: PresentationSession.makeError(str: "Unexpected SD-JWT verification result")
+			}
+			throw error
+		}
+	}
+
+	private func expectedSdJwtIssuerURL() throws -> URL {
+		guard let issuer = config.credentialIssuerURL, let issuerURL = URL(string: issuer) else {
+			throw PresentationSession.makeError(str: "credentialIssuerURL must be a valid URL to verify SD-JWT credentials")
+		}
+		return issuerURL
 	}
 
 	func hasIssuerUrl(_ issuerURL: String) -> Bool {

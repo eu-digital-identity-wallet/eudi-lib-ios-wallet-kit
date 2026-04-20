@@ -26,8 +26,11 @@ import SwiftCBOR
 import eudi_lib_sdjwt_swift
 import SwiftyJSON
 import OpenID4VP
+import OpenID4VCI
+import X509
 import enum OpenID4VP.ClaimPathElement
 import struct OpenID4VP.ClaimPath
+import protocol OpenID4VCI.Networking
 
 struct EudiWalletKitTests {
 
@@ -221,9 +224,123 @@ struct EudiWalletKitTests {
 			Issue.record("Expected .string data value for female sex claim")
 		}
 	}
+
+	@Test("Issued SD-JWT credentials are validated before storage")
+	func testValidateIssuedSdJwtCredential() async throws {
+		let storageService = TestDataStorageService()
+		let service = try makeVciService(storageService: storageService)
+		let document = try makeSdJwtDocument(fromResource: "sjwt-pid")
+		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [])
+	}
+
+	private func makeVciService(
+		storageService: TestDataStorageService,
+		issuerURL: String = "https://credential-issuer.example.com"
+	) throws -> OpenId4VCIService {
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let storage = StorageManager(storageService: storageService)
+		let config = OpenId4VciConfiguration(
+			credentialIssuerURL: issuerURL,
+			requirePAR: false,
+			requireDpop: false
+		)
+		return try OpenId4VCIService(
+			uiCulture: nil,
+			config: config,
+			networking: networking,
+			storage: storage,
+			storageService: storageService
+		)
+	}
+
+	private func makeSdJwtDocument(
+		fromResource resourceName: String,
+		transform: ((String) throws -> String)? = nil
+	) throws -> WalletStorage.Document {
+		let original = try #require(String(data: Data(name: resourceName, ext: "txt", from: Bundle.module)!, encoding: .utf8))
+		let serialized = try transform?(original) ?? original
+		return WalletStorage.Document(
+			id: UUID().uuidString,
+			docType: "urn:eu:europa:ec:eudi:pid:1",
+			docDataFormat: .sdjwt,
+			data: Data(serialized.utf8),
+			docKeyInfo: nil,
+			createdAt: .now,
+			metadata: nil,
+			displayName: nil,
+			status: .issued
+		)
+	}
+
+	private func makeSdJwtIssuerMetadata(forResource resourceName: String, issuerURL: String) throws -> Data {
+		let serialized = try #require(String(data: Data(name: resourceName, ext: "txt", from: Bundle.module)!, encoding: .utf8))
+		let issuerJwk = try makeIssuerJwk(from: serialized)
+		let metadata: [String: Any] = [
+			"issuer": issuerURL,
+			"jwks": [
+				"keys": [try issuerJwk.toDictionary()]
+			]
+		]
+		return try JSONSerialization.data(withJSONObject: metadata)
+	}
+
+	private func makeIssuerJwk(from serialized: String) throws -> ECPublicKey {
+		let (header, _, _) = StorageManager.extractJWTParts(serialized)
+		let headerData = try #require(Data(base64URLEncoded: header))
+		let headerJson = try JSON(data: headerData)
+		let certificateBase64 = try #require(headerJson["x5c"].array?.first?.string)
+		let certificateData = try #require(Data(base64Encoded: certificateBase64))
+		let certificate = try Certificate(derEncoded: [UInt8](certificateData))
+		let pem = try certificate.publicKey.serializeAsPEM().pemString
+		let secKey = try #require(makeSecKey(fromPEM: pem))
+		return try ECPublicKey(publicKey: secKey, additionalParameters: ["use": "sig"])
+	}
+
+	private func makeSecKey(fromPEM pem: String) -> SecKey? {
+		let keyString = pem
+			.replacingOccurrences(of: "-----BEGIN PUBLIC KEY-----", with: "")
+			.replacingOccurrences(of: "-----END PUBLIC KEY-----", with: "")
+			.replacingOccurrences(of: "\n", with: "")
+			.replacingOccurrences(of: "\r", with: "")
+		guard let keyData = Data(base64Encoded: keyString) else { return nil }
+		let attributes: [CFString: Any] = [
+			kSecAttrKeyType: kSecAttrKeyTypeEC,
+			kSecAttrKeyClass: kSecAttrKeyClassPublic,
+			kSecAttrKeySizeInBits: 256
+		]
+		return SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, nil)
+	}
+
 }
 
 // MARK: - Data Extension for Test Resources
+
+actor TestDataStorageService: DataStorageService {
+	func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? { nil }
+	func loadDocumentMetadata(id: String) async throws -> DocMetadata? { nil }
+	func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
+	func saveDocument(_ document: WalletStorage.Document, batch: [WalletStorage.Document]?, allowOverwrite: Bool) async throws {}
+	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
+	func deleteDocuments(status: WalletStorage.DocumentStatus) async throws {}
+	func deleteDocumentCredential(id: String, index: Int) async throws {}
+}
+
+final class TestNetworking: Networking {
+	private let metadata: Data
+
+	init(metadata: Data) {
+		self.metadata = metadata
+	}
+
+	func data(from url: URL) async throws -> (Data, URLResponse) {
+		let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:])!
+		return (metadata, response)
+	}
+
+	func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+		try await data(from: request.url ?? URL(string: "https://example.com")!)
+	}
+}
 
 extension Data {
 	init?(name: String, ext: String, from bundle: Bundle) {
