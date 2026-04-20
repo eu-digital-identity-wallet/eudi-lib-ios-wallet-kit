@@ -10,6 +10,19 @@ let session = eudiWallet.beginPresentation(flow: flow)
 ShareView(presentationSession: session)
 ```
 
+For OpenID4VP flows, partial DCQL claim presentation can be enabled through ``OpenId4VpConfiguration``. When ``OpenId4VpConfiguration/allowPresentingPartialClaims`` is `true`, claims that are not present in an otherwise matching credential are omitted instead of causing the presentation request to fail.
+
+```swift
+let openId4VpConfig = OpenId4VpConfiguration(
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
+    allowPresentingPartialClaims: true
+)
+let wallet = try! EudiWallet(
+    eudiWalletConfig: config,
+    openID4VpConfig: openId4VpConfig
+)
+```
+
 On view appearance the attestations are presented with the ``PresentationService/receiveRequest()`` method. For the BLE (proximity) case, the ``PresentationSession/deviceEngagement`` property is populated with the QR code to be displayed on the holder device.
 
 ```swift
@@ -19,7 +32,7 @@ On view appearance the attestations are presented with the ``PresentationService
 }
 ```
 
-After the request is received the ``PresentationSession/disclosedDocuments`` contains the requested attested items. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
+After the request is received the ``PresentationSession/disclosedDocuments`` contains the requested attested items that can be satisfied by the selected credential. When partial-claim presentation is enabled, this includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
 
 ```swift
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
@@ -31,4 +44,3 @@ await presentationSession.sendResponse(userAccepted: true,
     }
   })
 ```
-
