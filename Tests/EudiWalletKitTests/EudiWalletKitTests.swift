@@ -239,18 +239,9 @@ struct EudiWalletKitTests {
 	) throws -> OpenId4VCIService {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(
-			credentialIssuerURL: issuerURL,
-			requirePAR: false,
-			requireDpop: false
-		)
-		return try OpenId4VCIService(
-			uiCulture: nil,
-			config: config,
-			networking: networking,
-			storage: storage,
-			storageService: storageService
-		)
+		let eudic = ["pidissuerca02_ut"].compactMap { SecCertificateCreateWithData(nil, Data(name: $0, ext: "der", from: Bundle.module)! as CFData)! }
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true, trustedIssuerCertificates: [eudic])
+		return try OpenId4VCIService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
 	private func makeSdJwtDocument(
@@ -259,58 +250,29 @@ struct EudiWalletKitTests {
 	) throws -> WalletStorage.Document {
 		let original = try #require(String(data: Data(name: resourceName, ext: "txt", from: Bundle.module)!, encoding: .utf8))
 		let serialized = try transform?(original) ?? original
-		return WalletStorage.Document(
-			id: UUID().uuidString,
-			docType: "urn:eu:europa:ec:eudi:pid:1",
-			docDataFormat: .sdjwt,
-			data: Data(serialized.utf8),
-			docKeyInfo: nil,
-			createdAt: .now,
-			metadata: nil,
-			displayName: nil,
-			status: .issued
-		)
+		return WalletStorage.Document(id: UUID().uuidString, docType: "urn:eu:europa:ec:eudi:pid:1", docDataFormat: .sdjwt,
+			data: Data(serialized.utf8), docKeyInfo: nil, createdAt: .now, metadata: nil, displayName: nil, status: .issued)
 	}
 
 	private func makeSdJwtIssuerMetadata(forResource resourceName: String, issuerURL: String) throws -> Data {
 		let serialized = try #require(String(data: Data(name: resourceName, ext: "txt", from: Bundle.module)!, encoding: .utf8))
-		let issuerJwk = try makeIssuerJwk(from: serialized)
-		let metadata: [String: Any] = [
-			"issuer": issuerURL,
-			"jwks": [
-				"keys": [try issuerJwk.toDictionary()]
-			]
-		]
+		let issuerJwkData = try makeIssuerJwkData(from: serialized)
+		let ec = try issuerJwkData.ecPublicKeyComponents()
+		let metadata: [String: Any] = ["issuer": issuerURL,
+			"jwks": [ "keys": ["crv": ec.crv, "x": ec.x.base64URLEncodedString(), "y": ec.y.base64URLEncodedString(), "use": "sig"] ] ]
 		return try JSONSerialization.data(withJSONObject: metadata)
 	}
 
-	private func makeIssuerJwk(from serialized: String) throws -> ECPublicKey {
+	private func makeIssuerJwkData(from serialized: String) throws -> Data {
 		let (header, _, _) = StorageManager.extractJWTParts(serialized)
 		let headerData = try #require(Data(base64URLEncoded: header))
 		let headerJson = try JSON(data: headerData)
 		let certificateBase64 = try #require(headerJson["x5c"].array?.first?.string)
 		let certificateData = try #require(Data(base64Encoded: certificateBase64))
 		let certificate = try Certificate(derEncoded: [UInt8](certificateData))
-		let pem = try certificate.publicKey.serializeAsPEM().pemString
-		let secKey = try #require(makeSecKey(fromPEM: pem))
-		return try ECPublicKey(publicKey: secKey, additionalParameters: ["use": "sig"])
+		let keyData = Data(certificate.publicKey.subjectPublicKeyInfoBytes)
+		return keyData
 	}
-
-	private func makeSecKey(fromPEM pem: String) -> SecKey? {
-		let keyString = pem
-			.replacingOccurrences(of: "-----BEGIN PUBLIC KEY-----", with: "")
-			.replacingOccurrences(of: "-----END PUBLIC KEY-----", with: "")
-			.replacingOccurrences(of: "\n", with: "")
-			.replacingOccurrences(of: "\r", with: "")
-		guard let keyData = Data(base64Encoded: keyString) else { return nil }
-		let attributes: [CFString: Any] = [
-			kSecAttrKeyType: kSecAttrKeyTypeEC,
-			kSecAttrKeyClass: kSecAttrKeyClassPublic,
-			kSecAttrKeySizeInBits: 256
-		]
-		return SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, nil)
-	}
-
 }
 
 // MARK: - Data Extension for Test Resources

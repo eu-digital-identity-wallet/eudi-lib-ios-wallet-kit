@@ -18,6 +18,7 @@ import Foundation
 import OpenID4VCI
 import JOSESwift
 import MdocDataModel18013
+import MdocSecurity18013
 import AuthenticationServices
 import Logging
 import CryptoKit
@@ -27,11 +28,14 @@ import SwiftCBOR
 import JOSESwift
 import SwiftyJSON
 import LocalAuthentication
+import X509
 import class eudi_lib_sdjwt_swift.ClaimsVerifier
 import class eudi_lib_sdjwt_swift.CompactParser
 import class eudi_lib_sdjwt_swift.SDJWTVerifier
 import class eudi_lib_sdjwt_swift.SdJwtVcIssuerMetaDataFetcher
 import class eudi_lib_sdjwt_swift.SignatureVerifier
+import protocol eudi_lib_sdjwt_swift.KeyExpressible
+import struct eudi_lib_sdjwt_swift.SignedSDJWT
 
 public actor OpenId4VCIService {
 	var issueReq: IssueRequest!
@@ -853,14 +857,12 @@ public actor OpenId4VCIService {
 		let pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
 		guard pkCoseKeys.count == publicKeys.count else { throw PresentationSession.makeError(str: "Failed to parse public keys") }
 		for doc in (batch ?? [issued]) {
-			do {
-				if doc.docDataFormat == .cbor {
-					let iss = try IssuerSigned(data: [UInt8](doc.data))
-					try iss.validate(docType: doc.docType)
-				} else if doc.docDataFormat == .sdjwt {
-					try await validateIssuedSdJwt(doc)
-				}
-			}  catch let e as LocalizedError { throw PresentationSession.makeError(err: e) }
+			if doc.docDataFormat == .cbor {
+				let iss = try IssuerSigned(data: [UInt8](doc.data))
+				try iss.validate(docType: doc.docType)
+			} else if doc.docDataFormat == .sdjwt {
+				try await validateIssuedSdJwt(doc)
+			}
 		}
 	}
 
@@ -871,22 +873,29 @@ public actor OpenId4VCIService {
 		let expectedIssuer = try expectedSdJwtIssuerURL()
 		let signedSdJwt = try CompactParser().getSignedSdJwt(serialisedString: serialized)
 		let verifier = SDJWTVerifier(sdJwt: signedSdJwt)
-		let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
-		let metadata = try await metadataFetcher.fetchIssuerMetaData(issuer: expectedIssuer)
-		guard let kid = signedSdJwt.jwt.protectedHeader.keyID else {
-			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a key identifier")
-		}
-		guard let issuerJwk = metadata?.jwks.first(where: { $0.keyID == kid }) else {
-			throw PresentationSession.makeError(str: "Unable to resolve issuer signing key for issued SD-JWT")
+		// Determine the issuer public key: prefer x5c certificate chain, fall back to metadata
+		let issuerKey: any KeyExpressible
+		if let x5cChain = signedSdJwt.jwt.protectedHeader.x509CertificateChain, !x5cChain.isEmpty {
+			issuerKey = try validateX5cChain(x5cChain)
+		} else {
+			let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
+			let metadata = try await metadataFetcher.fetchIssuerMetaData(issuer: expectedIssuer)
+			guard let kid = signedSdJwt.jwt.protectedHeader.keyID else {
+				throw PresentationSession.makeError(str: "Issued SD-JWT is missing both x5c chain and key identifier")
+			}
+			guard let issuerJwk = metadata?.jwks.first(where: { $0.keyID == kid }) else {
+				throw PresentationSession.makeError(str: "Unable to resolve issuer signing key for issued SD-JWT")
+			}
+			issuerKey = issuerJwk
 		}
 		let result = try verifier.verifyIssuance(
-			issuersSignatureVerifier: { jws in
-				try SignatureVerifier(signedJWT: jws, publicKey: issuerJwk)
-			},
-			claimVerifier: { nbf, exp in
-				ClaimsVerifier(nbf: nbf, exp: exp)
-			}
+			issuersSignatureVerifier: { jws in try SignatureVerifier(signedJWT: jws, publicKey: issuerKey) },
+			claimVerifier: { nbf, exp in ClaimsVerifier(nbf: nbf, exp: exp) }
 		)
+		try validateVerificationResult(result)
+	}
+
+	private func validateVerificationResult(_ result: Result<SignedSDJWT, any Error>) throws {
 		guard case .success = result else {
 			let error = switch result {
 			case .failure(let error): error
@@ -894,6 +903,32 @@ public actor OpenId4VCIService {
 			}
 			throw error
 		}
+	}
+
+	/// Validate the x5c certificate chain from an SD-JWT header against trusted issuer root certificates.
+	/// Returns the public key from the leaf certificate.
+	private func validateX5cChain(_ x5cChain: [String]) throws -> SecKey {
+		let certsData = x5cChain.compactMap { Data(base64Encoded: $0) }
+		guard certsData.count == x5cChain.count else {
+			throw PresentationSession.makeError(str: "Invalid base64 encoding in SD-JWT x5c certificate chain")
+		}
+		let secCerts = certsData.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+		guard secCerts.count == certsData.count else {
+			throw PresentationSession.makeError(str: "Failed to parse certificates in SD-JWT x5c chain")
+		}
+		guard let trustedRoots = config.trustedIssuerCertificates, !trustedRoots.isEmpty else {
+			throw PresentationSession.makeError(str: "No trusted issuer certificates configured to validate SD-JWT x5c chain")
+		}
+		let (isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: secCerts, usage: .mdocAuth, rootIaca: trustedRoots)
+		guard isValid else {
+			let detail = validationMessages.joined(separator: "; ")
+			throw PresentationSession.makeError(str: "SD-JWT x5c certificate chain validation failed: \(detail)")
+		}
+		// Extract public key from the leaf certificate
+		guard let secKey = SecCertificateCopyKey(secCerts[0]) else {
+			throw PresentationSession.makeError(str: "Unable to extract public key from SD-JWT x5c leaf certificate")
+		}
+		return secKey
 	}
 
 	private func expectedSdJwtIssuerURL() throws -> URL {
