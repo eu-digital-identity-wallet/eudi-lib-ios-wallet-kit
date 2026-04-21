@@ -224,34 +224,38 @@ struct EudiWalletKitTests {
 			Issue.record("Expected .string data value for female sex claim")
 		}
 	}
-
-	@Test("Issued SD-JWT credentials are validated before storage")
-	func testValidateIssuedSdJwtCredential() async throws {
+	
+	@Test("Issued mDOC mDL credential validation")
+	func testValidateIssuedMdocCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let document = try makeSdJwtDocument(fromResource: "sjwt-pid")
+		let document = try makeDocument(fromResource: "mdoc-mdl", docDataFormat: .cbor, docType: "org.iso.18013.5.1.mDL")
 		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [])
 	}
 
-	private func makeVciService(
-		storageService: TestDataStorageService,
-		issuerURL: String = "https://credential-issuer.example.com"
-	) throws -> OpenId4VCIService {
-		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
-		let storage = StorageManager(storageService: storageService)
-		let eudic = ["pidissuerca02_ut"].compactMap { SecCertificateCreateWithData(nil, Data(name: $0, ext: "der", from: Bundle.module)! as CFData)! }
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true, trustedIssuerCertificates: [eudic])
-		return try OpenId4VCIService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
+	@Test("Issued SD-JWT PID credential validation")
+	func testValidateIssuedSdJwtCredential() async throws {
+		let storageService = TestDataStorageService()
+		let service = try makeVciService(storageService: storageService)
+		let document = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
+		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [])
 	}
 
-	private func makeSdJwtDocument(
-		fromResource resourceName: String,
-		transform: ((String) throws -> String)? = nil
-	) throws -> WalletStorage.Document {
-		let original = try #require(String(data: Data(name: resourceName, ext: "txt", from: Bundle.module)!, encoding: .utf8))
-		let serialized = try transform?(original) ?? original
-		return WalletStorage.Document(id: UUID().uuidString, docType: "urn:eu:europa:ec:eudi:pid:1", docDataFormat: .sdjwt,
-			data: Data(serialized.utf8), docKeyInfo: nil, createdAt: .now, metadata: nil, displayName: nil, status: .issued)
+	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let storage = StorageManager(storageService: storageService)
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true)
+		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
+	}
+
+	private func makeDocument(fromResource resourceName: String, docDataFormat: DocDataFormat, docType: String) throws -> WalletStorage.Document {
+		var original = Data(name: resourceName, ext: "txt", from: Bundle.module)!
+		if docDataFormat == .cbor {
+			let originalBase64Url = try #require(String(data: original, encoding: .utf8)).trimmingCharacters(in: .whitespacesAndNewlines)
+			original = try #require(Data(base64URLEncoded: originalBase64Url))
+		}
+		return WalletStorage.Document(id: UUID().uuidString, docType: docType, docDataFormat: docDataFormat,
+			data: original, docKeyInfo: nil, createdAt: .now, metadata: nil, displayName: nil, status: .issued)
 	}
 
 	private func makeSdJwtIssuerMetadata(forResource resourceName: String, issuerURL: String) throws -> Data {

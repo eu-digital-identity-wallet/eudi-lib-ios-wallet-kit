@@ -44,8 +44,6 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	/// Key options for generating DPoP keys, if DPoP is used
 	public let dpopKeyOptions: KeyOptions?
-	/// Trusted root certificates for validating the issuer's x5c certificate chain in SD-JWT credentials
-	public let trustedIssuerCertificates: [x5chain]?
 
 	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfiguration? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, requirePAR: Bool = true, requireDpop: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil, trustedIssuerCertificates: [x5chain]? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL
@@ -57,7 +55,6 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.requireDpop = requireDpop
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
-		self.trustedIssuerCertificates = trustedIssuerCertificates
 	}
 }
 
