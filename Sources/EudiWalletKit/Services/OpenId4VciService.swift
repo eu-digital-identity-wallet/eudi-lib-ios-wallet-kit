@@ -443,32 +443,11 @@ public actor OpenId4VCIService {
 	}
 
 	func buildCredentialConfiguration(docTypeIdentifier: DocTypeIdentifier, credentialIssuerIdentifier: CredentialIssuerId, metaData: CredentialIssuerMetadata, authorizationServerMetadata: IdentityAndAccessManagementMetadata) throws -> CredentialConfiguration {
-		try getCredentialConfiguration(
-			credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString,
-			issuerDisplay: metaData.display,
-			credentialsSupported: metaData.credentialsSupported,
-			identifier: docTypeIdentifier.configurationIdentifier,
-			docType: docTypeIdentifier.docType,
-			vct: docTypeIdentifier.vct,
-			batchCredentialIssuance: metaData.batchCredentialIssuance,
-			dpopSigningAlgValuesSupported: authorizationServerMetadata.dpopSigningAlgValuesSupported?.map(\.name),
-			clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map(\.name)
-		)
+		try getCredentialConfiguration(credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString, issuerDisplay: metaData.display, credentialsSupported: metaData.credentialsSupported, identifier: docTypeIdentifier.configurationIdentifier, docType: docTypeIdentifier.docType, vct: docTypeIdentifier.vct, batchCredentialIssuance: metaData.batchCredentialIssuance, dpopSigningAlgValuesSupported: authorizationServerMetadata.dpopSigningAlgValuesSupported?.map(\.name), clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map(\.name))
 	}
 
 	func makeOfferedDocModel(from config: CredentialConfiguration, credentialOptions: CredentialOptions?, keyOptions: KeyOptions?) -> OfferedDocModel {
-		OfferedDocModel(
-			credentialConfigurationIdentifier: config.configurationIdentifier.value,
-			docType: config.docType,
-			vct: config.vct,
-			scope: config.scope ?? "",
-			identifier: config.configurationIdentifier.value,
-			displayName: config.display.getName(uiCulture) ?? config.docType ?? config.vct ?? config.scope ?? "",
-			algValuesSupported: config.credentialSigningAlgValuesSupported,
-			claims: config.claims,
-			credentialOptions: credentialOptions ?? config.defaultCredentialOptions,
-			keyOptions: keyOptions
-		)
+		OfferedDocModel(credentialConfigurationIdentifier: config.configurationIdentifier.value, docType: config.docType, vct: config.vct, scope: config.scope ?? "", identifier: config.configurationIdentifier.value, displayName: config.display.getName(uiCulture) ?? config.docType ?? config.vct ?? config.scope ?? "", algValuesSupported: config.credentialSigningAlgValuesSupported, claims: config.claims, credentialOptions: credentialOptions ?? config.defaultCredentialOptions, keyOptions: keyOptions)
 	}
 
 	func getCredentialOfferedModels(credentialsSupported: [CredentialConfigurationIdentifier: CredentialSupported], batchCredentialIssuance: BatchCredentialIssuance?) throws -> [(identifier: CredentialConfigurationIdentifier, scope: String?, offered: OfferedDocModel)] {
@@ -490,21 +469,16 @@ public actor OpenId4VCIService {
 		let authResult = try await loginUserAndGetAuthCode(authorizationCodeURL: parPlaced.authorizationCodeURL.url)
 		logger.info("--> [AUTHORIZATION] Authorization code retrieved")
 		switch authResult {
-		case .code(let authorizationCode):
-			return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: parPlaced, authorizationCode: authorizationCode))
+		case .code(let authorizationCode, let serverState):
+			return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: parPlaced, authorizationCode: authorizationCode, serverState: serverState))
 		case .presentation_request(let url):
 			return .presentation_request(url)
 		}
 	}
 
-	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String) async throws -> AuthorizedRequest {
+	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String, serverState: String?) async throws -> AuthorizedRequest {
 		let typedAuthorizationCode = try AuthorizationCode(value: authorizationCode)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(
-			request: request,
-			authorizationCode: typedAuthorizationCode,
-			authorizationDetailsInTokenRequest: .doNotInclude,
-			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
-		)
+		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: serverState ?? request.state, request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
 		let at = authorized.accessToken
 		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
@@ -620,7 +594,7 @@ public actor OpenId4VCIService {
 			throw PresentationSession.makeError(str: "Web URL not specified")
 		}
 		let asWeb = try await loginUserAndGetAuthCode(authorizationCodeURL: webUrl)
-		guard case .code(let authorizationCode) = asWeb else {
+		guard case .code(let authorizationCode, let serverState) = asWeb else {
 			throw PresentationSession.makeError(str: "Pending issuance not authorized")
 		}
 		guard let offer = Self.credentialOfferCache[model.metadataKey] else {
@@ -636,7 +610,7 @@ public actor OpenId4VCIService {
 			configurationIds: [model.configuration.configurationIdentifier]
 		)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(
-			request: request,
+			serverState: serverState ?? request.state, request: request,
 			authorizationCode: try AuthorizationCode(value: authorizationCode),
 			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
 		)
@@ -703,7 +677,8 @@ public actor OpenId4VCIService {
 					nillableContinuation = nil
 				} else if let code = url.getQueryStringParameter("code") {
 					self.logger.info("Authorization code: \(code)")
-					nillableContinuation?.resume(returning: .code(code))
+					let state = url.getQueryStringParameter("state")
+					nillableContinuation?.resume(returning: .code(code, state: state))
 					nillableContinuation = nil
 				} else {
 					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a code"))
@@ -821,24 +796,9 @@ public actor OpenId4VCIService {
 
 	private func logIssuanceTransaction(status: TransactionLog.Status, format: DocDataFormat, issuerName: String?, issuerIdentifier: String?, issuerLogoUrl: String?, documentId: String? = nil, docType: String? = nil, docDisplayName: String? = nil, docMetadata: Data? = nil, errorMessage: String? = nil) async {
 		guard let transactionLogger else { return }
-		let issuingParty = TransactionLog.IssuingParty(
-			name: issuerName ?? "Unknown Issuer",
-			identifier: issuerIdentifier ?? "",
-			logoUrl: issuerLogoUrl
-		)
+		let issuingParty = TransactionLog.IssuingParty(name: issuerName ?? "Unknown Issuer", identifier: issuerIdentifier ?? "", logoUrl: issuerLogoUrl)
 		let dataFormat = TransactionLog.DataFormat(format)
-		let transactionLog = TransactionLog(
-			timestamp: TransactionLogUtils.getTimestamp(),
-			status: status,
-			errorMessage: errorMessage,
-			issuingParty: issuingParty,
-			type: .issuance,
-			dataFormat: dataFormat,
-			docMetadata: docMetadata != nil ? [docMetadata] : nil,
-			documentId: documentId,
-			docType: docType,
-			displayName: docDisplayName
-		)
+		let transactionLog = TransactionLog(timestamp: TransactionLogUtils.getTimestamp(), status: status, errorMessage: errorMessage, issuingParty: issuingParty, type: .issuance, dataFormat: dataFormat, docMetadata: docMetadata != nil ? [docMetadata] : nil, documentId: documentId, docType: docType, displayName: docDisplayName)
 		do {
 			try await transactionLogger.log(transaction: transactionLog)
 		} catch {
