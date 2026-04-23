@@ -18,7 +18,7 @@ import Foundation
 import OpenID4VCI
 
 enum AsWebOutcome: @unchecked Sendable {
-	case code(String)
+	case code(String, state: String?)
 	case presentation_request(URL)
 }
 
