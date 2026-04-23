@@ -73,13 +73,5 @@ struct VpResponsePayload: Codable {
 	let transaction_data: [TransactionData]?
 }
 
-/// A logger for transactions.
-///
-/// Implementations of this protocol should log transactions to some persistent storage.
-/// The storage can be a file, a database, or any other storage medium.
-public protocol TransactionLogger: Actor {
-    ///  Logs a transaction.
-    func log(transaction: TransactionLog) async throws
-}
 
 
