@@ -229,13 +229,16 @@ public actor OpenId4VCIService {
 		let authorizedOutcome: AuthorizeRequestOutcome
 		if var authorized {
 			do {
-				if let clock = authorized.refreshToken?.expiresIn, authorized.isRefreshTokenExpired(clock: clock) { 
-					logger.info("Refresh token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + clock)).")
-				}
+				if authorized.isAccessTokenExpired() {
+					logger.info("Access token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0))).")
+					if let refrExpiresIn = authorized.refreshToken?.expiresIn, authorized.isRefreshTokenExpired(clock: refrExpiresIn) { 
+						logger.info("Refresh token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + refrExpiresIn)).")
+					}
 					authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
 					logger.info("Refreshed authorized request for offer \(offerUri)")
-					authorizedOutcome = .authorized(authorized)
-					return (authorizedOutcome, issuer, credentialInfos)
+				}
+				authorizedOutcome = .authorized(authorized)
+				return (authorizedOutcome, issuer, credentialInfos)
 			}
 			catch {
 				logger.error("Failed to refresh provided authorized request: \(error).")
