@@ -17,6 +17,7 @@
 import Testing
 @testable import EudiWalletKit
 import Foundation
+import MdocDataModel18013
 import MdocDataTransfer18013
 
 // TODO: Add tests for PresentationSession:
