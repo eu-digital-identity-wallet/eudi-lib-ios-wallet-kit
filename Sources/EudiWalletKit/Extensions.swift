@@ -175,8 +175,9 @@ extension Array where Element == DocClaimMetadata {
 		let groupIndex = keyPrefix?.count ?? 0
 		let arr = if let keyPrefix { filter { $0.claimPath.count > groupIndex && keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) } } else { self }
 		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[groupIndex]} )
-		let displayNames = dictKeys.compactMapValues { $0.first?.display?.getName(uiCulture) }
-		let mandatory =  dictKeys.compactMapValues { $0.first?.isMandatory }
+		let exactPathLength = groupIndex + 1
+		let displayNames = dictKeys.compactMapValues { $0.first(where: { $0.claimPath.count == exactPathLength })?.display?.getName(uiCulture) }
+		let mandatory =  dictKeys.compactMapValues { $0.first(where: { $0.claimPath.count == exactPathLength })?.isMandatory }
 		return (displayNames, mandatory, arr)
 	}
 }
