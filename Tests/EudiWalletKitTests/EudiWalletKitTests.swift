@@ -221,6 +221,58 @@ struct EudiWalletKitTests {
 			Issue.record("Expected .string data value for female sex claim")
 		}
 	}
+
+	@Test("JSON nested claim metadata labels only exact claim paths")
+	func testJsonNestedClaimMetadataUsesExactPathDisplay() throws {
+		let claimMetadata = [
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 12", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: true,
+				claimPath: ["age_equal_or_over", "12"]
+			),
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 18", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: true,
+				claimPath: ["age_equal_or_over", "18"]
+			),
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 21", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: false,
+				claimPath: ["age_equal_or_over", "21"]
+			)
+		]
+		let json = JSON(parseJSON: """
+		{
+		  "age_equal_or_over": {
+		    "18": true,
+		    "21": true
+		  }
+		}
+		""")
+
+		let rootMetadata = claimMetadata.convertToJsonClaimMetadata("en", keyPrefix: [])
+		#expect(rootMetadata.displayNames["age_equal_or_over"] == nil)
+		#expect(rootMetadata.mandatory["age_equal_or_over"] == nil)
+
+		let childMetadata = claimMetadata.convertToJsonClaimMetadata("en", keyPrefix: ["age_equal_or_over"])
+		#expect(childMetadata.displayNames["18"] == "Age over 18")
+		#expect(childMetadata.displayNames["21"] == "Age over 21")
+		#expect(childMetadata.mandatory["18"] == true)
+		#expect(childMetadata.mandatory["21"] == false)
+
+		let claims = try #require(json.toClaimsArray(pathPrefix: [], claimMetadata, "en")?.0)
+		let ageEqualOrOver = try #require(claims.first { $0.name == "age_equal_or_over" })
+		#expect(ageEqualOrOver.displayName == nil)
+		#expect(ageEqualOrOver.isOptional)
+
+		let age18 = try #require(ageEqualOrOver.children?.first { $0.name == "18" })
+		#expect(age18.displayName == "Age over 18")
+		#expect(age18.isOptional == false)
+
+		let age21 = try #require(ageEqualOrOver.children?.first { $0.name == "21" })
+		#expect(age21.displayName == "Age over 21")
+		#expect(age21.isOptional)
+	}
 }
 
 // MARK: - Data Extension for Test Resources
