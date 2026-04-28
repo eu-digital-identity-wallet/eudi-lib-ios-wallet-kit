@@ -158,27 +158,29 @@ extension MdocDataModel18013.SignUpResponse {
 }
 
 extension Claim {
-	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description)) }
+	var metadata: DocClaimMetadata { DocClaimMetadata(display: display?.map(\.displayMetadata), isMandatory: mandatory, claimPath: path.value.map(\.description), valueType: valueType) }
 }
 
 extension Array where Element == DocClaimMetadata {
-	func convertToCborClaimMetadata(_ uiCulture: String?) -> (displayNames: [NameSpace: [String: String]], mandatory: [NameSpace: [String: Bool]]) {
-		guard allSatisfy({ $0.claimPath.count > 1 }) else { return ([:], [:]) } // sanity check
+	func convertToCborClaimMetadata(_ uiCulture: String?) -> (displayNames: [NameSpace: [String: String]], mandatory: [NameSpace: [String: Bool]], valueTypes: [NameSpace: [String: String]]) {
+		guard allSatisfy({ $0.claimPath.count > 1 }) else { return ([:], [:], [:]) } // sanity check
 		let dictNs = Dictionary(grouping: self, by: { $0.claimPath[0]})
 		let dictNsAndKeys = dictNs.mapValues { Dictionary(grouping: $0, by: { $0.claimPath[1]}) } // group by namespace and key
 		let displayNames = dictNsAndKeys.mapValues { nsv in nsv.compactMapValues { kv in kv.first?.display?.getName(uiCulture) } }
 		let mandatory = dictNsAndKeys.mapValues { nsv in nsv.compactMapValues { kv in kv.first?.isMandatory } }
-		return (displayNames, mandatory)
+		let valueTypes = dictNsAndKeys.mapValues { nsv in nsv.compactMapValues { kv in kv.first?.valueType } }
+		return (displayNames, mandatory, valueTypes)
 	}
 
-	func convertToJsonClaimMetadata(_ uiCulture: String?, keyPrefix: [String]?) -> (displayNames: [String: String], mandatory: [String: Bool], childMetadata: [DocClaimMetadata]) {
+	func convertToJsonClaimMetadata(_ uiCulture: String?, keyPrefix: [String]?) -> (displayNames: [String: String], mandatory: [String: Bool], valueTypes: [String: String], childMetadata: [DocClaimMetadata]) {
 		let groupIndex = keyPrefix?.count ?? 0
 		let arr = if let keyPrefix { filter { $0.claimPath.count > groupIndex && keyPrefix.elementsEqual($0.claimPath[0..<keyPrefix.count]) } } else { self }
 		let dictKeys = Dictionary(grouping: arr, by: { $0.claimPath[groupIndex]} )
 		let exactPathLength = groupIndex + 1
 		let displayNames = dictKeys.compactMapValues { $0.first(where: { $0.claimPath.count == exactPathLength })?.display?.getName(uiCulture) }
 		let mandatory =  dictKeys.compactMapValues { $0.first(where: { $0.claimPath.count == exactPathLength })?.isMandatory }
-		return (displayNames, mandatory, arr)
+		let valueTypes = dictKeys.compactMapValues { $0.first(where: { $0.claimPath.count == exactPathLength })?.valueType }
+		return (displayNames, mandatory, valueTypes, arr)
 	}
 }
 
@@ -231,7 +233,7 @@ extension URL {
 }
 
 extension JSON {
-	func getDataValue(name: String) -> (DocDataValue, String)? {
+	func getDataValue(name: String, valueType: String?) -> (DocDataValue, String)? {
 		switch type {
 		case .number:
 			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
@@ -245,7 +247,9 @@ extension JSON {
 			}
 			return (.integer(UInt64(intValue)), stringValue)
 		case .string:
-			if name == "portrait" || name == "signature_usual_mark", let d = Data(base64urlEncoded: stringValue) { return (.bytes(d.bytes), "\(d.count) bytes") }
+			if isBase64ByteClaim(name: name, valueType: valueType), let d = decodeBase64ByteClaim(stringValue) {
+				return (.bytes(d.bytes), "\(d.count) bytes")
+			}
 			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
 				let locSexValue = NSLocalizedString(isex == 1 ? "male" : "female", comment: "")
 				return (.string(locSexValue), locSexValue)
@@ -259,16 +263,43 @@ extension JSON {
 		}
 	}
 
-	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?, _ displayName: String?, _ mandatory: Bool?) -> DocClaim? {
+	private func isBase64ByteClaim(name: String, valueType: String?) -> Bool {
+		if let valueType {
+			let normalized = valueType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+			if ["jpeg", "jpg", "image/jpeg", "png", "image/png"].contains(normalized) {
+				return true
+			}
+		}
+		return name == "portrait" || name == "signature_usual_mark"
+	}
+
+	private func decodeBase64ByteClaim(_ value: String) -> Data? {
+		if let dataUrlPayload = dataUrlBase64Payload(from: value) {
+			return Data(base64Encoded: dataUrlPayload, options: .ignoreUnknownCharacters) ?? Data(base64urlEncoded: dataUrlPayload)
+		}
+		return Data(base64urlEncoded: value) ?? Data(base64Encoded: value)
+	}
+
+	private func dataUrlBase64Payload(from value: String) -> String? {
+		let prefix = String(value.prefix(5))
+		guard prefix.caseInsensitiveCompare("data:") == .orderedSame, let commaIndex = value.firstIndex(of: ",") else { return nil }
+		let metadataStartIndex = value.index(value.startIndex, offsetBy: 5)
+		let metadata = value[metadataStartIndex..<commaIndex].lowercased()
+		guard metadata.split(separator: ";").contains("base64") else { return nil }
+		return String(value[value.index(after: commaIndex)...])
+	}
+
+	func toDocClaim(key: String, order n: Int, pathPrefix: [String], claimMetadata: [DocClaimMetadata]?, uiCulture: String?, displayName: String?, mandatory: Bool?, valueType: String?) -> DocClaim? {
 		if key == "_sd" || key == "_sd_alg" || key == "..." { return nil } // internal SD-JWT digest elements
 		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
 		if key == "assurance_level" || key == JWTClaimNames.issuer || key == JWTClaimNames.audience, type == .string {  return nil }
 		if key == "vct", type == .string  { return nil }
-		guard let pair = getDataValue(name: key) else { return nil}
-		let ch = toClaimsArray(pathPrefix: pathPrefix + [key], claimMetadata, uiCulture)
+		let path = pathPrefix + [key]
+		guard let pair = getDataValue(name: key, valueType: valueType) else { return nil}
+		let ch = toClaimsArray(pathPrefix: path, claimMetadata, uiCulture)
 		let isMandatory = mandatory ?? false
-		return DocClaim(name: key, path: pathPrefix + [key], displayName: displayName, dataValue: pair.0, stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: nil, children: ch?.0)
+		return DocClaim(name: key, path: path, displayName: displayName, dataValue: pair.0, stringValue: ch?.1 ?? pair.1, isOptional: !isMandatory, order: n, namespace: nil, children: ch?.0)
 	}
 
 	func toClaimsArray(pathPrefix: [String], _ claimMetadata: [DocClaimMetadata]?, _ uiCulture: String?) -> ([DocClaim], String)? {
@@ -279,7 +310,7 @@ extension JSON {
 				let isArray = type == .array
 				let n2 = if isArray { String(n) } else { key }
 				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
-				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimMetadata, uiCulture, cmd?.displayNames[key], cmd?.mandatory[key]) {
+				if let di = subJson.toDocClaim(key: n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, displayName: cmd?.displayNames[key], mandatory: cmd?.mandatory[key], valueType: cmd?.valueTypes[key]) {
 					a.append(di)
 				}
 			}
