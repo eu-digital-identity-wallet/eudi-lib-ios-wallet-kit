@@ -247,7 +247,7 @@ extension JSON {
 			}
 			return (.integer(UInt64(intValue)), stringValue)
 		case .string:
-			if isBase64ByteClaim(name: name, valueType: valueType), let d = Data(base64urlEncoded: stringValue) ?? Data(base64Encoded: stringValue) {
+			if isBase64ByteClaim(name: name, valueType: valueType), let d = decodeBase64ByteClaim(stringValue) {
 				return (.bytes(d.bytes), "\(d.count) bytes")
 			}
 			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
@@ -266,14 +266,30 @@ extension JSON {
 	private func isBase64ByteClaim(name: String, valueType: String?) -> Bool {
 		if let valueType {
 			let normalized = valueType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-			if ["jpeg", "jpg", "image/jpeg"].contains(normalized) {
+			if ["jpeg", "jpg", "image/jpeg", "png", "image/png"].contains(normalized) {
 				return true
 			}
 		}
 		return name == "portrait" || name == "signature_usual_mark"
 	}
 
-	func toDocClaim(_ key: String, order n: Int, pathPrefix: [String], claimMetadata: [DocClaimMetadata]?, uiCulture: String?, valueType: String?, displayName: String?, mandatory: Bool?) -> DocClaim? {
+	private func decodeBase64ByteClaim(_ value: String) -> Data? {
+		if let dataUrlPayload = dataUrlBase64Payload(from: value) {
+			return Data(base64Encoded: dataUrlPayload, options: .ignoreUnknownCharacters) ?? Data(base64urlEncoded: dataUrlPayload)
+		}
+		return Data(base64urlEncoded: value) ?? Data(base64Encoded: value)
+	}
+
+	private func dataUrlBase64Payload(from value: String) -> String? {
+		let prefix = String(value.prefix(5))
+		guard prefix.caseInsensitiveCompare("data:") == .orderedSame, let commaIndex = value.firstIndex(of: ",") else { return nil }
+		let metadataStartIndex = value.index(value.startIndex, offsetBy: 5)
+		let metadata = value[metadataStartIndex..<commaIndex].lowercased()
+		guard metadata.split(separator: ";").contains("base64") else { return nil }
+		return String(value[value.index(after: commaIndex)...])
+	}
+
+	func toDocClaim(key: String, order n: Int, pathPrefix: [String], claimMetadata: [DocClaimMetadata]?, uiCulture: String?, displayName: String?, mandatory: Bool?, valueType: String?) -> DocClaim? {
 		if key == "_sd" || key == "_sd_alg" || key == "..." { return nil } // internal SD-JWT digest elements
 		if key == "cnf", type == .dictionary { return nil } // members used to identify the proof-of-possession key.
 		if key == "status", type == .dictionary, self["status_list"].type == .dictionary { return nil } // status list.
@@ -294,7 +310,7 @@ extension JSON {
 				let isArray = type == .array
 				let n2 = if isArray { String(n) } else { key }
 				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
-				if let di = subJson.toDocClaim(n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, valueType: cmd?.valueTypes[key], displayName: cmd?.displayNames[key], mandatory: cmd?.mandatory[key]) {
+				if let di = subJson.toDocClaim(key: n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, displayName: cmd?.displayNames[key], mandatory: cmd?.mandatory[key], valueType: cmd?.valueTypes[key]) {
 					a.append(di)
 				}
 			}
