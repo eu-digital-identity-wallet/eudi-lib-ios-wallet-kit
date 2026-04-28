@@ -25,6 +25,7 @@ import SwiftCBOR
 @testable import JOSESwift
 import eudi_lib_sdjwt_swift
 import SwiftyJSON
+import OpenID4VCI
 import OpenID4VP
 import enum OpenID4VP.ClaimPathElement
 import struct OpenID4VP.ClaimPath
@@ -50,6 +51,18 @@ struct EudiWalletKitTests {
 		return (resolved, sdJwt.disclosures)
 	}
 
+	private func firstClaim(named name: String, in claims: [DocClaim]) -> DocClaim? {
+		for claim in claims {
+			if claim.name == name {
+				return claim
+			}
+			if let children = claim.children, let childClaim = firstClaim(named: name, in: children) {
+				return childClaim
+			}
+		}
+		return nil
+	}
+
 	@Test("Get claims from sd-jwt", arguments: ["mdl", "pid", "pid-address"])
 	func testParseJwt(dt: String) async throws {
 		let (claims, _) = try parseSdJwtClaims(for: dt)
@@ -57,6 +70,43 @@ struct EudiWalletKitTests {
 			let family_name = try #require(claims["family_name"].string)
 			let given_name = try #require(claims["given_name"].string)
 			print(family_name, given_name)
+		}
+	}
+
+	@Test("Dev Python issuer metadata decodes SD-JWT mDL portrait as bytes")
+	func testDevPythonIssuerMetadataDecodesSdJwtMdlPortraitAsBytes() throws {
+		let issuerData = try #require(Data(name: "dev-python-openid-credential-issuer", ext: "json", from: Bundle.module))
+		let issuerMetadata = try JSONDecoder().decode(CredentialIssuerMetadata.self, from: issuerData)
+		let configurationIdentifier = try CredentialConfigurationIdentifier(value: "eu.europa.ec.eudi.mdl_mdoc")
+		let credentialSupported = try #require(issuerMetadata.credentialsSupported[configurationIdentifier])
+
+		guard case .msoMdoc(let configuration) = credentialSupported else {
+			Issue.record("Expected mso_mdoc metadata for \(configurationIdentifier.value)")
+			return
+		}
+
+		let credentialMetadata = try #require(configuration.credentialMetadata)
+		let claimMetadata = credentialMetadata.claims.map(\.metadata)
+		let portraitMetadata = try #require(claimMetadata.first { $0.claimPath == ["org.iso.18013.5.1", "portrait"] })
+		#expect(portraitMetadata.valueType == "jpeg")
+
+		let docMetadata = DocMetadata(credentialIssuerIdentifier: issuerMetadata.credentialIssuerIdentifier.url.absoluteString, configurationIdentifier: configurationIdentifier.value, docType: configuration.docType, display: credentialMetadata.display.map(\.displayMetadata), issuerDisplay: issuerMetadata.display.map(\.displayMetadata), claims: claimMetadata, authorizedRequestData: nil, keyOptions: nil, credentialOptions: nil)
+		let sdJwtData = try #require(Data(name: "sjwt-mdl", ext: "txt", from: Bundle.module))
+		let document = WalletStorage.Document(id: "sjwt-mdl", docType: configuration.docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: nil, createdAt: .now, metadata: docMetadata.toData(), displayName: nil, status: .issued)
+
+		let model = try #require(StorageManager.toSdJwtDocModel(doc: document, uiCulture: "en"))
+		#expect(model.docType == "org.iso.18013.5.1.mDL")
+		#expect(model.docDataFormat == .sdjwt)
+
+		let portrait = try #require(firstClaim(named: "portrait", in: model.docClaims))
+		#expect(portrait.path == ["verified_claims", "claims", "org.iso.18013.5.1", "portrait"])
+		#expect(portrait.stringValue == "10369 bytes")
+
+		if case .bytes(let bytes) = portrait.dataValue {
+			#expect(bytes.count == 10369)
+			#expect(Array(bytes.prefix(4)) == [0xff, 0xd8, 0xff, 0xe0])
+		} else {
+			Issue.record("Expected portrait to decode as bytes, got \(portrait.dataValue)")
 		}
 	}
 
@@ -85,7 +135,7 @@ struct EudiWalletKitTests {
 				guard let name = d["name"].string else { return nil }
 				return DisplayMetadata(name: name, localeIdentifier: d["locale"].string, logo: nil, description: nil, backgroundColor: nil, textColor: nil)
 			}
-			return DocClaimMetadata(display: displayArr, isMandatory: claimJson["mandatory"].bool, claimPath: path)
+			return DocClaimMetadata(display: displayArr, isMandatory: claimJson["mandatory"].bool, claimPath: path, valueType: claimJson["value_type"].string)
 		}
 		#expect(!claimMetadata.isEmpty)
 
@@ -144,7 +194,7 @@ struct EudiWalletKitTests {
 			.filter { meta in docClaims.contains { $0.path == meta.claimPath } }
 			.map { $0.claimPath.last! }
 
-		let actualOrder = reordered.docClaims.map(\.name)
+		let actualOrder = reordered.docClaims.map { $0.name }
 		#expect(actualOrder == expectedOrder)
 
 		// Verify order values are sequential
@@ -178,6 +228,47 @@ struct EudiWalletKitTests {
 	    #expect(keySign.publicKey.isValidSignature(ecdsaSignature, for: signingInput), "Signature is invalid")
 	}
 
+	@Test("Data URL byte claims decode as bytes")
+	func testDataUrlByteClaimDecodesAsBytes() throws {
+		let claimMetadata = [DocClaimMetadata(display: nil, isMandatory: true, claimPath: ["photo"], valueType: "jpeg")]
+		let json = JSON(parseJSON: #"{ "photo": "data:image/jpeg;base64,/9j/4A==" }"#)
+		let claims = try #require(json.toClaimsArray(pathPrefix: [], claimMetadata, nil)?.0)
+		let photo = try #require(claims.first { $0.name == "photo" })
+		#expect(photo.stringValue == "4 bytes")
+		#expect(photo.isOptional == false)
+		if case .bytes(let bytes) = photo.dataValue {
+			#expect(bytes == [0xff, 0xd8, 0xff, 0xe0])
+		} else {
+			Issue.record("Expected data URL photo claim to decode as bytes, got \(photo.dataValue)")
+		}
+	}
+
+	@Test("Wrapped PNG data URL byte claims decode as bytes")
+	func testWrappedPngDataUrlByteClaimDecodesAsBytes() throws {
+		let claimMetadata = [DocClaimMetadata(display: nil, isMandatory: true, claimPath: ["photo"], valueType: "image/png")]
+		let dataUrl = """
+		data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAIAA
+		AC0Ujn1AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAA
+		DsMAAA7DAcdvqGQAAAEDSURBVEhLtZJBEoMwDAP7lr6nn+0LqUGChsVOwoG
+		dvTSSNRz6Wh7jxvT7+wn9Y4LZae0e+rXLeBqjh45rBtOYgy4V9KYxlOpqRj
+		mNiY4+uJBP41gOI5BM40w620AknTVwGgfSWQMK0tnOaRpV6ewCatLZxn8aJ
+		emsAGXp7JhGLBX1wYlUtE4jkIpnwKGM9xeepG7mwblMpl2/CUbCJ7+6CnQz
+		Aw5lvD/8DxGIpbMClKWzdjpASTq7gJp0tnGaDlCVzhpQkM52OB3gQDrbQCS
+		dNSTTAc7kMAL5dIDjjj64UE4HmEh1NaM3HWAIulQwmA4wd+i4ZjwdYDR00G
+		qWsyPrizLD76QCPOHqP2cAAAAAElFTkSuQmCC
+		""".removeWhitespaceAndNewlines()
+		let json = JSON(["photo": dataUrl])
+		let claims = try #require(json.toClaimsArray(pathPrefix: [], claimMetadata, nil)?.0)
+		let photo = try #require(claims.first { $0.name == "photo" })
+		#expect(photo.stringValue == "365 bytes")
+		if case .bytes(let bytes) = photo.dataValue {
+			#expect(bytes.count == 365)
+			#expect(Array(bytes.prefix(8)) == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+			#expect(Array(bytes[16..<24]) == [0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x1e])
+		} else {
+			Issue.record("Expected wrapped PNG data URL photo claim to decode as bytes, got \(photo.dataValue)")
+		}
+	}
 
 	@Test("Sex field displays male/female for both number and string JSON types")
 	func testSexFieldConversion() throws {
@@ -220,6 +311,61 @@ struct EudiWalletKitTests {
 		} else {
 			Issue.record("Expected .string data value for female sex claim")
 		}
+	}
+
+	@Test("JSON nested claim metadata labels only exact claim paths")
+	func testJsonNestedClaimMetadataUsesExactPathDisplay() throws {
+		let claimMetadata = [
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 12", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: true,
+				claimPath: ["age_equal_or_over", "12"],
+				valueType: nil
+			),
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 18", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: true,
+				claimPath: ["age_equal_or_over", "18"],
+				valueType: nil
+			),
+			DocClaimMetadata(
+				display: [DisplayMetadata(name: "Age over 21", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)],
+				isMandatory: false,
+				claimPath: ["age_equal_or_over", "21"],
+				valueType: nil
+			)
+		]
+		let json = JSON(parseJSON: """
+		{
+		  "age_equal_or_over": {
+		    "18": true,
+		    "21": true
+		  }
+		}
+		""")
+
+		let rootMetadata = claimMetadata.convertToJsonClaimMetadata("en", keyPrefix: [])
+		#expect(rootMetadata.displayNames["age_equal_or_over"] == nil)
+		#expect(rootMetadata.mandatory["age_equal_or_over"] == nil)
+
+		let childMetadata = claimMetadata.convertToJsonClaimMetadata("en", keyPrefix: ["age_equal_or_over"])
+		#expect(childMetadata.displayNames["18"] == "Age over 18")
+		#expect(childMetadata.displayNames["21"] == "Age over 21")
+		#expect(childMetadata.mandatory["18"] == true)
+		#expect(childMetadata.mandatory["21"] == false)
+
+		let claims = try #require(json.toClaimsArray(pathPrefix: [], claimMetadata, "en")?.0)
+		let ageEqualOrOver = try #require(claims.first { $0.name == "age_equal_or_over" })
+		#expect(ageEqualOrOver.displayName == nil)
+		#expect(ageEqualOrOver.isOptional)
+
+		let age18 = try #require(ageEqualOrOver.children?.first { $0.name == "18" })
+		#expect(age18.displayName == "Age over 18")
+		#expect(age18.isOptional == false)
+
+		let age21 = try #require(ageEqualOrOver.children?.first { $0.name == "21" })
+		#expect(age21.displayName == "Age over 21")
+		#expect(age21.isOptional)
 	}
 }
 
