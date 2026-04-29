@@ -238,7 +238,7 @@ public actor OpenId4VciService {
 			do {
 				if authorized.isAccessTokenExpired() {
 					logger.info("Access token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0))).")
-					if let refrExpiresIn = authorized.refreshToken?.expiresIn, authorized.isRefreshTokenExpired(clock: refrExpiresIn) { 
+					if let refrExpiresIn = authorized.refreshToken?.expiresIn, authorized.isRefreshTokenExpired(clock: refrExpiresIn) {
 						logger.info("Refresh token for offer \(offerUri) expired at \(Date(timeIntervalSince1970: authorized.timeStamp + refrExpiresIn)).")
 					}
 					authorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
@@ -882,11 +882,8 @@ public actor OpenId4VciService {
 			throw PresentationSession.makeError(str: "Failed to decode SD-JWT payload")
 		}
 		let payloadJson = try JSON(data: payloadData)
-		guard let issuer = payloadJson["iss"].string, let issuerURL = URL(string: issuer) else {
+		guard let issuer = payloadJson["iss"].string, URL(string: issuer) != nil else {
 			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a valid issuer")
-		}
-		guard normalized(url: issuerURL) == normalized(url: expectedIssuer) else {
-			throw PresentationSession.makeError(str: "Issued SD-JWT issuer \(normalized(url: issuerURL)) does not match the configured credential issuer \(normalized(url: expectedIssuer))")
 		}
 	}
 	/// Returns the public key from the leaf certificate.
@@ -905,7 +902,7 @@ public actor OpenId4VciService {
 		}
 		return secKey
 	}
-	
+
 	private func normalized(url: URL) -> String {
 		let absoluteString = url.absoluteString
 		return absoluteString.hasSuffix("/") ? String(absoluteString.dropLast()) : absoluteString
