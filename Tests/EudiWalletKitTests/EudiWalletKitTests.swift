@@ -119,9 +119,8 @@ struct EudiWalletKitTests {
 			throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Resource file not found: mdoc-\(dt).txt"])
 		}
 		let strData = try #require(String(data: data, encoding: .utf8))
-		let base64Data = try #require(Data(base64URLEncoded: strData))
-		let dr = try DeviceResponse(data: [UInt8](base64Data))
-		let iss = try #require(dr.documents?.first?.issuerSigned)
+		let base64Data = try #require(Data(base64URLEncoded: strData.removeWhitespaceAndNewlines()))
+		let iss: IssuerSigned = try IssuerSigned(data: [UInt8](base64Data))
 		#expect("org.iso.18013.5.1.mDL" == iss.issuerAuth.mso.docType)
 	}
 
