@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -93,12 +93,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 
 		}
-		if let readerAuthority = request.readerCertificateIssuer {
+		if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
 			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = request.readerAuthValidated
-			readerCertValidationMessage = request.readerCertificateValidationMessage
+			readerCertIssuerValid = authResult.isValidated
+			readerCertValidationMessage = authResult.validationMessage
 		}
-		readerLegalName = request.readerLegalName
+		readerLegalName = request.defaultReaderAuthResult?.legalName
 		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 		status = .requestReceived
@@ -106,9 +106,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
-	public static func makeError(str: String, localizationKey: String? = nil, code: WalletError.Code? = nil) -> WalletError {
+	public static func makeError(str: String, localizationKey: String? = nil, code: WalletError.Code? = nil, context: [String: String] = [:]) -> WalletError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
-		return WalletError(description: str, localizationKey: localizationKey, code: code)
+		return WalletError(description: str, localizationKey: localizationKey, code: code, context: context)
 	}
 
 	public static func makeError(err: LocalizedError) -> WalletError {
@@ -207,7 +207,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	}
 
 	/// Wait for disconnect
-	
+
 	/// If current status is not `responseSent` this method will return immediately, otherwise it will wait for disconnection and set status to `disconnected`
 	public func waitForDisconnect() async {
 		logger.info("Wait for disconnect, current status: \(status)")
@@ -221,7 +221,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		} catch {
 			await setError(error.localizedDescription)
 		}
-		
+
 	}
 
 

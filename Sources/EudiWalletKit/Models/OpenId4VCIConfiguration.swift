@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import SwiftyJSON
 import OpenID4VCI
 import MdocDataModel18013
 import MdocSecurity18013
+import Security
 import Copyable
 
 @Copyable
@@ -44,7 +45,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// Key options for generating DPoP keys, if DPoP is used
 	public let dpopKeyOptions: KeyOptions?
 
-	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfiguration? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, requirePAR: Bool = true, requireDpop: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil) {
+	public init(credentialIssuerURL: String?, clientId: String? = nil, keyAttestationsConfig: KeyAttestationConfiguration? = nil, authFlowRedirectionURI: URL? = nil, authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes, requirePAR: Bool = true, requireDpop: Bool = true, cacheIssuerMetadata: Bool = true, userAuthenticationRequired: Bool = false, dpopKeyOptions: KeyOptions? = nil, trustedIssuerCertificates: [x5chain]? = nil) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId ?? "wallet-dev"
 		self.keyAttestationsConfig = keyAttestationsConfig

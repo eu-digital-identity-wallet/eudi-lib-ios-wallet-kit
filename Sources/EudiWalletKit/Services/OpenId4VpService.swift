@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -70,9 +70,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
-		let objs = parameters.toInitializeTransferInfo()
+		let objs = try await parameters.toInitializeTransferInfo()
 		self.transferInfo = objs
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
@@ -156,13 +156,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
 		var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
 		logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
-		if let ln = rrd.legalName { result.readerLegalName = ln }
-		if let readerCertificateIssuer {
-			result.readerAuthValidated = readerAuthValidated
-			result.certificateChain = certificateChain
-			result.readerCertificateIssuer = MdocHelpers.getCN(from: readerCertificateIssuer)
-			result.readerCertificateValidationMessage = readerCertificateValidationMessage
-		}
+		let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: readerCertificateIssuer.map(MdocHelpers.getCN(from:)), validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
+		result.readerAuthResults = ["": rar]
 		TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
 		return result
 	}

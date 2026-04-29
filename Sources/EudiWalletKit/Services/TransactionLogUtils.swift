@@ -33,8 +33,8 @@ class TransactionLogUtils {
 	}
 
 	static func getRelyingParty(_ requestInfo: UserRequestInfo) -> TransactionLog.RelyingParty? {
-		guard let name = requestInfo.readerCertificateIssuer else { return nil }
-		return TransactionLog.RelyingParty(name: name, isVerified: requestInfo.readerAuthValidated ?? false, certificateChain: requestInfo.certificateChain ?? [], readerAuth: requestInfo.readerAuthBytes)
+		guard let name = requestInfo.defaultReaderAuthResult?.certificateIssuer else { return nil }
+		return TransactionLog.RelyingParty(name: name, isVerified: requestInfo.defaultReaderAuthResult?.isValidated ?? false, certificateChain: requestInfo.defaultReaderAuthResult?.certificateChain ?? [], readerAuth: requestInfo.defaultReaderAuthResult?.authBytes)
 	}
 
 	static func parseDocClaimsDecodables(_ transactionLog: TransactionLog, uiCulture: String?) -> [DocClaimsModel] {

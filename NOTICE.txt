@@ -1,5 +1,5 @@
 EU Digital Identity Wallet
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 (1) google/identity-credential (available at https://github.com/google/identity-credential)
-Certain file packages were originally created under the Apache License, Version 2.0.  These files have been copied into this project and modified.  All modifications are Copyright 2023 European Commission, and are licensed under the Apache License, Version 2.0.
+Certain file packages were originally created under the Apache License, Version 2.0.  These files have been copied into this project and modified.  All modifications are Copyright 2026 European Commission, and are licensed under the Apache License, Version 2.0.
 
 Original License:
                                  Apache License

@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2023 European Commission
+ Copyright (c) 2026 European Commission
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -37,6 +37,8 @@ public struct WalletError: LocalizedError {
 		case bleNotSupported
 		/// No documents available for presentation
 		case noDocumentsAvailable
+		/// The issuer is not registered
+		case issuerNotRegistered
 	}
 
 	public let description: String
