@@ -17,6 +17,7 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import MdocSecurity18013
+import OpenID4VCI
 
 /// Configuration for EudiWallet
 public struct EudiWalletConfiguration: Sendable {
@@ -34,9 +35,15 @@ public struct EudiWalletConfiguration: Sendable {
 	public let uiCulture: String?
 	/// If not-nil, logging to the specified log file name will be configured
 	public let logFileName: String?
+	/// Policy for handling signed issuer metadata fetched from `/.well-known/openid-credential-issuer`.
+	///
+	/// - `.ignoreSigned` (default): wallet sends `Accept: application/json` and only accepts plain JSON metadata. Backwards-compatible with all existing deployments.
+	/// - `.preferSigned(issuerTrust:)`: wallet sends `Accept: application/jwt, application/json`. If the issuer returns a signed JWT, the signature is verified against the supplied trust anchor; otherwise plain JSON is accepted as a fallback.
+	/// - `.requireSigned(issuerTrust:)`: wallet sends `Accept: application/jwt`. The issuer must return a signed JWT whose signature validates against the supplied trust anchor; plain JSON responses are rejected.
+	public let issuerMetadataPolicy: IssuerMetadataPolicy
 	static let defaultServiceName: String = "eudiw"
 
-	public init(serviceName: String? = nil, accessGroup: String? = nil, userAuthenticationRequired: Bool = false, trustedReaderRootCertificates: [x5chain]? = nil, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, uiCulture: String? = nil, logFileName: String? = nil) {
+	public init(serviceName: String? = nil, accessGroup: String? = nil, userAuthenticationRequired: Bool = false, trustedReaderRootCertificates: [x5chain]? = nil, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, uiCulture: String? = nil, logFileName: String? = nil, issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned) {
 		self.serviceName = serviceName ?? Self.defaultServiceName
 		self.accessGroup = accessGroup
         self.userAuthenticationRequired = userAuthenticationRequired
@@ -44,5 +51,6 @@ public struct EudiWalletConfiguration: Sendable {
 		self.deviceAuthMethod = deviceAuthMethod
 		self.uiCulture = uiCulture
 		self.logFileName = logFileName
+		self.issuerMetadataPolicy = issuerMetadataPolicy
 	}
 }

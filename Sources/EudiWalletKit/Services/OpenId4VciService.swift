@@ -42,6 +42,9 @@ public actor OpenId4VciService {
 	let uiCulture: String?
 	let logger: Logger
 	var config: OpenId4VciConfiguration
+	/// Policy used when fetching `/.well-known/openid-credential-issuer`.
+	/// Wallet-wide setting injected from `EudiWalletConfiguration.issuerMetadataPolicy`.
+	let issuerMetadataPolicy: IssuerMetadataPolicy
 	static nonisolated(unsafe) var credentialOfferCache = [String: CredentialOffer]()
 	static nonisolated(unsafe) var issuerMetadataCache = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
 	var networking: Networking
@@ -53,7 +56,7 @@ public actor OpenId4VciService {
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
-	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService, transactionLogger: (any TransactionLogger)? = nil) throws {
+	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService, transactionLogger: (any TransactionLogger)? = nil, issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned) throws {
 		logger = Logger(label: "OpenId4VCI")
 		guard config.credentialIssuerURL != nil else { throw PresentationSession.makeError(str: "credentialIssuerURL must be set in OpenId4VciConfiguration") }
 		self.uiCulture = uiCulture
@@ -62,6 +65,7 @@ public actor OpenId4VciService {
 		self.storageService = storageService
 		self.config = config
 		self.transactionLogger = transactionLogger
+		self.issuerMetadataPolicy = issuerMetadataPolicy
 	}
 
 	/// Prepare issuing by creating an issue request (id, private key) and an OpenId4VCI service instance
@@ -153,7 +157,7 @@ public actor OpenId4VciService {
 	}
 
 	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: Self.makeMetadataResolver(networking), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: offerUri), policy: .ignoreSigned)
+		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: Self.makeMetadataResolver(networking), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: offerUri), policy: issuerMetadataPolicy)
 		switch result {
 		case .success(let offer):
 			return try await resolveOfferDocTypes(offerUri: offerUri, offer: offer)
@@ -197,7 +201,7 @@ public actor OpenId4VciService {
 
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
 		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
-		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
+		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: issuerMetadataPolicy)
 		switch issuerMetadata {
 			case .success(let metaData): return metaData
 			case .failure(let error):
@@ -290,7 +294,7 @@ public actor OpenId4VciService {
 			return cachedResult
 		}
 		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
-		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: .ignoreSigned)
+		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: issuerMetadataPolicy)
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
