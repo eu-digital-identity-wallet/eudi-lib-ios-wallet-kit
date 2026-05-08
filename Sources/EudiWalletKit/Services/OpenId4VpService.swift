@@ -37,7 +37,10 @@ import struct WalletStorage.Document
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
  	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
+	let sourceTransferData: InitializeTransferData
 	let transferInfo: InitializeTransferInfo
+	var selectedTransferInfo: InitializeTransferInfo?
+	let sourceHashingAlgs: [String: String]
 	// map of document-id to IssuerSigned
 	var docsCbor: [Document.ID: IssuerSigned]!
 	// map of document-id to SignedSDJWT
@@ -70,9 +73,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) async throws {
+	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking, hashingAlgs: [String: String] = [:]) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
-		let objs = try await parameters.toInitializeTransferInfo()
+		self.sourceTransferData = parameters
+		self.sourceHashingAlgs = hashingAlgs
+		let objs = try await parameters.forRequestResolution(hashingAlgs: hashingAlgs).toInitializeTransferInfo()
 		self.transferInfo = objs
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "QR_DATA_MALFORMED")
@@ -86,7 +91,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
 		if unlockData == nil {
 			unlockData = [String: Data]()
-			for (id, key) in transferInfo.privateKeyObjects {
+			for (id, key) in (selectedTransferInfo ?? transferInfo).privateKeyObjects {
 				let ud = try await key.secureArea.unlockKey(id: id)
 				if let ud { unlockData[id] = ud }
 			}
@@ -167,7 +172,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: transferInfo.docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: transferInfo.privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: transferInfo.zkSystemRepository)
+		let signingTransferInfo = selectedTransferInfo ?? transferInfo
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: signingTransferInfo.docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: signingTransferInfo.privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: signingTransferInfo.zkSystemRepository)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -232,6 +238,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		zkpDocumentIds = [String]()
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
+		selectedTransferInfo = try await sourceTransferData.forResponseGeneration(documentIDs: Set(itemsToSend.keys), hashingAlgs: sourceHashingAlgs).toInitializeTransferInfo()
 		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
 		// tuples of inputDescriptor-id, docId and verifiable presentation
 		// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
@@ -246,14 +253,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				zkpDocumentIds!.append(contentsOf: vpToken.3)
 				inputToPresentations.append((inputDescrId, docId, vpToken.0))
 			} else if transferInfo.dataFormats[docId] == .sdjwt {
-				let docSigned = docsSdJwt[docId]; let dpk = transferInfo.privateKeyObjects[docId]
+				let signingTransferInfo = selectedTransferInfo ?? transferInfo
+				let docSigned = docsSdJwt[docId]; let dpk = signingTransferInfo.privateKeyObjects[docId]
 				guard let docSigned, let dpk, let items = nsItems.first?.value else { continue }
 				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
 				let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
 				let dsa = keyInfo.crv.defaultSigningAlgorithm
 				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
-				let hai = HashingAlgorithmIdentifier(rawValue: transferInfo.hashingAlgs[docId] ?? "") ?? .SHA3256
+				let hai = HashingAlgorithmIdentifier(rawValue: signingTransferInfo.hashingAlgs[docId] ?? "") ?? .SHA3256
 				guard let presented = try await OpenId4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
 					continue
 				}
@@ -363,6 +371,33 @@ extension VerifiablePresentation {
 		case .generic(let str): return str
 		case .json(let json): return json.stringValue
 		}
+	}
+}
+
+private extension InitializeTransferData {
+	func forRequestResolution(hashingAlgs: [String: String]) -> InitializeTransferData {
+		scopedForOpenId4Vp(documentIDs: nil, includePrivateKeys: false, hashingAlgs: hashingAlgs)
+	}
+
+	func forResponseGeneration(documentIDs: Set<String>, hashingAlgs: [String: String]) -> InitializeTransferData {
+		scopedForOpenId4Vp(documentIDs: documentIDs, includePrivateKeys: true, hashingAlgs: hashingAlgs)
+	}
+
+	private func scopedForOpenId4Vp(documentIDs: Set<String>?, includePrivateKeys: Bool, hashingAlgs: [String: String]) -> InitializeTransferData {
+		let contains: (String) -> Bool = { documentIDs?.contains($0) ?? true }
+		return InitializeTransferData(
+			dataFormats: dataFormats.filter { contains($0.key) },
+			documentData: documentData.filter { contains($0.key) },
+			documentKeyIndexes: documentKeyIndexes.filter { contains($0.key) },
+			docMetadata: docMetadata.filter { contains($0.key) },
+			docDisplayNames: docDisplayNames.filter { contains($0.key) },
+			docKeyInfos: includePrivateKeys ? docKeyInfos.filter { contains($0.key) } : [:],
+			iaca: iaca,
+			deviceAuthMethod: deviceAuthMethod,
+			idsToDocTypes: idsToDocTypes.filter { contains($0.key) },
+			hashingAlgs: hashingAlgs.filter { contains($0.key) },
+			zkSystemRepository: zkSystemRepository
+		)
 	}
 }
 
