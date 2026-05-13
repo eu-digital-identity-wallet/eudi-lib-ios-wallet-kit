@@ -19,9 +19,9 @@ class TransactionLogUtils {
 		transactionLog = transactionLog.copy(timestamp: getTimestamp(), rawRequest: requestInfo.deviceRequestBytes, relyingParty: TransactionLogUtils.getRelyingParty(requestInfo), dataFormat: .cbor)
 	}
 
-	static func setCborTransactionLogResponseInfo(_ bleServerTransfer: MdocGattServer, transactionLog: inout TransactionLog) {
-		let sessionTranscript: Data? = if let stb = bleServerTransfer.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: bleServerTransfer.deviceResponseBytes, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: bleServerTransfer.responseMetadata)
+	static func setCborTransactionLogResponseInfo(_ bleService: BlePresentationService, transactionLog: inout TransactionLog) {
+		let sessionTranscript: Data? = if let stb = bleService.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: bleService.deviceResponseBytes, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: bleService.responseMetadata)
 	}
 
 	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, transactionLog: inout TransactionLog) {
@@ -33,13 +33,13 @@ class TransactionLogUtils {
 	}
 
 	static func getRelyingParty(_ requestInfo: UserRequestInfo) -> TransactionLog.RelyingParty? {
-		guard let name = requestInfo.readerCertificateIssuer else { return nil }
-		return TransactionLog.RelyingParty(name: name, isVerified: requestInfo.readerAuthValidated ?? false, certificateChain: requestInfo.certificateChain ?? [], readerAuth: requestInfo.readerAuthBytes)
+		guard let name = requestInfo.defaultReaderAuthResult?.certificateIssuer else { return nil }
+		return TransactionLog.RelyingParty(name: name, isVerified: requestInfo.defaultReaderAuthResult?.isValidated ?? false, certificateChain: requestInfo.defaultReaderAuthResult?.certificateChain ?? [], readerAuth: requestInfo.defaultReaderAuthResult?.authBytes)
 	}
 
-	static func parseDocClaimsDecodables(_ transactionLog: TransactionLog, uiCulture: String?) -> [any DocClaimsDecodable] {
+	static func parseDocClaimsDecodables(_ transactionLog: TransactionLog, uiCulture: String?) -> [DocClaimsModel] {
 		guard let raw = transactionLog.rawResponse else { return [] }
-		var res = [any DocClaimsDecodable]()
+		var res = [DocClaimsModel]()
 		if transactionLog.dataFormat == .cbor {
 			guard let dr = try? DeviceResponse(data: raw.bytes) else { return [] }
 			for (index, doc) in (dr.documents ?? []).enumerated() {
@@ -67,7 +67,7 @@ class TransactionLogUtils {
 		return res
 	}
 
-	static func parseDocClaimDecodable(_ presentedStr: String, dataFormat: DocDataFormat, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
+	static func parseDocClaimDecodable(_ presentedStr: String, dataFormat: DocDataFormat, metadata: Data?, uiCulture: String?) -> DocClaimsModel? {
 		if dataFormat == .cbor {
 			guard let isd = Data(base64urlEncoded: presentedStr) ?? Data(base64Encoded: presentedStr) else { return nil }
 			let iss = if let dr = try? DeviceResponse(data: isd.bytes) { dr.documents?.first?.issuerSigned } else { try? IssuerSigned(data: isd.bytes) }
@@ -79,12 +79,12 @@ class TransactionLogUtils {
 		return nil
 	}
 
-	static func parseCBORDocClaimsDecodable(id: String, docType: String, issuerSigned: IssuerSigned, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
+	static func parseCBORDocClaimsDecodable(id: String, docType: String, issuerSigned: IssuerSigned, metadata: Data?, uiCulture: String?) -> DocClaimsModel? {
 		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: Data(issuerSigned.encode(options: CBOROptions())), docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
 		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil)
 	}
 
-	static func parseSdJwtDocClaimsDecodable(id: String, docType: String, sdJwtSerialized: String, metadata: Data?, uiCulture: String?) -> (any DocClaimsDecodable)? {
+	static func parseSdJwtDocClaimsDecodable(id: String, docType: String, sdJwtSerialized: String, metadata: Data?, uiCulture: String?) -> (DocClaimsModel)? {
 		guard let sdJwtData = sdJwtSerialized.data(using: .utf8) else { return nil }
 		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
 		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil)

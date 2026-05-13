@@ -1,3 +1,252 @@
+## v0.29.4
+### Credential Display Images Downloaded at Issuance Time
+- Credential background images (`backgroundImageURL`) and logo images referenced in display metadata are downloaded and stored as inline data URIs.
+- This prevents the issuer from observing when a user opens their wallet or views a credential (privacy improvement) and eliminates any network latency at viewing time. If an image download fails, the original URL is preserved.
+
+## v0.29.3
+- Fixes display of portrait image in SD-JWT when it is base64-data-url
+
+## v0.29.2
+- Enhance token refresh handling in authorization and document issuance
+
+## v0.29.1
+The `bleTransferMode` property on ``EudiWallet`` controls the Bluetooth Low Energy (BLE) role used during proximity (ISO 18013-5) presentation. It can be set through ``EudiWalletConfiguration/bleTransferMode`` during initialization
+
+## v0.29.0
+
+### BLE Transfer Mode
+
+You can specify ``EudiWalletConfiguration/bleTransferMode`` during initialization:
+
+- **`.server`** (default): The holder device acts as a GATT peripheral (server), advertising and waiting for the reader to connect.
+- **`.client`**: The holder device acts as a GATT central (client), scanning and connecting to the reader's peripheral.
+- **`.both`**: The holder device supports both modes simultaneously and advertises both in the QR device engagement.
+
+## v0.28.3
+
+### Access Token Expiration Fix
+- Fixed access token expiration check and token refresh reason check.
+
+## v0.28.2
+
+### OpenID4VCI Auto-Registration
+- Added auto-registration for OpenID4VCI configuration and refactored service retrieval.
+
+## v0.28.1
+
+### Key Batch with Attestation
+- Added `EudiWallet.createKeyBatchWithAttestation` method to create a batch of keys with a single attestation.
+
+```swift
+let result = try await wallet.createKeyBatchWithAttestation(
+  issuerName: "attested_issuer",
+  id: UUID().uuidString,
+  credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2),
+  keyOptions: KeyOptions(secureAreaName: SoftwareSecureArea.name, curve: .P256),
+  nonce: "issuer-provided-nonce"
+)
+
+let keys = result.keys
+let keyAttestationJwt = result.keyAttestation
+```
+
+## v0.28.0
+
+### Issuer Metadata Policy and OpenID4VP v0.33.0
+- Added support for issuer metadata policy in `OpenId4VciConfiguration`.
+- Updated OpenID4VP dependency to v0.33.0.
+
+```swift
+let trust: CertificateChainTrust = TrustedChainValidator(iacaRoots: [eudic])
+let issuerMetadataPolicy: IssuerMetadataPolicy = .requireSigned(issuerTrust: .byCertificateChain(certificateChainTrust: trust))
+let config = OpenId4VciConfiguration(
+    credentialIssuerURL: "https://issuer.example.com",
+    clientId: "my-wallet",
+    issuerMetadataPolicy: issuerMetadataPolicy
+)
+```
+
+## v0.27.0
+
+### SD-JWT Validation and Issuer Trust Verification
+- Added SD-JWT validation during credential issuance.
+- Enhanced issuer trust verification.
+
+## v0.26.0
+
+### Claim Metadata and SD-JWT Image Handling
+- Enhanced claim metadata handling.
+- Added processing of image data from SD-JWT claims.
+
+## v0.25.2
+
+### SD-JWT Claim Metadata Refinement
+- Refined SD-JWT claim metadata handling to use exact claim paths for display names and mandatory status in JSON conversion.
+
+## v0.25.1
+
+### Access Token Reuse in Reissuance
+- Access token is now reused during reissuance flows.
+- Updated related dependencies.
+
+## v0.25.0
+
+### Background Image URL Support
+- Added support for `backgroundImageURL` in credential display metadata.
+
+## v0.24.1
+
+### OpenID4VCI 0.35.0 and AsWebOutcome Refactor
+- Updated `eudi-lib-ios-openid4vci-swift` to version 0.35.0.
+- Refactored `AsWebOutcome` to use state from server.
+
+## v0.24.0
+
+### OpenID4VP Partial Claim Presentation
+- Added `allowPresentingPartialClaims` to `OpenId4VpConfiguration` to let DCQL-based OpenID4VP presentations continue when some requested claims are missing from an otherwise matching credential.
+- When enabled, unavailable claims are skipped from the disclosed claim set instead of causing DCQL resolution to fail.
+
+```swift
+let openId4VpConfig = OpenId4VpConfiguration(
+    clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
+    allowPresentingPartialClaims: true
+)
+```
+
+## v0.23.7
+
+### DPoP and Reissuance Improvements
+- Added DPoP support to deferred issuance flows.
+- Reissuance now always refreshes access tokens as part of the process.
+
+## v0.23.6
+
+### Access Token Refresh Handling
+- Improved access token refresh handling.
+- Updated related dependency versions to support the refreshed token flow.
+
+## v0.23.5
+
+### Dependency Updates
+- Updated `eudi-lib-ios-siop-openid4vp-swift` to version 0.31.0.
+
+## v0.23.4
+
+### Transaction Logging and OpenID4VCI Enhancements
+- Added transaction logging for document deletion in `EudiWallet`.
+- Enhanced `OpenId4VCIService`.
+- Updated `eudi-lib-ios-openid4vci-swift` to version 0.33.0.
+
+## v0.23.3
+
+### Issuance Logging, Error Handling, and DCQL Improvements
+- Added issuance transaction logging to `OpenId4VciService`.
+- Added BLE-specific error codes and mapped transfer-layer errors to `WalletError.Code`.
+- Added wildcard-aware value matching for DCQL queries.
+- Updated libraries and fixed `CredentialQuery`.
+
+## v0.23.2
+
+### Structured DCQL Error Codes
+- Added structured error codes to `WalletError` for DCQL query failures.
+
+## v0.23.1
+
+### Background Reissuance and DPoP Propagation
+- Added `backgroundOnly` parameter to `reissueDocument` method. When set to `true`, reissuance only proceeds if stored authorization data is available; otherwise it throws an error. This enables automatic credential refresh without user interaction.
+- DPoP key ID is now propagated through the issuance flow and persisted in document metadata, enabling DPoP-protected refresh and reissuance flows.
+
+```swift
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    backgroundOnly: true,                  // only reissue if stored auth exists
+    credentialOptions: credentialOptions,   // optional, defaults to original
+    keyOptions: keyOptions,                 // optional, defaults to original
+)
+
+
+// Background reissuance - only succeeds if stored authorization exists
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    backgroundOnly: true,
+)
+
+```
+
+
+
+### KB-JWT Fix for Decentralized Identifier Scheme
+- Fixed issue where KB-JWT `aud` claim used a stripped DID instead of the full `client_id` for the `decentralized_identifier` scheme. The session transcript and KB-JWT now correctly include the resolved client identifier. Fixes [#308](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/issues/308).
+
+### Dependency Updates
+- `eudi-lib-sdjwt-swift` updated to 0.14.1
+- `eudi-lib-ios-siop-openid4vp-swift` updated to 0.30.1
+- `eudi-lib-ios-iso18013-data-transfer` updated to 0.11.2
+- `eudi-lib-ios-statium-swift` updated to 0.4.0
+
+
+## v0.23.0
+
+### Document Reissuance
+- Added `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:)` method to `EudiWallet` for reissuing an existing document using previously stored issuance metadata and authorization data.
+  - Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
+  - If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.
+  - Falls back to the original issuance metadata for `credentialOptions` and `keyOptions` when not explicitly provided.
+
+```swift
+let reissued = try await wallet.reissueDocument(
+    documentId: existingDocument.id,
+    credentialOptions: credentialOptions,  // optional, defaults to original
+    keyOptions: keyOptions,                // optional, defaults to original
+)
+```
+
+## v0.22.0
+
+### SD-JWT Nested Disclosure fixes
+* `StorageManager.recreateSdJwtClaims` now recursively resolves nested `_sd` digest arrays in SD-JWT claims. Previously, only top-level disclosures were resolved; nested objects inside arrays (e.g., `address[0]`) retained raw `_sd` hashes instead of the actual claim values.
+* SD-JWT presentations via OpenID4VP now selectively disclose only the claims requested in the DCQL query
+
+### `StorageManager.docModels`
+* `docModels` is a `@Published` property holding an array of concrete `DocClaimsModel` objects representing all issued documents currently loaded in the wallet.
+
+## v0.21.1
+
+* Update `eudi-lib-ios-openid4vci-swift` dependency to version 0.30.0
+* Fix for issue #296
+
+## v0.21.0
+
+### ZKP (Zero-Knowledge Proof) Support
+* Supports zero-knowledge proof generation by using a provided `ZkSystemRepository`
+* Extracts ZKP specs from DCQL request.
+* Tracks ZKP document IDs through presentation flow. Skip deleting credentials used as ZKP documents
+
+### Improvements
+* Add optional `zkSystemRepository: ZkSystemRepository?` parameter to `EudiWallet` initializer. When provided, it is used during the presentation flow to enable zero-knowledge proof operations. 
+* Add `waitForDisconnect` method to `PresentationSession` to prevent the session from being disposed while the remote device is still connected. This method should be called after `sendResponse`. In BLE presentations, it awaits until the remote verifier disconnects; in OpenID4VP presentations, it returns immediately.
+* BLE peripheral manager now uses `CBPeripheralManagerOptionShowPowerAlertKey` to automatically prompt the user to enable Bluetooth if it is turned off when starting a BLE presentation.
+* `getIssuerMetadata`, `issueDocuments`, `getDefaultCredentialOptions`, `requestDeferredIssuance`, and `resumePendingIssuance` now fall back to resolving the VCI service by issuer URL when the name-based lookup fails, improving service discovery for dynamically registered issuers. Also, offer resolution was modified to register credential issuer url directly instead of host name.
+
+### Breaking Changes
+
+- **`EudiWalletConfiguration.trustedReaderCertificates` renamed and retyped**: The property `trustedReaderCertificates: [Data]?` has been replaced by `trustedReaderRootCertificates: [x5chain]?`. A x5chain is usually a root `SecCertificate` but may include intermediate certificates.
+
+### Dependency Update
+* Updated "eudi-lib-ios-iso18013-data-transfer" and "eudi-lib-ios-wallet-storage" package dependencies to version 0.10.0
+
+### Refactorings
+- Refactored document handling in OpenId4VP and related services to use `Document.ID` for improved type safety and clarity
+- Introduce `zkpDocumentIds` property on `PresentationService` and concrete services (`BlePresentationService`, `FaultPresentationService`, `OpenId4VpService`)
+  - `generateCborVpToken` now returns ZKP document IDs; `OpenId4VpService` aggregates them
+  - `PresentationSession.updateKeyBatchInfoAndDeleteCredentialIfNeeded` now accepts `Document.ID`s and an optional `zkpDocumentIds` list
+
+## v0.20.5
+* Fixed bug in https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/291 when more than one identical attestation is successfully presented to the verifier. Previously, only a single entry per "type" appears in the Transactions tab.
+For example, the screenshots show 2 mDL and 3 PID attestations, all successfully presented, but only 1 of each is listed in the Transactions.
+
+* Fallback to sha-256 hashing algorithm if sd-alg does not exist by @dtsiflit in https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-kit/pull/293
+
 ## v0.20.4
 
 Fixed bug when more than one identical attestation is successfully presented to the verifier. Previously, only a single entry per "type" appears in the Transactions tab.

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import Foundation
 import OpenID4VCI
 
 enum AsWebOutcome: @unchecked Sendable {
-	case code(String)
+	case code(String, state: String?)
 	case presentation_request(URL)
 }
 

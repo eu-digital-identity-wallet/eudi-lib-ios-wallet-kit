@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 European Commission
+Copyright (c) 2026 European Commission
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,14 +21,14 @@ import MdocDataModel18013
 import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
-
+import struct WalletStorage.Document
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
 public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public var presentationService: any PresentationService
-	var storageManager: StorageManager!
-	var storageService: (any DataStorageService)!
+	public var storageManager: StorageManager!
+	public var storageService: (any DataStorageService)!
 	/// Reader certificate issuer (the Common Name (CN) from the verifier's certificate)
 	@Published public var readerCertIssuer: String?
 	/// Reader legal name (if provided)
@@ -46,15 +46,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
 	// map of document id to (doc type, format, display name) pairs
-	public var docIdToPresentInfo: [String: DocPresentInfo]!
+	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
-	public var documentKeyIndexes: [String: Int]!
+	public var documentKeyIndexes: [Document.ID: Int]
 	/// User authentication required
 	var userAuthenticationRequired: Bool
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
-	public init(presentationService: any PresentationService, storageManager: StorageManager? = nil, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [String: DocPresentInfo], documentKeyIndexes: [String: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
+	public init(presentationService: any PresentationService, storageManager: StorageManager? = nil, storageService: (any DataStorageService)? = nil, docIdToPresentInfo: [Document.ID: DocPresentInfo], documentKeyIndexes: [Document.ID: Int], userAuthenticationRequired: Bool, transactionLogger: (any TransactionLogger)? = nil) {
 		self.presentationService = presentationService
 		self.storageManager = storageManager
 		self.storageService = storageService
@@ -93,21 +93,22 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 
 		}
-		if let readerAuthority = request.readerCertificateIssuer {
+		if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
 			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = request.readerAuthValidated
-			readerCertValidationMessage = request.readerCertificateValidationMessage
+			readerCertIssuerValid = authResult.isValidated
+			readerCertValidationMessage = authResult.validationMessage
 		}
-		readerLegalName = request.readerLegalName
-		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document") }
+		readerLegalName = request.defaultReaderAuthResult?.legalName
+		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
+		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 		status = .requestReceived
 	}
 
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
-	public static func makeError(str: String, localizationKey: String? = nil) -> WalletError {
+	public static func makeError(str: String, localizationKey: String? = nil, code: WalletError.Code? = nil, context: [String: String] = [:]) -> WalletError {
 		logger.error(Logger.Message(unicodeScalarLiteral: str))
-		return WalletError(description: str, localizationKey: localizationKey)
+		return WalletError(description: str, localizationKey: localizationKey, code: code, context: context)
 	}
 
 	public static func makeError(err: LocalizedError) -> WalletError {
@@ -120,20 +121,35 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On success ``deviceEngagement`` published variable will be set with the result and ``status`` will be ``.qrEngagementReady``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async throws {
-		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document"); return }
+		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
+		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
 		do {
 			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
 			await MainActor.run {
 				deviceEngagement = data
 				status = .qrEngagementReady
 			}
-		} catch { await setError(error.localizedDescription) }
+		} catch {
+			let walletCode = Self.mapTransferError(error)
+			await setError(error.localizedDescription, code: walletCode)
+		}
+	}
+
+	/// Maps transfer-layer errors (MdocDataTransfer18013.ErrorCode) to structured WalletError.Code
+	static func mapTransferError(_ error: Error) -> WalletError.Code? {
+		let nsError = error as NSError
+		guard let errorCode = ErrorCode(rawValue: nsError.code) else { return nil }
+		switch errorCode {
+		case .bleNotAuthorized: return .bleNotAuthorized
+		case .bleNotSupported: return .bleNotSupported
+		default: return nil
+		}
 	}
 
 	@MainActor
-	func setError(_ description: String, localizationKey: String? = nil) {
+	func setError(_ description: String, localizationKey: String? = nil, code: WalletError.Code? = nil) {
 		status = .error
-		uiError = WalletError(description: description, localizationKey: localizationKey)
+		uiError = WalletError(description: description, localizationKey: localizationKey, code: code)
 	}
 
 	/// Receive request from verifer
@@ -153,8 +169,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		}
 	}
 
-	func updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: [String]) async throws {
+	func updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: [Document.ID], zkpDocumentIds: [Document.ID]?) async throws {
 		for (id, dpi) in docIdToPresentInfo where presentedIds.contains(id) {
+			if let zkpDocumentIds, zkpDocumentIds.contains(id) { continue }
 			let secureArea = SecureAreaRegistry.shared.get(name: dpi.secureAreaName)
 			guard let keyIndex = documentKeyIndexes[id] else { continue }
 			let newKeyBatchInfo = try await secureArea.updateKeyBatchInfo(id: id, keyIndex: keyIndex)
@@ -163,7 +180,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 				try await secureArea.deleteKeyBatch(id: id, startIndex: keyIndex, batchSize: 1)
 				let remaining: Int? = newKeyBatchInfo.usedCounts.count { $0 == 0 }
 				let uc = remaining.map { try! CredentialsUsageCounts(total: newKeyBatchInfo.usedCounts.count, remaining: $0) }
-				storageManager?.setUsageCount(uc, id: id)
+				await storageManager?.setUsageCount(uc, id: id)
 			}
 		}
 	}
@@ -173,21 +190,39 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }
 			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
-			await MainActor.run { status = .responseSent }
-			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys))
+			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys), zkpDocumentIds: presentationService.zkpDocumentIds)
+			await MainActor.run { status = .responseSent; storageManager?.objectWillChange.send() }
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
 			await setError(error.localizedDescription)
 			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
 			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
+			throw error
 		}
 	}
 
+	/// Wait for disconnect
+
+	/// If current status is not `responseSent` this method will return immediately, otherwise it will wait for disconnection and set status to `disconnected`
+	public func waitForDisconnect() async {
+		logger.info("Wait for disconnect, current status: \(status)")
+		if status != .responseSent {
+			logger.warning("This method should be called after response has been sent")
+			return
+		}
+		do {
+			try await presentationService.waitForDisconnect()
+			await MainActor.run { status = .disconnected }
+		} catch {
+			await setError(error.localizedDescription)
+		}
+
+	}
 
 
 }
