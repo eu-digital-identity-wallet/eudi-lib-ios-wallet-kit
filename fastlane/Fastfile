@@ -12,7 +12,7 @@ platform :ios do
     }
 
     if ENV['CI'] 
-      params[:xcargs] = "-skipPackagePluginValidation"
+      params[:xcargs] = "-skipPackagePluginValidation -skipMacroValidation"
     end
 
     run_tests(params)
@@ -34,7 +34,7 @@ platform :ios do
     }
 
     if ENV['CI']
-      params[:xcargs] = "-skipPackagePluginValidation"
+      params[:xcargs] = "-skipPackagePluginValidation -skipMacroValidation"
     end
 
     run_tests(params)
