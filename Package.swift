@@ -20,6 +20,7 @@ let package = Package(
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.38.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-siop-openid4vp-swift.git", exact: "0.33.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git", exact: "0.4.0"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/SwiftCopyableMacro.git", exact: "0.0.4"),
 	],
 	targets: [
 		// Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -27,6 +28,7 @@ let package = Package(
 		.target(
 			name: "EudiWalletKit",
 			dependencies: [
+				.product(name: "Copyable", package: "SwiftCopyableMacro"),
 				.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "OpenID4VP", package: "eudi-lib-ios-siop-openid4vp-swift"),
