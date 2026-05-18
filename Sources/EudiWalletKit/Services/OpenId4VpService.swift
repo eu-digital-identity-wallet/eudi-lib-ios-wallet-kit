@@ -156,7 +156,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
 		var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
 		logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
-		let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: readerCertificateIssuer.map(MdocHelpers.getCN(from:)), validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
+		let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
+		let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 		result.readerAuthResults = ["": rar]
 		TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
 		return result
@@ -167,7 +168,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: transferInfo.docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: transferInfo.privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: transferInfo.zkSystemRepository)
+		let docMetadata = transferInfo.docMetadata
+		let privateKeyObjects = transferInfo.privateKeyObjects
+		let zkSystemRepository = transferInfo.zkSystemRepository
+		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: zkSystemRepository)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -207,7 +211,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
 			paths.removeAll(); values.removeAll()
 			for (p, disclosures) in allPathsDict {
-				let path = ClaimPath(p.value.map { e in if case .claim(let name) = e { ClaimPathElement.claim(name: name) } else if case .arrayElement(let index) = e { ClaimPathElement.arrayElement(index: index) } else { ClaimPathElement.allArrayElements } } )
+				let mappedElements = p.value.map { element in
+					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
+					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
+					return ClaimPathElement.allArrayElements
+				}
+				let path = ClaimPath(mappedElements)
 				paths.append(path)
 				values[path] = disclosures
 			}

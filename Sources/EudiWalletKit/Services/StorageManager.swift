@@ -121,7 +121,21 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	@MainActor
 	public func setUsageCount(_ usageCount: CredentialsUsageCounts?, id: String) {
 		let docModel = docModels.first(where: { $0.id == id })
+		guard docModel?.credentialsUsageCounts != usageCount else { return }
 		docModel?.credentialsUsageCounts = usageCount
+	}
+
+	/// Refresh usage counters for currently loaded issued document models.
+	///
+	/// This updates each model's `credentialsUsageCounts` from secure area key batch info.
+	/// When a value changes, assigning through `setUsageCount` updates the model's
+	/// published property so observers of the `DocClaimsModel` are notified.
+	public func refreshUsageCounters() async throws {
+		let modelInfos = await MainActor.run { docModels.map { ($0.id, $0.secureAreaName) } }
+		for (id, secureAreaName) in modelInfos {
+			let usageCount = try await Self.getCredentialsUsageCount(id: id, secureAreaName: secureAreaName)
+			await setUsageCount(usageCount, id: id)
+		}
 	}
 
 	/// Converts a `WalletStorage.Document` to an `DocClaimsModel` model using an optional `MdocModelFactory`.
@@ -147,7 +161,10 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		let docKeyInfo = DocKeyInfo(from: doc.docKeyInfo) ?? .default
 		let md = docMetadata?.getMetadata(uiCulture: uiCulture)
 		let cmd = md?.claimMetadata?.convertToCborClaimMetadata(uiCulture)
-		let configuration = DocClaimsModelConfiguration(id: d.0, createdAt: doc.createdAt, docType: doc.docType, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: iss.issuerAuth.statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: [], docDataFormat: .cbor, hashingAlg: nil)
+		let credentialIssuerIdentifier = md?.credentialIssuerIdentifier
+		let configurationIdentifier = md?.configurationIdentifier
+		let statusIdentifier = iss.issuerAuth.statusIdentifier
+		let configuration = DocClaimsModelConfiguration(id: d.0, createdAt: doc.createdAt, docType: doc.docType, displayName: md?.displayName, display: md?.display, issuerDisplay: md?.issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, validFrom: iss.validFrom, validUntil: iss.validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: [], docDataFormat: .cbor, hashingAlg: nil)
 		var retModel: DocClaimsModel? = modelFactory?.makeClaimsDecodableFromCbor(configuration: configuration, issuerSigned: iss, displayNames: cmd?.displayNames, mandatory: cmd?.mandatory)
 		if retModel == nil {
 			let defModel: DocClaimsModel? = switch doc.docType {
@@ -200,8 +217,15 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		if type == nil || type!.isEmpty { type = docClaims.first(where: { $0.name == "evidence"})?.children?.first(where: { $0.name == "type"})?.stringValue }
 		let validFrom: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.issuedAt})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
 		let validUntil: Date? = if case let .date(s) = docClaims.first(where: { $0.name == JWTClaimNames.expirationTime})?.dataValue { ISO8601DateFormatter().date(from: s) } else { nil }
-		let statusIdentifier: StatusIdentifier? = if let sd = recreatedClaims.json["status"].dictionary, let sld = sd["status_list"]?.dictionary, let uri = sld["uri"]?.string, let idx = sld["idx"]?.int32 { StatusIdentifier(idx: Int(idx), uriString: uri) } else { nil }
-		let configuration = DocClaimsModelConfiguration(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: docMetadata?.getDisplayName(uiCulture), display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: md?.credentialIssuerIdentifier, configurationIdentifier: md?.configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
+		let statusJson = recreatedClaims.json["status"].dictionary
+		let statusListJson = statusJson?["status_list"]?.dictionary
+		let statusURI = statusListJson?["uri"]?.string
+		let statusIndex = statusListJson?["idx"]?.int32
+		let statusIdentifier: StatusIdentifier? = if let statusURI, let statusIndex { StatusIdentifier(idx: Int(statusIndex), uriString: statusURI) } else { nil }
+		let credentialIssuerIdentifier = md?.credentialIssuerIdentifier
+		let configurationIdentifier = md?.configurationIdentifier
+		let displayName = docMetadata?.getDisplayName(uiCulture)
+		let configuration = DocClaimsModelConfiguration(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: displayName, display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
 		return DocClaimsModel(configuration: configuration)
 	}
 
@@ -340,7 +364,10 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	@discardableResult public func loadDocuments(status: WalletStorage.DocumentStatus, uiCulture: String?) async throws -> [WalletStorage.Document]?  {
 		do {
 			guard let docs = try await storageService.loadDocuments(status: status) else { return nil }
-			let docs2 = docs.map { d in WalletStorage.Document(id: d.id, docType: d.docType, docDataFormat: d.docDataFormat, data: d.data, docKeyInfo: d.docKeyInfo, createdAt: d.createdAt, modifiedAt: d.modifiedAt, metadata: d.metadata, displayName: d.getDisplayName(uiCulture), status: d.status) }
+			let docs2 = docs.map { document in
+				let displayName = document.getDisplayName(uiCulture)
+				return WalletStorage.Document(id: document.id, docType: document.docType, docDataFormat: document.docDataFormat, data: document.data, docKeyInfo: document.docKeyInfo, createdAt: document.createdAt, modifiedAt: document.modifiedAt, metadata: document.metadata, displayName: displayName, status: document.status)
+			}
 			await refreshDocModels(docs2, uiCulture: uiCulture, docStatus: status)
 			await refreshPublishedVars()
 			return docs

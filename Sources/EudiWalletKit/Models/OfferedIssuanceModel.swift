@@ -46,7 +46,19 @@ public struct OfferedIssuanceModel: Sendable {
 @Copyable
 public struct OfferedDocModel: Sendable {
 	/// public initializer
-	public init(credentialConfigurationIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String?, identifier: String?, displayName: String, algValuesSupported: [String], claims: [Claim], credentialMetadata: ConfigurationCredentialMetadata? = nil, credentialOptions: CredentialOptions, keyOptions: KeyOptions?) {
+	public init(
+		credentialConfigurationIdentifier: String,
+		docType: String? = nil,
+		vct: String? = nil,
+		scope: String?,
+		identifier: String?,
+		displayName: String,
+		algValuesSupported: [String],
+		claims: [Claim],
+		credentialMetadata: ConfigurationCredentialMetadata? = nil,
+		credentialOptions: CredentialOptions,
+		keyOptions: KeyOptions?
+	) {
 		self.credentialConfigurationIdentifier = credentialConfigurationIdentifier
 		self.docType = docType
 		self.vct = vct

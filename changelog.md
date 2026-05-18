@@ -1,3 +1,19 @@
+## v0.30.0
+
+### Usage Counter Refresh
+
+Added ``EudiWallet/refreshUsageCounters()`` method to synchronize the wallet's cached usage counter values with the actual state on the device.
+
+Usage counters track how many times a document can be presented (for one-time use policies). When a presentation occurs in another application (such as DC-API extension) that shares access to the secure area, the wallet's cached counters may become out of sync. This method refreshes those cached values so that the wallet displays accurate remaining presentation counts.
+
+When a counter value changes, the corresponding document model publishes the change, allowing SwiftUI views to automatically update. The recommended approach is to refresh usage counters when your app returns to the foreground:
+
+```swift
+.onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+    Task { try? await wallet.refreshUsageCounters() }
+}
+```
+
 ## v0.29.4
 ### Credential Display Images Downloaded at Issuance Time
 - Credential background images (`backgroundImageURL`) and logo images referenced in display metadata are downloaded and stored as inline data URIs.

@@ -43,7 +43,9 @@ func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFErro
 extension Display {
 	public var displayMetadata: MdocDataModel18013.DisplayMetadata {
 		let logoMetadata = LogoMetadata(urlString: logo?.uri?.absoluteString, alternativeText: logo?.alternativeText)
-		return MdocDataModel18013.DisplayMetadata(name: name, localeIdentifier: locale?.identifier, logo: logoMetadata, description: description, backgroundColor: backgroundColor, textColor: textColor, backgroundImageURL: backgroundImage?.url.absoluteString)
+		let localeIdentifier = locale?.identifier
+		let backgroundImageURL = backgroundImage?.url.absoluteString
+		return MdocDataModel18013.DisplayMetadata(name: name, localeIdentifier: localeIdentifier, logo: logoMetadata, description: description, backgroundColor: backgroundColor, textColor: textColor, backgroundImageURL: backgroundImageURL)
 	}
 }
 
@@ -117,20 +119,14 @@ extension WalletStorage.Document {
 	}
 }
 
-/*
-extension MdocDataModel18013.CoseKeyPrivate {
-  // decode private key data cbor string and save private key in key chain
-	public static func from(base64: String) async -> MdocDataModel18013.CoseKeyPrivate? {
-		guard let d = Data(base64Encoded: base64), let obj = try? CBOR.decode([UInt8](d)), let coseKey = try? CoseKey(cbor: obj), let cd = obj[-4], case let CBOR.byteString(rd) = cd else { return nil }
-		let storage = await SecureAreaRegistry.shared.defaultSecurityArea!.getStorage()
-		let keyData = NSMutableData(bytes: [0x04], length: [0x04].count)
-		keyData.append(Data(coseKey.x)); keyData.append(Data(coseKey.y));	keyData.append(Data(rd))
-		let sampleSA = SampleDataSecureArea(storage: storage, x963Key: keyData as Data)
-		let res = MdocDataModel18013.CoseKeyPrivate(secureArea: sampleSA)
-		return res
+extension MdocDataModel18013.CoseKey {
+ 	static func x963Representation(x: Data, y: Data) -> Data {
+		var data = Data([0x04])
+		data.append(x)
+		data.append(y)
+		return data
 	}
 }
- */
 
 extension MdocDataModel18013.SignUpResponse {
 	/// Decompose CBOR signup responses from data
@@ -209,7 +205,8 @@ extension CredentialConfiguration {
 	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil, dpopKeyId: String? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
 		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: docType ?? vct ?? "", display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
+		let resolvedDocType = docType ?? vct ?? ""
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: resolvedDocType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
 	}
 }
 
@@ -241,7 +238,8 @@ extension DisplayMetadata {
 		async let newLogoURL = Self.fetchAsDataURI(urlString: logo?.urlString)
 		let (fetchedBg, fetchedLogo) = await (newBgURL, newLogoURL)
 		let newLogo = logo.map { LogoMetadata(urlString: fetchedLogo ?? $0.urlString, alternativeText: $0.alternativeText) }
-		return DisplayMetadata(name: name, localeIdentifier: localeIdentifier, logo: newLogo, description: description, backgroundColor: backgroundColor, textColor: textColor, backgroundImageURL: fetchedBg ?? backgroundImageURL)
+		let resolvedBackgroundImageURL = fetchedBg ?? backgroundImageURL
+		return DisplayMetadata(name: name, localeIdentifier: localeIdentifier, logo: newLogo, description: description, backgroundColor: backgroundColor, textColor: textColor, backgroundImageURL: resolvedBackgroundImageURL)
 	}
 
 	/// Downloads data from `urlString` (http/https only) and encodes it as a `data:` URI.
@@ -364,7 +362,10 @@ extension JSON {
 				let isArray = type == .array
 				let n2 = if isArray { String(n) } else { key }
 				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
-				if let di = subJson.toDocClaim(key: n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, displayName: cmd?.displayNames[key], mandatory: cmd?.mandatory[key], valueType: cmd?.valueTypes[key]) {
+				let displayNameForKey = cmd?.displayNames[key]
+				let isMandatoryForKey = cmd?.mandatory[key]
+				let valueTypeForKey = cmd?.valueTypes[key]
+				if let di = subJson.toDocClaim(key: n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, displayName: displayNameForKey, mandatory: isMandatoryForKey, valueType: valueTypeForKey) {
 					a.append(di)
 				}
 			}
