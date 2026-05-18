@@ -35,6 +35,17 @@ import protocol OpenID4VCI.Networking
 
 struct EudiWalletKitTests {
 
+    @Test("Initializing multiple wallets does not crash logging bootstrap")
+    func testInitializeMultipleWalletInstances() throws {
+        let firstConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-1-\(UUID().uuidString)")
+        let secondConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-2-\(UUID().uuidString)")
+
+        let firstWallet = try EudiWallet(eudiWalletConfig: firstConfig)
+        let secondWallet = try EudiWallet(eudiWalletConfig: secondConfig)
+
+        #expect(firstWallet.eudiWalletConfig.serviceName != secondWallet.eudiWalletConfig.serviceName)
+    }
+
 	@Test("Parse DCQL", arguments: [DocDataFormat.cbor, .sdjwt])
 	func testParseDcql(format: DocDataFormat) throws {
 		if format == .cbor { return } // skip cbor sample due to legacy schema differences
@@ -313,16 +324,18 @@ struct EudiWalletKitTests {
 	func testValidateIssuedMdocCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let document = try makeDocument(fromResource: "mdoc-mdl", docDataFormat: .cbor, docType: "org.iso.18013.5.1.mDL")
-		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [])
+		let (document, publicKey) = try makeDocument(fromResource: "mdoc-mdl", docDataFormat: .cbor, docType: "org.iso.18013.5.1.mDL")
+		let publicKeyData = Data(publicKey.encode(options: CBOROptions()))
+		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
 
 	@Test("Issued SD-JWT PID credential validation")
 	func testValidateIssuedSdJwtCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let document = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
-		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [])
+		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
+		let publicKeyData = Data(publicKey.encode(options: CBOROptions()))
+		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
 
 	@Test("createKeyBatchWithAttestation returns keys with matching attestation input")
@@ -369,14 +382,33 @@ struct EudiWalletKitTests {
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
-	private func makeDocument(fromResource resourceName: String, docDataFormat: DocDataFormat, docType: String) throws -> WalletStorage.Document {
+	private func makeDocument(fromResource resourceName: String, docDataFormat: DocDataFormat, docType: String) throws -> (doc: WalletStorage.Document, publicKey: CoseKey) {
 		var original = Data(name: resourceName, ext: "txt", from: Bundle.module)!
+		let publicKey: CoseKey
 		if docDataFormat == .cbor {
 			let originalBase64Url = try #require(String(data: original, encoding: .utf8)).trimmingCharacters(in: .whitespacesAndNewlines)
 			original = try #require(Data(base64URLEncoded: originalBase64Url))
+			let issuerSigned = try IssuerSigned(data: [UInt8](original))
+			publicKey = issuerSigned.issuerAuth.mso.deviceKeyInfo.deviceKey
+		} else {
+			let serialized = try #require(String(data: original, encoding: .utf8))
+			let (_, payload, _) = StorageManager.extractJWTParts(serialized)
+			let payloadData = try #require(Data(base64URLEncoded: payload))
+			let payloadJson = try JSON(data: payloadData)
+			let jwk = payloadJson["cnf"]["jwk"]
+			let crvName = try #require(jwk["crv"].string)
+			guard let crv = MdocDataModel18013.CoseEcCurve(crvName: crvName) else {
+				throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "cnf.jwk.crv is invalid"])
+			}
+			let xBase64 = try #require(jwk["x"].string)
+			let yBase64 = try #require(jwk["y"].string)
+			let x = try #require(Data(base64URLEncoded: xBase64), "cnf.jwk.x is not base64url")
+			let y = try #require(Data(base64URLEncoded: yBase64), "cnf.jwk.y is not base64url")
+			publicKey = CoseKey(x: [UInt8](x), y: [UInt8](y), crv: crv)
 		}
-		return WalletStorage.Document(id: UUID().uuidString, docType: docType, docDataFormat: docDataFormat,
+		let doc = WalletStorage.Document(id: UUID().uuidString, docType: docType, docDataFormat: docDataFormat,
 			data: original, docKeyInfo: nil, createdAt: .now, metadata: nil, displayName: nil, status: .issued)
+		return (doc, publicKey)
 	}
 
 	private func makeSdJwtIssuerMetadata(forResource resourceName: String, issuerURL: String) throws -> Data {

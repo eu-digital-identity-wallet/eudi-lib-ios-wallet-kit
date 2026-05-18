@@ -39,7 +39,25 @@ struct CredentialConfiguration: Codable, Sendable {
    	let format: DocDataFormat
 	let defaultCredentialOptions: CredentialOptions
 
-	init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, supportsAttestationProofType: Bool, supportsJwtProofTypeWithAttestation: Bool, supportsJwtProofTypeWithoutAttestation: Bool,  credentialSigningAlgValuesSupported: [String], dpopSigningAlgValuesSupported: [String]?, clientAttestationPopSigningAlgValuesSupported: [String]?, issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], credentialMetadata: ConfigurationCredentialMetadata? = nil, format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
+	init(
+		configurationIdentifier: CredentialConfigurationIdentifier,
+		credentialIssuerIdentifier: String,
+		docType: String? = nil,
+		vct: String? = nil,
+		scope: String? = nil,
+		supportsAttestationProofType: Bool,
+		supportsJwtProofTypeWithAttestation: Bool,
+		supportsJwtProofTypeWithoutAttestation: Bool,
+		credentialSigningAlgValuesSupported: [String],
+		dpopSigningAlgValuesSupported: [String]?,
+		clientAttestationPopSigningAlgValuesSupported: [String]?,
+		issuerDisplay: [DisplayMetadata],
+		display: [DisplayMetadata],
+		claims: [Claim],
+		credentialMetadata: ConfigurationCredentialMetadata? = nil,
+		format: DocDataFormat,
+		defaultCredentialOptions: CredentialOptions
+	) {
 		self.configurationIdentifier = configurationIdentifier
 		self.credentialIssuerIdentifier = credentialIssuerIdentifier
 		self.docType = docType
@@ -85,7 +103,7 @@ struct PendingIssuanceModel: Codable {
 }
 
 enum IssuanceOutcome {
-	case issued([(data: Data, pk: Data)], CredentialConfiguration, AuthorizedRequest)
+	case issued([(data: Data, publicKey: Data)], CredentialConfiguration, AuthorizedRequest)
 	case deferred(DeferredIssuanceModel)
 	case pending(PendingIssuanceModel)
 }

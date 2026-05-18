@@ -70,9 +70,13 @@ public actor OpenId4VciService {
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: (Issue request key pair, vci service, unique id)
 	func prepareIssuing(id: String, docTypeIdentifier: DocTypeIdentifier, displayName: String?, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, disablePrompt: Bool, promptMessage: String?) async throws {
+		let resolvedDocTypeName = displayName ?? docTypeIdentifier.docTypeOrVct ?? docTypeIdentifier.value
+		let localizedDocTypeName = NSLocalizedString(resolvedDocTypeName, comment: "")
+		let defaultLocalizedReason = NSLocalizedString("issue_document", comment: "")
+		let localizedReason = promptMessage ?? defaultLocalizedReason.replacingOccurrences(of: "{docType}", with: localizedDocTypeName)
 		issueReq = try await EudiWallet.authorizedAction(action: {
 			return try beginIssueDocument(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions)
-		}, disabled: !config.userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: promptMessage ?? NSLocalizedString("issue_document", comment: "").replacingOccurrences(of: "{docType}", with: NSLocalizedString(displayName ?? docTypeIdentifier.docTypeOrVct ?? docTypeIdentifier.value, comment: "")))
+		}, disabled: !config.userAuthenticationRequired || disablePrompt, dismiss: {}, localizedReason: localizedReason)
 		guard issueReq != nil else {
 			logger.error("User cancelled authentication")
 			throw LAError(.userCancel)
@@ -183,7 +187,13 @@ public actor OpenId4VciService {
 	}
 
 	public func resolveOfferUrlDocTypes(offerUri: String) async throws -> OfferedIssuanceModel {
-		let result = await CredentialOfferRequestResolver(fetcher: Fetcher<CredentialOfferRequestObject>(session: networking), credentialIssuerMetadataResolver: Self.makeMetadataResolver(networking), authorizationServerMetadataResolver: AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))).resolve(source: try .init(urlString: offerUri), policy: config.issuerMetadataPolicy)
+		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networking)
+		let metadataResolver = Self.makeMetadataResolver(networking)
+		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networking)
+		let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networking)
+		let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
+		let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
+		let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: config.issuerMetadataPolicy)
 		switch result {
 		case .success(let offer):
 			return try await resolveOfferDocTypes(offerUri: offerUri, offer: offer)
@@ -578,9 +588,9 @@ public actor OpenId4VciService {
 				do { return try compactParser.stringFromJwsJsonObject(json) }
 				catch { return json.stringValue }
 			}
-			let response = json.map { j in
-				let str = parseJsonToJwt(j.1["credential"])
-				return (toData(str), publicKeys[index])
+			let response = json.enumerated().map { j in
+				let str = parseJsonToJwt(j.element.1["credential"])
+				return (toData(str), publicKeys[j.offset])
 			}
 			logger.notice("Issued credential data:\n\(String(data: response.first!.0, encoding: .utf8) ?? "")")
 			return response
@@ -805,17 +815,17 @@ public actor OpenId4VciService {
 			var publicKeys: [Data] = []
 			var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialOptions.credentialPolicy)
 			switch issueOutcome {
-			case .issued(let dataPair, let cc, let authorized):
-				guard dataPair.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
+			case .issued(let dataPairs, let cc, let authorized):
+				guard dataPairs.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
 				dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 				docMetadata = cc.convertToDocMetadata(authorized: authorized, keyOptions: issueReq.keyOptions, credentialOptions: issueReq.credentialOptions, dpopKeyId: savedDpopKeyId)
 				let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
-				dkInfo.batchSize = dataPair.count
+				dkInfo.batchSize = dataPairs.count
 				docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { StorageManager.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
 				displayName = cc.display.getName(uiCulture)
-				if dataPair.count > 0 {
-					batch = (0..<dataPair.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) }
-					publicKeys = dataPair.map(\.pk)
+				if dataPairs.count > 0 {
+					batch = (0..<dataPairs.count).map { WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: issueOutcome.getDataToSave(index: $0, format: format), docKeyInfo: nil, createdAt: Date(), metadata: nil, displayName: displayName, status: .issued) }
+					publicKeys = dataPairs.map(\.publicKey)
 				}
 			case .deferred(let deferredIssuanceModel):
 				dataToSave = try JSONEncoder().encode(deferredIssuanceModel)
@@ -860,31 +870,31 @@ public actor OpenId4VciService {
 	}
 
 	func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {
-		let pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
+		var pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
 		guard pkCoseKeys.count == publicKeys.count else { throw PresentationSession.makeError(str: "Failed to parse public keys") }
 		for doc in (batch ?? [issued]) {
 			if doc.docDataFormat == .cbor {
 				let iss = try IssuerSigned(data: [UInt8](doc.data))
-				try iss.validate(docType: doc.docType)
+				try iss.validate(docType: doc.docType, publicCoseKeys: &pkCoseKeys)
 			} else if doc.docDataFormat == .sdjwt {
-				try await validateIssuedSdJwt(doc)
+				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
 		}
 	}
 
-	private func validateIssuedSdJwt(_ document: WalletStorage.Document) async throws {
+	private func validateIssuedSdJwt(_ document: WalletStorage.Document, publicCoseKeys: inout [CoseKey]) async throws {
 		guard let serialized = String(data: document.data, encoding: .utf8) else {
 			throw PresentationSession.makeError(str: "Failed to decode SD-JWT credential data")
 		}
+		try validateSdJwtBindingKeys(serialized, publicCoseKeys: &publicCoseKeys)
 		let expectedIssuer = try expectedSdJwtIssuerURL()
 		let signedSdJwt = try CompactParser().getSignedSdJwt(serialisedString: serialized)
-		let x5cChain = signedSdJwt.jwt.protectedHeader.x509CertificateChain
-		let hasX5c = !(x5cChain ?? []).isEmpty
+		let hasX5c = !(signedSdJwt.jwt.protectedHeader.x509CertificateChain ?? []).isEmpty
 		try validateSdJwtIssuer(serialized, expectedIssuer: expectedIssuer, requireIssuer: !hasX5c)
 		let verifier = SDJWTVerifier(sdJwt: signedSdJwt)
 		// Determine the issuer public key: prefer x5c certificate chain, fall back to metadata
 		let issuerKey: any KeyExpressible
-		if let x5cChain, !x5cChain.isEmpty {
+		if let x5cChain = signedSdJwt.jwt.protectedHeader.x509CertificateChain, !x5cChain.isEmpty {
 			issuerKey = try getIssuerKey(from: x5cChain)
 		} else {
 			let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
@@ -902,6 +912,56 @@ public actor OpenId4VciService {
 			claimVerifier: { nbf, exp in ClaimsVerifier(nbf: nbf, exp: exp) }
 		)
 		try validateVerificationResult(result)
+	}
+
+	private func validateSdJwtBindingKeys(_ serialized: String, publicCoseKeys: inout [CoseKey]) throws {
+		let (_, payload, _) = StorageManager.extractJWTParts(serialized)
+		guard let payloadData = Data(base64URLEncoded: payload) else {
+			throw PresentationSession.makeError(str: "Failed to decode SD-JWT payload")
+		}
+		let payloadJson = try JSON(data: payloadData)
+		guard payloadJson["cnf"].exists(), payloadJson["cnf"].type == .dictionary else {
+			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a valid cnf claim")
+		}
+		let cnfKeys = try parseCnfBindingKeys(payloadJson["cnf"])
+		let availableKeys = publicCoseKeys.map(\.x963Representation)
+		for key in cnfKeys {
+			guard let x = Data(base64URLEncoded: key.x), let y = Data(base64URLEncoded: key.y) else {
+				throw PresentationSession.makeError(str: "Issued SD-JWT cnf JWK has invalid key coordinates")
+			}
+			let keyX963 = MdocDataModel18013.CoseKey.x963Representation(x: x, y: y)
+			let index = availableKeys.firstIndex(of: keyX963)
+			if let index {
+				publicCoseKeys.remove(at: index)
+			} else {
+				throw PresentationSession.makeError(str: "Failed to find matching public key for SD-JWT cnf binding key")
+			}
+		}
+	}
+
+	private func parseCnfBindingKeys(_ cnf: JSON) throws -> [ECPublicKey] {
+		var jwks: [JSON] = []
+		if cnf["jwk"].type == .dictionary {
+			jwks.append(cnf["jwk"])
+		} else if cnf["jwk"].type == .array {
+			jwks.append(contentsOf: cnf["jwk"].arrayValue)
+		}
+		if cnf["jwks"]["keys"].type == .array {
+			jwks.append(contentsOf: cnf["jwks"]["keys"].arrayValue)
+		}
+		guard !jwks.isEmpty else {
+			throw PresentationSession.makeError(str: "Issued SD-JWT cnf claim does not contain JWK binding keys")
+		}
+		return try jwks.map { jwk in
+			guard let kty = jwk["kty"].string, kty == "EC",
+					let curveName = jwk["crv"].string,
+					let curve = ECCurveType(rawValue: curveName),
+					let x = jwk["x"].string,
+					let y = jwk["y"].string else {
+				throw PresentationSession.makeError(str: "Issued SD-JWT cnf JWK is missing required key material")
+			}
+			return ECPublicKey(crv: curve, x: x, y: y)
+		}
 	}
 
 	private func validateVerificationResult(_ result: Result<SignedSDJWT, any Error>) throws {
@@ -935,7 +995,7 @@ public actor OpenId4VciService {
 			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a valid issuer")
 		}
 		if normalized(url: issuerURL) != normalized(url: expectedIssuer) {
-			logger.warning("Issued SD-JWT issuer does not match expected issuer")
+			logger.warning("Issued SD-JWT issuer \(issuerURL.absoluteString) does not match expected issuer \(expectedIssuer.absoluteString)")
 		}
 	}
 	/// Returns the public key from the leaf certificate.

@@ -138,7 +138,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		case .requestReceived:
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: docMetadata.compactMapValues { $0 }, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let compactDocMetadata = docMetadata.compactMapValues { $0 }
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
@@ -149,7 +150,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 					continuationRequest = nil
 				} else {
 					await userSelected(false, nil)
-					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."]))
+					let notAvailableMessage = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
+					let userInfo = [NSLocalizedDescriptionKey: notAvailableMessage]
+					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo))
 				}
 			case .failure(let err):
 				didFinishedWithError(err)
@@ -200,7 +203,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
+				let compactDocMetadata = docMetadata.compactMapValues { $0 }
+				let eReaderKey = sessionEncryption!.sessionKeys.publicKey
+				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: compactDocMetadata, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: eReaderKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
 					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
 					return
 				}

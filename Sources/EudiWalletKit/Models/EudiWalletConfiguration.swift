@@ -43,7 +43,16 @@ public struct EudiWalletConfiguration: Sendable {
 	/// Default service name for the keychain, used if no service name is provided in the initializer
 	static let defaultServiceName: String = "eudiw"
 
-	public init(serviceName: String? = nil, accessGroup: String? = nil, userAuthenticationRequired: Bool = false, trustedReaderRootCertificates: [x5chain]? = nil, deviceAuthMethod: DeviceAuthMethod = .deviceSignature, uiCulture: String? = nil, logFileName: String? = nil, bleTransferMode: BleTransferMode = .server) {
+	public init(
+		serviceName: String? = nil,
+		accessGroup: String? = nil,
+		userAuthenticationRequired: Bool = false,
+		trustedReaderRootCertificates: [x5chain]? = nil,
+		deviceAuthMethod: DeviceAuthMethod = .deviceSignature,
+		uiCulture: String? = nil,
+		logFileName: String? = nil,
+		bleTransferMode: BleTransferMode = .server
+	) {
 		self.serviceName = serviceName ?? Self.defaultServiceName
 		self.accessGroup = accessGroup
         self.userAuthenticationRequired = userAuthenticationRequired
