@@ -362,9 +362,10 @@ extension JSON {
 				let isArray = type == .array
 				let n2 = if isArray { String(n) } else { key }
 				let cmd = claimMetadata?.convertToJsonClaimMetadata(uiCulture, keyPrefix: pathPrefix)
-				let displayNameForKey = cmd?.displayNames[key]
-				let isMandatoryForKey = cmd?.mandatory[key]
-				let valueTypeForKey = cmd?.valueTypes[key]
+				let metadataLookupKey = isArray ? (pathPrefix.last ?? key) : key
+				let displayNameForKey = cmd?.displayNames[metadataLookupKey] ?? (isArray ? pathPrefix.last : nil)
+				let isMandatoryForKey = cmd?.mandatory[metadataLookupKey]
+				let valueTypeForKey = cmd?.valueTypes[metadataLookupKey]
 				if let di = subJson.toDocClaim(key: n2, order: n, pathPrefix: pathPrefix, claimMetadata: claimMetadata, uiCulture: uiCulture, displayName: displayNameForKey, mandatory: isMandatoryForKey, valueType: valueTypeForKey) {
 					a.append(di)
 				}
