@@ -87,6 +87,55 @@ struct EudiWalletKitTests {
 		}
 	}
 
+	@Test("Undisclosed SD-JWT array elements are omitted and produce no empty-object artifacts")
+	func testUndisclosedSdJwtArrayElementsOmitted() throws {
+		// Build a selective-disclosure for the array element "DE"
+		let disclosureJSONDE = "[\"randomsaltDE1234\",\"DE\"]"
+		let disclosureDE = Data(disclosureJSONDE.utf8).base64URLEncodedString()
+		let hashDE = Data(SHA256.hash(data: Data(disclosureDE.utf8))).base64URLEncodedString()
+		// Build the hash for a "FR" element that is NOT disclosed
+		let disclosureJSONFR = "[\"randomsaltFR5678\",\"FR\"]"
+		let disclosureFR = Data(disclosureJSONFR.utf8).base64URLEncodedString()
+		let hashFR = Data(SHA256.hash(data: Data(disclosureFR.utf8))).base64URLEncodedString()
+		// SD-JWT payload: two selective-disclosure array elements; only "DE" has a matching disclosure
+		let payload = JSON(parseJSON: "{\"nationalities\": [{\"...\": \"\(hashDE)\"}, {\"...\": \"\(hashFR)\"}]}")
+		let resolved = StorageManager.resolveNestedSdClaims(payload, disclosures: [disclosureDE], hashingAlg: "sha-256")
+		print("Nationalities disclosures — DE: \(disclosureDE), FR: \(disclosureFR)")
+		// The undisclosed element must be omitted, leaving only "DE"
+		let nationalities = resolved["nationalities"].arrayValue.map(\.stringValue)
+		#expect(nationalities == ["DE"], "Expected only the disclosed element 'DE', got: \(nationalities)")
+		// No DocClaim produced for the resolved array should carry an empty-object value
+		let metadata = [DocClaimMetadata(display: [DisplayMetadata(name: "nationalities", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)], isMandatory: false, claimPath: ["nationalities"], valueType: nil)]
+		let docClaims = resolved.toClaimsArray(pathPrefix: [], metadata, "en")?.0 ?? []
+		let nationalitiesClaim = docClaims.first { $0.name == "nationalities" }
+		let emptyChildren = nationalitiesClaim?.children?.filter { $0.stringValue == "{}" } ?? []
+		#expect(emptyChildren.isEmpty, "Expected no empty-object '{}' children, got: \(emptyChildren)")
+		let firstChildDisplayName = nationalitiesClaim?.children?.first?.displayName
+		#expect(firstChildDisplayName == "nationalities", "Expected array child display name to be parent claim name, got: \(String(describing: firstChildDisplayName))")
+	}
+
+	@Test("Issue 371 — Real SD-JWT credential (pid-de) resolves array without empty-object artifacts")
+	func testIssue371SdJwtPidDeArrayResolution() throws {
+		// Load the real SD-JWT credential that contains selectively disclosed array claims
+		guard let sdJwtData = Data(name: "sjwt-pid-de", ext: "txt", from: Bundle.module) else {
+			Issue.record("Failed to load sjwt-pid-de.txt")
+			return
+		}
+		let serialized = try #require(String(data: sdJwtData, encoding: .utf8))
+		let parser = CompactParser()
+		let sdJwt = try parser.getSignedSdJwt(serialisedString: serialized)
+		let result = try sdJwt.recreateClaims()
+		let resolved = StorageManager.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
+				// No DocClaim produced for the resolved array should carry an empty-object value
+		let metadata = [DocClaimMetadata(display: [DisplayMetadata(name: "nationalities", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)], isMandatory: false, claimPath: ["nationalities"], valueType: nil)]
+		let docClaims = resolved.toClaimsArray(pathPrefix: [], metadata, "en")?.0 ?? []
+		let nationalitiesClaim = docClaims.first { $0.name == "nationalities" }
+		let emptyChildren = nationalitiesClaim?.children?.filter { $0.stringValue == "{}" } ?? []
+		#expect(emptyChildren.isEmpty, "Expected no empty-object '{}' children, got: \(emptyChildren)")
+		let firstChildDisplayName = nationalitiesClaim?.children?.first?.displayName
+		#expect(firstChildDisplayName == "nationalities", "Expected array child display name to be parent claim name, got: \(String(describing: firstChildDisplayName))")
+	}
+
 	@Test("Dev Python issuer metadata decodes SD-JWT mDL portrait as bytes")
 	func testDevPythonIssuerMetadataDecodesSdJwtMdlPortraitAsBytes() throws {
 		let issuerData = try #require(Data(name: "dev-python-openid-credential-issuer", ext: "json", from: Bundle.module))
