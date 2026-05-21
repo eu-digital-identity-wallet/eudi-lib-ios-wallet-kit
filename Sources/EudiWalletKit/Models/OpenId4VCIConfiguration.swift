@@ -66,7 +66,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		trustedIssuerCertificates: [x5chain]? = nil
 	) {
 		self.credentialIssuerURL = credentialIssuerURL
-		self.clientId = clientId ?? "wallet-dev"
+		self.clientId = clientId ?? "eudiw-abca"
 		self.keyAttestationsConfig = keyAttestationsConfig
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
