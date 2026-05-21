@@ -376,15 +376,12 @@ extension OpenId4VciService {
 				}
 				let deferredModel = await DeferredIssuanceModel(
 					deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!,
-					accessToken: authorized.accessToken,
-					refreshToken: authorized.refreshToken,
 					transactionId: transactionId,
 					publicKeys: publicKeys,
 					derKeyData: derKeyData,
-					configuration: configuration,
 					timeStamp: authorized.timeStamp
 				)
-				return .deferred(deferredModel)
+				return .deferred(deferredModel, configuration, authorized)
 			case .issued(let format, _, _, _):
 				let credentials = response.credentialResponses.compactMap {
 					if case let .issued(_, credential, _, _) = $0 { credential } else { nil }

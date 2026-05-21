@@ -292,12 +292,15 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			}
 			return result
 		case .array:
-			let resolved = json.arrayValue.map { element -> JSON in
-				// Handle array elements with "..." (decoy digests)
+			let resolved = json.arrayValue.compactMap { element -> JSON? in
+				// Selectively disclosable array elements use {"...": "<digest>"}.
+				// If a matching disclosure exists, replace the element with its disclosed value.
+				// If no matching disclosure exists, the element is undisclosed and must be omitted.
 				if element.type == .dictionary, let dots = element["..."].string {
-					if let disclosure = hashToDisclosure[dots], disclosure.arrayValue.count >= 2 {
-						return resolveNode(disclosure[1], hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+					guard let disclosure = hashToDisclosure[dots], disclosure.arrayValue.count >= 2 else {
+						return nil
 					}
+					return resolveNode(disclosure[1], hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
 				}
 				return resolveNode(element, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
 			}

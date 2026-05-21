@@ -80,12 +80,9 @@ struct CredentialConfiguration: Codable, Sendable {
 
 struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
-	let accessToken: IssuanceAccessToken
-	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
 	let publicKeys: [Data]
 	let derKeyData: Data?
-	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }
 
@@ -104,14 +101,14 @@ struct PendingIssuanceModel: Codable {
 
 enum IssuanceOutcome {
 	case issued([(data: Data, publicKey: Data)], CredentialConfiguration, AuthorizedRequest)
-	case deferred(DeferredIssuanceModel)
+	case deferred(DeferredIssuanceModel, CredentialConfiguration, AuthorizedRequest)
 	case pending(PendingIssuanceModel)
 }
 
 extension IssuanceOutcome {
 	var isDeferred: Bool {
 		switch self {
-		case .deferred(_): true
+		case .deferred(_, _, _): true
 		default: false
 		}
 	}
@@ -123,7 +120,7 @@ extension IssuanceOutcome {
 	}
 	var pendingOrDeferredStatus: DocumentStatus? {
 		switch self {
-		case .deferred(_): .deferred
+		case .deferred(_, _, _): .deferred
 		case .pending(_): .pending
 		default: nil
 		}
