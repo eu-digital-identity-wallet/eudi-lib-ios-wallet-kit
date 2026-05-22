@@ -40,6 +40,31 @@ func secCall<Result>(_ body: (_ resultPtr: UnsafeMutablePointer<Unmanaged<CFErro
     return result
 }
 
+func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeSupportedMeta]) -> (
+	jwtProofType: ProofTypeSupportedMeta?,
+	jwtProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
+	attestProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
+	supportsAttestationProofType: Bool,
+	supportsJwtProofTypeWithoutAttestation: Bool,
+	supportsJwtProofTypeWithAttestation: Bool
+) {
+	let jwtProofType = proofTypesSupported["jwt"]
+	let attestProofType = proofTypesSupported["attestation"]
+	let jwtProofTypeKeyAttestationRequirement = jwtProofType?.keyAttestationRequirement
+	let attestProofTypeKeyAttestationRequirement = attestProofType?.keyAttestationRequirement
+	let supportsAttestationProofType = attestProofType != nil && attestProofTypeKeyAttestationRequirement != .notRequired
+	let supportsJwtProofTypeWithoutAttestation = jwtProofType != nil && (jwtProofTypeKeyAttestationRequirement == nil || jwtProofTypeKeyAttestationRequirement == .notRequired)
+	let supportsJwtProofTypeWithAttestation = jwtProofType != nil && !supportsJwtProofTypeWithoutAttestation
+	return (
+		jwtProofType,
+		jwtProofTypeKeyAttestationRequirement,
+		attestProofTypeKeyAttestationRequirement,
+		supportsAttestationProofType,
+		supportsJwtProofTypeWithoutAttestation,
+		supportsJwtProofTypeWithAttestation
+	)
+}
+
 extension Display {
 	public var displayMetadata: MdocDataModel18013.DisplayMetadata {
 		let logoMetadata = LogoMetadata(urlString: logo?.uri?.absoluteString, alternativeText: logo?.alternativeText)
