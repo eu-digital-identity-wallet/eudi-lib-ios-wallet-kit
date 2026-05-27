@@ -39,7 +39,7 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
 	}
 
-	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
+	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
 		throw error
 	}
 

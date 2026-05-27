@@ -57,3 +57,21 @@ The following example shows how to delete a document:
 try await wallet.deleteDocument(id: documentId, status: .issued)
 ```
 To delete all documents you can use ``EudiWallet/deleteAllDocuments()``
+
+
+### Refreshing usage counters
+
+The ``EudiWallet/refreshUsageCounters()`` method synchronizes the wallet's cached usage counter values with the actual state on the device.
+
+Usage counters track how many times a document can be presented (for one-time use policies). When a presentation occurs in another application (such as DC-API extension) that shares access to the secure area, the wallet's cached counters may become out of sync. This method refreshes those cached values so that the wallet displays accurate remaining presentation counts.
+
+When a counter value changes, the corresponding document model publishes the change, allowing SwiftUI views to automatically update.
+
+The recommended approach is to refresh usage counters when your app returns to the foreground, ensuring that any presentations that occurred in other apps are reflected in the wallet:
+
+```swift
+.onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+    Task { try? await wallet.refreshUsageCounters() }
+}
+```
+

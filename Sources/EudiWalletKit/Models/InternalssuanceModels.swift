@@ -39,7 +39,25 @@ struct CredentialConfiguration: Codable, Sendable {
    	let format: DocDataFormat
 	let defaultCredentialOptions: CredentialOptions
 
-	init(configurationIdentifier: CredentialConfigurationIdentifier, credentialIssuerIdentifier: String, docType: String? = nil, vct: String? = nil, scope: String? = nil, supportsAttestationProofType: Bool, supportsJwtProofTypeWithAttestation: Bool, supportsJwtProofTypeWithoutAttestation: Bool,  credentialSigningAlgValuesSupported: [String], dpopSigningAlgValuesSupported: [String]?, clientAttestationPopSigningAlgValuesSupported: [String]?, issuerDisplay: [DisplayMetadata], display: [DisplayMetadata], claims: [Claim], credentialMetadata: ConfigurationCredentialMetadata? = nil, format: DocDataFormat, defaultCredentialOptions: CredentialOptions) {
+	init(
+		configurationIdentifier: CredentialConfigurationIdentifier,
+		credentialIssuerIdentifier: String,
+		docType: String? = nil,
+		vct: String? = nil,
+		scope: String? = nil,
+		supportsAttestationProofType: Bool,
+		supportsJwtProofTypeWithAttestation: Bool,
+		supportsJwtProofTypeWithoutAttestation: Bool,
+		credentialSigningAlgValuesSupported: [String],
+		dpopSigningAlgValuesSupported: [String]?,
+		clientAttestationPopSigningAlgValuesSupported: [String]?,
+		issuerDisplay: [DisplayMetadata],
+		display: [DisplayMetadata],
+		claims: [Claim],
+		credentialMetadata: ConfigurationCredentialMetadata? = nil,
+		format: DocDataFormat,
+		defaultCredentialOptions: CredentialOptions
+	) {
 		self.configurationIdentifier = configurationIdentifier
 		self.credentialIssuerIdentifier = credentialIssuerIdentifier
 		self.docType = docType
@@ -62,12 +80,9 @@ struct CredentialConfiguration: Codable, Sendable {
 
 struct DeferredIssuanceModel: Codable, Sendable {
 	let deferredCredentialEndpoint: CredentialIssuerEndpoint
-	let accessToken: IssuanceAccessToken
-	let refreshToken: IssuanceRefreshToken?
 	let transactionId: TransactionId
 	let publicKeys: [Data]
 	let derKeyData: Data?
-	let configuration: CredentialConfiguration
 	let timeStamp: TimeInterval
 }
 
@@ -85,15 +100,15 @@ struct PendingIssuanceModel: Codable {
 }
 
 enum IssuanceOutcome {
-	case issued([(data: Data, pk: Data)], CredentialConfiguration, AuthorizedRequest)
-	case deferred(DeferredIssuanceModel)
+	case issued([(data: Data, publicKey: Data)], CredentialConfiguration, AuthorizedRequest)
+	case deferred(DeferredIssuanceModel, CredentialConfiguration, AuthorizedRequest)
 	case pending(PendingIssuanceModel)
 }
 
 extension IssuanceOutcome {
 	var isDeferred: Bool {
 		switch self {
-		case .deferred(_): true
+		case .deferred(_, _, _): true
 		default: false
 		}
 	}
@@ -105,7 +120,7 @@ extension IssuanceOutcome {
 	}
 	var pendingOrDeferredStatus: DocumentStatus? {
 		switch self {
-		case .deferred(_): .deferred
+		case .deferred(_, _, _): .deferred
 		case .pending(_): .pending
 		default: nil
 		}

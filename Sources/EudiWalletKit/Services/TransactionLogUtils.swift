@@ -21,7 +21,9 @@ class TransactionLogUtils {
 
 	static func setCborTransactionLogResponseInfo(_ bleService: BlePresentationService, transactionLog: inout TransactionLog) {
 		let sessionTranscript: Data? = if let stb = bleService.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: bleService.deviceResponseBytes, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: bleService.responseMetadata)
+		let rawResponse = bleService.deviceResponseBytes
+		let responseMetadata = bleService.responseMetadata
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: rawResponse, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: responseMetadata)
 	}
 
 	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, transactionLog: inout TransactionLog) {
@@ -34,7 +36,11 @@ class TransactionLogUtils {
 
 	static func getRelyingParty(_ requestInfo: UserRequestInfo) -> TransactionLog.RelyingParty? {
 		guard let name = requestInfo.defaultReaderAuthResult?.certificateIssuer else { return nil }
-		return TransactionLog.RelyingParty(name: name, isVerified: requestInfo.defaultReaderAuthResult?.isValidated ?? false, certificateChain: requestInfo.defaultReaderAuthResult?.certificateChain ?? [], readerAuth: requestInfo.defaultReaderAuthResult?.authBytes)
+		let defaultReaderAuthResult = requestInfo.defaultReaderAuthResult
+		let isVerified = defaultReaderAuthResult?.isValidated ?? false
+		let certificateChain = defaultReaderAuthResult?.certificateChain ?? []
+		let readerAuth = defaultReaderAuthResult?.authBytes
+		return TransactionLog.RelyingParty(name: name, isVerified: isVerified, certificateChain: certificateChain, readerAuth: readerAuth)
 	}
 
 	static func parseDocClaimsDecodables(_ transactionLog: TransactionLog, uiCulture: String?) -> [DocClaimsModel] {
@@ -80,7 +86,8 @@ class TransactionLogUtils {
 	}
 
 	static func parseCBORDocClaimsDecodable(id: String, docType: String, issuerSigned: IssuerSigned, metadata: Data?, uiCulture: String?) -> DocClaimsModel? {
-		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: Data(issuerSigned.encode(options: CBOROptions())), docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
+		let encodedIssuerSigned = Data(issuerSigned.encode(options: CBOROptions()))
+		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: encodedIssuerSigned, docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
 		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil)
 	}
 

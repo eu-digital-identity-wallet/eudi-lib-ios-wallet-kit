@@ -22,7 +22,7 @@ struct FileHandlerOutputStream: TextOutputStream, Sendable {
     enum FileHandlerOutputStream: Error {
         case couldNotCreateFile
     }
-    
+
     private let fileHandle: FileHandle
     let encoding: String.Encoding
 
@@ -32,7 +32,7 @@ struct FileHandlerOutputStream: TextOutputStream, Sendable {
                 throw FileHandlerOutputStream.couldNotCreateFile
             }
         }
-        
+
         let fileHandle = try FileHandle(forWritingTo: url)
         fileHandle.seekToEndOfFile()
         self.fileHandle = fileHandle
@@ -49,16 +49,16 @@ struct FileHandlerOutputStream: TextOutputStream, Sendable {
 public struct FileLogging {
     let stream: FileHandlerOutputStream
     private var localFile: URL
-    
+
     public init(to localFile: URL) throws {
         self.stream = try FileHandlerOutputStream(localFile: localFile)
         self.localFile = localFile
     }
-    
+
     public func handler(label: String) -> FileLogHandler {
         return FileLogHandler(label: label, fileLogger: self)
     }
-    
+
     public static func logger(label: String, localFile url: URL) throws -> Logger {
         let logging = try FileLogging(to: url)
         return Logger(label: label, factory: logging.handler)
@@ -66,13 +66,13 @@ public struct FileLogging {
 }
 
 // Adapted from https://github.com/apple/swift-log.git
-        
+
 /// `FileLogHandler` is a simple implementation of `LogHandler` for directing
 /// `Logger` output to a local file. Appends log output to this file, even across constructor calls.
 public struct FileLogHandler: LogHandler {
     private let stream: FileHandlerOutputStream
     private var label: String
-    
+
     public var logLevel: Logger.Level = .info
 
     private var prettyMetadata: String?
@@ -90,7 +90,7 @@ public struct FileLogHandler: LogHandler {
             self.metadata[metadataKey] = newValue
         }
     }
-    
+
     public init(label: String, fileLogger: FileLogging) {
         self.label = label
         self.stream = fileLogger.stream
@@ -101,19 +101,13 @@ public struct FileLogHandler: LogHandler {
         self.stream = try FileHandlerOutputStream(localFile: url)
     }
 
-    public func log(level: Logger.Level,
-                    message: Logger.Message,
-                    metadata: Logger.Metadata?,
-                    source: String,
-                    file: String,
-                    function: String,
-                    line: UInt) {
-        let prettyMetadata = metadata?.isEmpty ?? true
+    public func log(event: LogEvent) {
+        let prettyMetadata = event.metadata?.isEmpty ?? true
             ? self.prettyMetadata
-            : self.prettify(self.metadata.merging(metadata!, uniquingKeysWith: { _, new in new }))
+            : self.prettify(self.metadata.merging(event.metadata!, uniquingKeysWith: { _, new in new }))
 
         var stream = self.stream
-        stream.write("\(self.timestamp()) \(level) \(self.label) :\(prettyMetadata.map { " \($0)" } ?? "") \(message)\n")
+        stream.write("\(self.timestamp()) \(event.level) \(self.label) :\(prettyMetadata.map { " \($0)" } ?? "") \(event.message)\n")
     }
 
     private func prettify(_ metadata: Logger.Metadata) -> String? {

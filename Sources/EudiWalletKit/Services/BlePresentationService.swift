@@ -76,7 +76,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	// Create a new device engagement object and start the device engagement process.
 	///
 	/// ``qrCodePayload`` is set to QR code data corresponding to the device engagement.
-	public func performDeviceEngagement(secureArea: any SecureArea, crv: CoseEcCurve, rfus: [String]? = nil) async throws {
+	public func performDeviceEngagement(secureArea: any SecureArea, keyOptions: KeyOptions, rfus: [String]? = nil) async throws {
 		if unlockData == nil {
 			unlockData = [String: Data]()
 			for (id, key) in privateKeyObjects {
@@ -98,7 +98,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 			throw MdocHelpers.makeError(code: .invalidInputDocument)
 		}
 		deviceEngagement = DeviceEngagement(supportsCentralClientMode: bleTransferMode == .client || bleTransferMode == .both, supportsPeripheralServerMode: bleTransferMode == .server || bleTransferMode == .both, rfus: rfus)
-		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
+		try await deviceEngagement!.makePrivateKey(secureArea: secureArea, keyOptions: keyOptions)
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
@@ -123,8 +123,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
-	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
-		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), crv: crv)
+	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
+		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), keyOptions: keyOptions)
 		return status == .qrEngagementReady ? (qrCodePayload ?? "") : ""
 	}
 
@@ -138,7 +138,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		case .requestReceived:
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: docMetadata.compactMapValues { $0 }, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let compactDocMetadata = docMetadata.compactMapValues { $0 }
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
@@ -149,7 +150,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 					continuationRequest = nil
 				} else {
 					await userSelected(false, nil)
-					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: [NSLocalizedDescriptionKey: "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."]))
+					let notAvailableMessage = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
+					let userInfo = [NSLocalizedDescriptionKey: notAvailableMessage]
+					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo))
 				}
 			case .failure(let err):
 				didFinishedWithError(err)
@@ -200,7 +203,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
-				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: docMetadata.compactMapValues { $0 }, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: sessionEncryption!.sessionKeys.publicKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
+				let compactDocMetadata = docMetadata.compactMapValues { $0 }
+				let eReaderKey = sessionEncryption!.sessionKeys.publicKey
+				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: compactDocMetadata, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: eReaderKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
 					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
 					return
 				}
