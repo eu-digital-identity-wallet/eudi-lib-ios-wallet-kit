@@ -30,7 +30,7 @@ public protocol PresentationService: Sendable {
 	/// instance of a presentation ``FlowType``
 	var flow: FlowType { get }
 	/// Generate a QR code to be shown to verifier (optional)
-	func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String
+	func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String
 	/// Receive request.
 	func receiveRequest() async throws -> UserRequestInfo
 

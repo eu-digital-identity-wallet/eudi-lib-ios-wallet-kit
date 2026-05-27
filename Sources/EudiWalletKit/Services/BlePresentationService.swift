@@ -76,7 +76,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	// Create a new device engagement object and start the device engagement process.
 	///
 	/// ``qrCodePayload`` is set to QR code data corresponding to the device engagement.
-	public func performDeviceEngagement(secureArea: any SecureArea, crv: CoseEcCurve, rfus: [String]? = nil) async throws {
+	public func performDeviceEngagement(secureArea: any SecureArea, keyOptions: KeyOptions, rfus: [String]? = nil) async throws {
 		if unlockData == nil {
 			unlockData = [String: Data]()
 			for (id, key) in privateKeyObjects {
@@ -98,7 +98,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 			throw MdocHelpers.makeError(code: .invalidInputDocument)
 		}
 		deviceEngagement = DeviceEngagement(supportsCentralClientMode: bleTransferMode == .client || bleTransferMode == .both, supportsPeripheralServerMode: bleTransferMode == .server || bleTransferMode == .both, rfus: rfus)
-		try await deviceEngagement!.makePrivateKey(crv: crv, secureArea: secureArea)
+		try await deviceEngagement!.makePrivateKey(secureArea: secureArea, keyOptions: keyOptions)
 		sessionEncryption = nil
 #if os(iOS)
 		qrCodePayload = deviceEngagement!.getQrCodePayload()
@@ -123,8 +123,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 
 	/// The holder app should present the returned code to the verifier
 	/// - Returns: The image data for the QR code
-	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
-		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), crv: crv)
+	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
+		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), keyOptions: keyOptions)
 		return status == .qrEngagementReady ? (qrCodePayload ?? "") : ""
 	}
 
