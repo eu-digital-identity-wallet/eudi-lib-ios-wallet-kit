@@ -132,7 +132,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
 		do {
-			let data = try await presentationService.startQrEngagement(secureAreaName: nil, crv: .P256)
+			let data = try await presentationService.startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256, accessControl: []))
 			await MainActor.run {
 				deviceEngagement = data
 				status = .qrEngagementReady

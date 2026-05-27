@@ -83,7 +83,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
-	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
+	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
 		if unlockData == nil {
 			unlockData = [String: Data]()
 			for (id, key) in transferInfo.privateKeyObjects {
@@ -241,7 +241,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		zkpDocumentIds = [String]()
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
-		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
+		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256)) }
 		// tuples of inputDescriptor-id, docId and verifiable presentation
 		// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
 		var inputToPresentations = [(String, String?, VerifiablePresentation)]()
