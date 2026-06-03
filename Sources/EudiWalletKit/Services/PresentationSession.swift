@@ -172,7 +172,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			try await decodeRequest(request)
 			return request
 		} catch {
-			await setError(error.localizedDescription)
+			let walletError = error as? WalletError
+			await setError(error.localizedDescription, localizationKey: walletError?.localizationKey, code: walletError?.code)
 			return nil
 		}
 	}
