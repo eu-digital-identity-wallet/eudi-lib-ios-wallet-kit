@@ -582,7 +582,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let docMetadata = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.metadata))
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.docType) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(eudiWalletConfig.uiCulture)) })
-		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, StorageManager.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
+		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, SdJwtUtils.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
 		let iaca = eudiWalletConfig.trustedReaderRootCertificates ?? []
 		let dataFormats = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt))
 		let deviceAuthMethod = eudiWalletConfig.deviceAuthMethod.rawValue
