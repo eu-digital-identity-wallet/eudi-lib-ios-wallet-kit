@@ -184,9 +184,10 @@ To use attestation-based authentication, implement the `WalletAttestationsProvid
 ```swift
 // Implement the WalletAttestationsProvider protocol
 struct MyAttestationProvider: WalletAttestationsProvider {
-    func getWalletAttestation(key: any JWK) async throws -> String {
+    func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
         // Obtain wallet attestation JWT from your attestation service
-        // The attestation should be bound to the provided public key
+        // Use getPublicJWK() to get the public key bound to the attestation
+        let key = try signingKey.getPublicJWK()
         return try await attestationService.getWalletAttestation(for: key)
     }
     
