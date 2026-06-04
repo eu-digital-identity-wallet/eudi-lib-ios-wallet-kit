@@ -116,8 +116,9 @@ extension OpenId4VciConfiguration {
 			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey, let privateKeyId { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
 			let publicCoseKey: CoseKey = if let existingPublicKey { existingPublicKey } else {
 				(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first! }
+			let publicKeyJwk = try publicCoseKey.jwk
 			let unlockData = try await secureArea.unlockKey(id: keyId)
-			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
+			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
 			signingKeyProxy = .custom(signer)
 			publicKey = try publicCoseKey.toSecKey()
 		} else {
@@ -159,7 +160,7 @@ extension OpenId4VciConfiguration {
 		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else {
 			throw PresentationSession.makeError(str: "Failed to create DPoP constructor for client attestation")
 		}
-		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: popConstructor.jwk)
+		let attestation = try await config.walletAttestationsProvider.getWalletAttestation(signingKey: popConstructor.privateKey)
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: popConstructor.algorithm.name) else {
 			throw PresentationSession.makeError(str: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation")
 		}

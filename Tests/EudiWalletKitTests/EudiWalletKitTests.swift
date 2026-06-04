@@ -564,7 +564,7 @@ final class RecordingWalletAttestationsProvider: WalletAttestationsProvider, @un
 
 	private(set) var lastRequest: (keyThumbprints: [String], nonce: String?)?
 
-	func getWalletAttestation(key: any JWK) async throws -> String {
+	func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
 		Self.attestation
 	}
 
