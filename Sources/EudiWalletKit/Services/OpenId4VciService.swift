@@ -687,7 +687,16 @@ public actor OpenId4VciService {
 		let issuer = try await getIssuer(offer: offer)
 		logger.info("Starting issuing with identifer \(model.configuration.configurationIdentifier.value)")
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorizationCodeURL = try AuthorizationCodeURL(urlString: webUrl.absoluteString)
+		// Append client_id if missing from the redirect URL (fixes presentation-during-issuance flow, see #376)
+		var authCodeUrlString = webUrl.absoluteString
+		if var components = URLComponents(url: webUrl, resolvingAgainstBaseURL: false),
+		   !(components.queryItems ?? []).contains(where: { $0.name == AuthorizationCodeURL.PARAM_CLIENT_ID }) {
+			var items = components.queryItems ?? []
+			items.append(URLQueryItem(name: AuthorizationCodeURL.PARAM_CLIENT_ID, value: config.clientId))
+			components.queryItems = items
+			if let updatedUrl = components.string { authCodeUrlString = updatedUrl }
+		}
+		let authorizationCodeURL = try AuthorizationCodeURL(urlString: authCodeUrlString)
 		let request = AuthorizationRequested(
 			credentials: [try .init(value: model.configuration.configurationIdentifier.value)],
 			authorizationCodeURL: authorizationCodeURL, pkceVerifier: pkceVerifier, state: model.state,
