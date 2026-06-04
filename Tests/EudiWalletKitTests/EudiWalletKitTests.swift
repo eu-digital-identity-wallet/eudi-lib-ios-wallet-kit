@@ -61,7 +61,7 @@ struct EudiWalletKitTests {
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
 		let result = try sdJwt.recreateClaims()
-		let resolved = StorageManager.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
 		return (resolved, sdJwt.disclosures)
 	}
 
@@ -99,7 +99,7 @@ struct EudiWalletKitTests {
 		let hashFR = Data(SHA256.hash(data: Data(disclosureFR.utf8))).base64URLEncodedString()
 		// SD-JWT payload: two selective-disclosure array elements; only "DE" has a matching disclosure
 		let payload = JSON(parseJSON: "{\"nationalities\": [{\"...\": \"\(hashDE)\"}, {\"...\": \"\(hashFR)\"}]}")
-		let resolved = StorageManager.resolveNestedSdClaims(payload, disclosures: [disclosureDE], hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(payload, disclosures: [disclosureDE], hashingAlg: "sha-256")
 		print("Nationalities disclosures — DE: \(disclosureDE), FR: \(disclosureFR)")
 		// The undisclosed element must be omitted, leaving only "DE"
 		let nationalities = resolved["nationalities"].arrayValue.map(\.stringValue)
@@ -125,7 +125,7 @@ struct EudiWalletKitTests {
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: serialized)
 		let result = try sdJwt.recreateClaims()
-		let resolved = StorageManager.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
 				// No DocClaim produced for the resolved array should carry an empty-object value
 		let metadata = [DocClaimMetadata(display: [DisplayMetadata(name: "nationalities", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)], isMandatory: false, claimPath: ["nationalities"], valueType: nil)]
 		let docClaims = resolved.toClaimsArray(pathPrefix: [], metadata, "en")?.0 ?? []
@@ -157,7 +157,7 @@ struct EudiWalletKitTests {
 		let sdJwtData = try #require(Data(name: "sjwt-mdl", ext: "txt", from: Bundle.module))
 		let document = WalletStorage.Document(id: "sjwt-mdl", docType: configuration.docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: nil, createdAt: .now, metadata: docMetadata.toData(), displayName: nil, status: .issued)
 
-		let model = try #require(StorageManager.toSdJwtDocModel(doc: document, uiCulture: "en"))
+		let model = try #require(SdJwtUtils.toSdJwtDocModel(doc: document, uiCulture: "en"))
 		#expect(model.docType == "org.iso.18013.5.1.mDL")
 		#expect(model.docDataFormat == .sdjwt)
 
@@ -441,7 +441,7 @@ struct EudiWalletKitTests {
 			publicKey = issuerSigned.issuerAuth.mso.deviceKeyInfo.deviceKey
 		} else {
 			let serialized = try #require(String(data: original, encoding: .utf8))
-			let (_, payload, _) = StorageManager.extractJWTParts(serialized)
+			let (_, payload, _) = SdJwtUtils.extractJWTParts(serialized)
 			let payloadData = try #require(Data(base64URLEncoded: payload))
 			let payloadJson = try JSON(data: payloadData)
 			let jwk = payloadJson["cnf"]["jwk"]
@@ -470,7 +470,7 @@ struct EudiWalletKitTests {
 	}
 
 	private func makeIssuerJwkData(from serialized: String) throws -> Data {
-		let (header, _, _) = StorageManager.extractJWTParts(serialized)
+		let (header, _, _) = SdJwtUtils.extractJWTParts(serialized)
 		let headerData = try #require(Data(base64URLEncoded: header))
 		let headerJson = try JSON(data: headerData)
 		let certificateBase64 = try #require(headerJson["x5c"].array?.first?.string)
@@ -564,7 +564,7 @@ final class RecordingWalletAttestationsProvider: WalletAttestationsProvider, @un
 
 	private(set) var lastRequest: (keyThumbprints: [String], nonce: String?)?
 
-	func getWalletAttestation(key: any JWK) async throws -> String {
+	func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
 		Self.attestation
 	}
 
