@@ -94,6 +94,40 @@ class OpenId4VpUtils {
 		}
 		return requestItems
 	}
+	
+	static func getTransactionDataRequested(idsToDocTypes: [Document.ID: DocType], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
+		var requestTransactionData: RequestTransactionData = [:]
+		for transactionData in transactionDataList {
+			let type = try transactionData.type()
+			let credentialIds = try transactionData.credentialIds()
+			let parameters = try transactionData.decode()
+			for credentialId in credentialIds {
+				if let docType = idsToDocTypes[credentialId.value] {
+					if (requestTransactionData[docType] == nil) {
+						requestTransactionData[docType] = [:]
+					}
+					requestTransactionData[docType]![type.value] = parameters
+					break
+				}
+			}
+		}
+		return requestTransactionData
+	}
+	
+	static func getVerifierInfoRequested(idsToDocTypes: [Document.ID: DocType], verifierInfoList: [VerifierInfo]) -> RequestVerifierInfo {
+		var requestVerifierInfo: RequestVerifierInfo = [:]
+		for verifierInfo in verifierInfoList {
+			for credentialId in verifierInfo.credentialIds?.map({ $0.value }) ?? idsToDocTypes.keys.map({ $0 }) {
+				if let docType = idsToDocTypes[credentialId] {
+					if (requestVerifierInfo[docType] == nil) {
+						requestVerifierInfo[docType] = [:]
+					}
+					requestVerifierInfo[docType]![verifierInfo.format] = verifierInfo.data
+				}
+			}
+		}
+		return requestVerifierInfo
+	}
 
 	/// parse claim-query and return (namespace, itemIdentifier) pair
 	static func parseClaim(_ claim: ClaimsQuery, _ docDataFormat: DocDataFormat) -> (String, RequestItem)? {
@@ -123,7 +157,7 @@ class OpenId4VpUtils {
 		  // Process transaction data hashes if available
 		if let transactionData, !transactionData.isEmpty {
 			let transactionDataHashes = transactionData.map { td -> String in
-				switch td {	case .sdJwtVc(let v): return sha256Hash(v) }
+				return sha256Hash(td.value)
 			}
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
