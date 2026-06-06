@@ -149,20 +149,20 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 			self.dcql = dcql
 			deviceRequestBytes = try? JSONEncoder().encode(dcql)
-			let (fmtsReq, imap, zkSpecMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
+			let (fmtsReq, imap, zkSpecMap, dcqlDocTypeMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
 			decodeDocuments()
 			let claimMapPath = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
 			requestItems = OpenId4VpUtils.getRequestItems(claimMapPath, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
+			if (transactionData != nil) {
+				transactionDataRequested = try OpenId4VpUtils.getTransactionDataRequested(dcqlDocTypeMap: dcqlDocTypeMap, transactionDataList: transactionData!)
+			}
+			if (verifierInfo != nil) {
+				verifierInfoRequested = OpenId4VpUtils.getVerifierInfoRequested(dcqlDocTypeMap: dcqlDocTypeMap, verifierInfoList: verifierInfo!)
+			}
 		}
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-		if (transactionData != nil) {
-			transactionDataRequested = try OpenId4VpUtils.getTransactionDataRequested(idsToDocTypes: transferInfo.idsToDocTypes, transactionDataList: transactionData!)
-		}
-		if (verifierInfo != nil) {
-			verifierInfoRequested = OpenId4VpUtils.getVerifierInfoRequested(idsToDocTypes: transferInfo.idsToDocTypes, verifierInfoList: verifierInfo!)
-		}
 		var result = UserRequestInfo(
 			docDataFormats: formatsRequested,
 			itemsRequested: requestItems,

@@ -63,10 +63,11 @@ class OpenId4VpUtils {
 	}
 
 	/// Parse DCQL into request items (docType -> namespaced items), formats requested (docType -> dataFormat) and input descriptor map (docType -> credentialQueryId)
-	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [Document.ID: DocType], logger: Logger? = nil) throws -> (formatsRequested: [DocType: DocDataFormat], inputDescriptorMap: [DocType: String], zkSpecsRequested: [DocType: [ZkSystemSpec]]?) {
+	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [Document.ID: DocType], logger: Logger? = nil) throws -> (formatsRequested: [DocType: DocDataFormat], inputDescriptorMap: [DocType: String], zkSpecsRequested: [DocType: [ZkSystemSpec]]?, dcqlDocTypeMap: [String: DocType]) {
 		var inputDescriptorMap = [DocType: String]()
 		var formatsRequested = [DocType: DocDataFormat]()
 		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
+		var dcqlDocTypeMap = [String: DocType]()
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
 			guard let docType = credQuery.docType else { continue }
@@ -76,8 +77,9 @@ class OpenId4VpUtils {
 				if zkSpecsRequested == nil { zkSpecsRequested = [:] }
 				zkSpecsRequested![docType] = zkSpecs
 			}
+			dcqlDocTypeMap[credQuery.id.value] = docType
 		}
-		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
+		return (formatsRequested, inputDescriptorMap, zkSpecsRequested, dcqlDocTypeMap)
 	}
 
 	static func getRequestItems(_ credentialMaps: [Document.ID: [ClaimsQuery]], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
@@ -95,14 +97,14 @@ class OpenId4VpUtils {
 		return requestItems
 	}
 	
-	static func getTransactionDataRequested(idsToDocTypes: [Document.ID: DocType], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
+	static func getTransactionDataRequested(dcqlDocTypeMap: [String: DocType], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
 		var requestTransactionData: RequestTransactionData = [:]
 		for transactionData in transactionDataList {
 			let type = try transactionData.type()
 			let credentialIds = try transactionData.credentialIds()
 			let parameters = try transactionData.decode()
 			for credentialId in credentialIds {
-				if let docType = idsToDocTypes[credentialId.value] {
+				if let docType = dcqlDocTypeMap[credentialId.value] {
 					if (requestTransactionData[docType] == nil) {
 						requestTransactionData[docType] = [:]
 					}
@@ -114,11 +116,11 @@ class OpenId4VpUtils {
 		return requestTransactionData
 	}
 	
-	static func getVerifierInfoRequested(idsToDocTypes: [Document.ID: DocType], verifierInfoList: [VerifierInfo]) -> RequestVerifierInfo {
+	static func getVerifierInfoRequested(dcqlDocTypeMap: [String: DocType], verifierInfoList: [VerifierInfo]) -> RequestVerifierInfo {
 		var requestVerifierInfo: RequestVerifierInfo = [:]
 		for verifierInfo in verifierInfoList {
-			for credentialId in verifierInfo.credentialIds?.map({ $0.value }) ?? idsToDocTypes.keys.map({ $0 }) {
-				if let docType = idsToDocTypes[credentialId] {
+			for credentialId in verifierInfo.credentialIds?.map({ $0.value }) ?? dcqlDocTypeMap.keys.map({ $0 }) {
+				if let docType = dcqlDocTypeMap[credentialId] {
 					if (requestVerifierInfo[docType] == nil) {
 						requestVerifierInfo[docType] = [:]
 					}
