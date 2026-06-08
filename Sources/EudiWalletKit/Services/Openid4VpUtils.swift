@@ -63,11 +63,10 @@ class OpenId4VpUtils {
 	}
 
 	/// Parse DCQL into request items (docType -> namespaced items), formats requested (docType -> dataFormat) and input descriptor map (docType -> credentialQueryId)
-	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [Document.ID: DocType], logger: Logger? = nil) throws -> (formatsRequested: [DocType: DocDataFormat], inputDescriptorMap: [DocType: String], zkSpecsRequested: [DocType: [ZkSystemSpec]]?, dcqlDocTypeMap: [String: DocType]) {
+	static func parseDcqlFormats(_ dcql: DCQL, idsToDocTypes: [Document.ID: DocType], logger: Logger? = nil) throws -> (formatsRequested: [DocType: DocDataFormat], inputDescriptorMap: [DocType: String], zkSpecsRequested: [DocType: [ZkSystemSpec]]?) {
 		var inputDescriptorMap = [DocType: String]()
 		var formatsRequested = [DocType: DocDataFormat]()
 		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
-		var dcqlDocTypeMap = [String: DocType]()
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
 			guard let docType = credQuery.docType else { continue }
@@ -77,9 +76,8 @@ class OpenId4VpUtils {
 				if zkSpecsRequested == nil { zkSpecsRequested = [:] }
 				zkSpecsRequested![docType] = zkSpecs
 			}
-			dcqlDocTypeMap[credQuery.id.value] = docType
 		}
-		return (formatsRequested, inputDescriptorMap, zkSpecsRequested, dcqlDocTypeMap)
+		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
 	}
 
 	static func getRequestItems(_ credentialMaps: [Document.ID: (QueryId, [ClaimsQuery])], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
