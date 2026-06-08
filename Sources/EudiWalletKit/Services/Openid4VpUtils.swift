@@ -82,9 +82,9 @@ class OpenId4VpUtils {
 		return (formatsRequested, inputDescriptorMap, zkSpecsRequested, dcqlDocTypeMap)
 	}
 
-	static func getRequestItems(_ credentialMaps: [Document.ID: [ClaimsQuery]], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
+	static func getRequestItems(_ credentialMaps: [Document.ID: (QueryId, [ClaimsQuery])], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
 		var requestItems = RequestItems()
-		for (id, claims) in credentialMaps {
+		for (id, (_, claims)) in credentialMaps {
 			guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
 			var nsItems: [String: [RequestItem]] = [:]
 			for claim in claims {
@@ -97,35 +97,45 @@ class OpenId4VpUtils {
 		return requestItems
 	}
 	
-	static func getTransactionDataRequested(dcqlDocTypeMap: [String: DocType], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
+	static func getTransactionDataRequested(_ credentialMaps: [Document.ID: (QueryId, [ClaimsQuery])], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
 		var requestTransactionData: RequestTransactionData = [:]
 		for transactionData in transactionDataList {
 			let type = try transactionData.type()
 			let credentialIds = try transactionData.credentialIds()
 			let parameters = try transactionData.decode()
 			for credentialId in credentialIds {
-				if let docType = dcqlDocTypeMap[credentialId.value] {
-					if (requestTransactionData[docType] == nil) {
-						requestTransactionData[docType] = [:]
+				if let document = credentialMaps.first(where: { (key, value) in value.0.value == credentialId.value}) {
+					if (requestTransactionData[document.key] == nil) {
+						requestTransactionData[document.key] = [:]
 					}
-					requestTransactionData[docType]![type.value] = parameters
+					requestTransactionData[document.key]![type.value] = parameters
 					break
+				} else {
+					throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)")
 				}
 			}
 		}
 		return requestTransactionData
 	}
 	
-	static func getVerifierInfoRequested(dcqlDocTypeMap: [String: DocType], verifierInfoList: [VerifierInfo]) -> RequestVerifierInfo {
+	static func getVerifierInfoRequested(_ credentialMaps: [Document.ID: (QueryId, [ClaimsQuery])], verifierInfoList: [VerifierInfo]) -> RequestVerifierInfo {
 		var requestVerifierInfo: RequestVerifierInfo = [:]
 		for verifierInfo in verifierInfoList {
-			for credentialId in verifierInfo.credentialIds?.map({ $0.value }) ?? dcqlDocTypeMap.keys.map({ $0 }) {
-				if let docType = dcqlDocTypeMap[credentialId] {
-					if (requestVerifierInfo[docType] == nil) {
-						requestVerifierInfo[docType] = [:]
+			var documentIds = [Document.ID]()
+			if (verifierInfo.credentialIds == nil) {
+				documentIds = credentialMaps.keys.map({ $0 })
+			} else {
+				for credentialId in verifierInfo.credentialIds! {
+					if let document = credentialMaps.first(where: { (key, value) in value.0.value == credentialId.value}) {
+						documentIds.append(document.key)
 					}
-					requestVerifierInfo[docType]![verifierInfo.format] = verifierInfo.data
 				}
+			}
+			for documentId in documentIds {
+				if (requestVerifierInfo[documentId] == nil) {
+					requestVerifierInfo[documentId] = [:]
+				}
+				requestVerifierInfo[documentId]![verifierInfo.format] = verifierInfo.data
 			}
 		}
 		return requestVerifierInfo
@@ -246,8 +256,8 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [String: [ClaimsQuery]] {
-		var result: [String: [ClaimsQuery]] = [:]
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [String: (QueryId, [ClaimsQuery])] {
+		var result: [String: (QueryId, [ClaimsQuery])]  = [:]
 		var lastError: WalletError?
 		var credentialQueryResults: [QueryId: (matchedCredId: Document.ID, claimQueries: [ClaimsQuery])] = [:]
 		// Step 1: Process individual credential queries
@@ -281,15 +291,15 @@ extension OpenId4VpUtils {
 						for queryId in option {
 							if let match = credentialQueryResults[queryId] {
 								// If the credential ID already exists, merge claim paths
-								if let existingPaths = result[match.matchedCredId] {
+								if let (existingQueryId, existingPaths) = result[match.matchedCredId] {
 									// Merge and deduplicate claim paths
 									let mergedPaths = existingPaths + match.claimQueries
 									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { pathValue in
 										mergedPaths.first { $0.path.value == pathValue }
 									}
-									result[match.matchedCredId] = uniquePaths
+									result[match.matchedCredId] = (existingQueryId, uniquePaths)
 								} else {
-									result[match.matchedCredId] = match.claimQueries
+									result[match.matchedCredId] = (queryId, match.claimQueries)
 								}
 							}
 						}
@@ -302,8 +312,8 @@ extension OpenId4VpUtils {
 				}
 			}
 		} else {
-			for (_, match) in credentialQueryResults {
-				result[match.matchedCredId] = match.claimQueries
+			for (queryId, match) in credentialQueryResults {
+				result[match.matchedCredId] = (queryId, match.claimQueries)
 			}
 		}
 		if result.isEmpty {

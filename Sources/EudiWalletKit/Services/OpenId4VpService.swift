@@ -152,14 +152,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let (fmtsReq, imap, zkSpecMap, dcqlDocTypeMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
 			decodeDocuments()
-			let claimMapPath = try OpenId4VpUtils.resolveDcql(
+			let credentialMaps = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
-			requestItems = OpenId4VpUtils.getRequestItems(claimMapPath, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
+			requestItems = OpenId4VpUtils.getRequestItems(credentialMaps, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
 			if (transactionData != nil) {
-				transactionDataRequested = try OpenId4VpUtils.getTransactionDataRequested(dcqlDocTypeMap: dcqlDocTypeMap, transactionDataList: transactionData!)
+				transactionDataRequested = try OpenId4VpUtils.getTransactionDataRequested(credentialMaps, transactionDataList: transactionData!)
 			}
 			if (verifierInfo != nil) {
-				verifierInfoRequested = OpenId4VpUtils.getVerifierInfoRequested(dcqlDocTypeMap: dcqlDocTypeMap, verifierInfoList: verifierInfo!)
+				verifierInfoRequested = OpenId4VpUtils.getVerifierInfoRequested(credentialMaps, verifierInfoList: verifierInfo!)
 			}
 		}
 		guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
