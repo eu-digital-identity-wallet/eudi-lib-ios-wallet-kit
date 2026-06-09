@@ -42,7 +42,7 @@ public protocol PresentationService: Sendable {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces (see ``RequestItems``)
-	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?) async throws
+	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ( @Sendable (URL?) -> Void)?, deviceNameSpacesToSend: RequestDeviceNameSpaces?) async throws
 	
 	/// wait for disconnect
 	func waitForDisconnect() async throws

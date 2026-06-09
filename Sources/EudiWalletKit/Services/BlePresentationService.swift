@@ -34,7 +34,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var continuationPowerOn: CheckedContinuation<Void, Error>?
 	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
 	var continuationDisconnect: CheckedContinuation<Void, Error>?
-	var handleSelected: ((Bool, RequestItems?) async -> Void)?
+	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
 	public var transactionLog: TransactionLog
@@ -149,7 +149,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 					continuationRequest?.resume(returning: decoded.userRequestInfo)
 					continuationRequest = nil
 				} else {
-					await userSelected(false, nil)
+					await userSelected(false, nil, nil)
 					let notAvailableMessage = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 					let userInfo = [NSLocalizedDescriptionKey: notAvailableMessage]
 					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo))
@@ -187,7 +187,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		}
 	}
 
-	public func userSelected(_ b: Bool, _ items: RequestItems?) async {
+	public func userSelected(_ b: Bool, _ items: RequestItems?, _ deviceNameSpaces: RequestDeviceNameSpaces? = nil) async {
 		status = .userSelected
 		let resError = await MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .error, docToSend: DeviceResponse(status: 0))
 		var bytesToSend = try! resError.get()
@@ -205,7 +205,18 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
 				let compactDocMetadata = docMetadata.compactMapValues { $0 }
 				let eReaderKey = sessionEncryption!.sessionKeys.publicKey
-				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: deviceRequest!, issuerSigned: docs, docMetadata: compactDocMetadata, selectedItems: items, sessionEncryption: sessionEncryption, eReaderKey: eReaderKey, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, zkSystemRepository: zkSystemRepository) else {
+				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(
+					deviceRequest: deviceRequest!,
+					issuerSigned: docs,
+					docMetadata: compactDocMetadata,
+					selectedItems: items,
+					sessionEncryption: sessionEncryption,
+					eReaderKey: eReaderKey,
+					privateKeyObjects: privateKeyObjects,
+					dauthMethod: dauthMethod,
+					unlockData: unlockData,
+					zkSystemRepository: zkSystemRepository,
+					deviceNameSpacesRequested: deviceNameSpaces) else {
 					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
 					return
 				}
@@ -256,8 +267,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
-		await handleSelected?(userAccepted, itemsToSend)
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: (@Sendable (URL?) -> Void)?, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil) async throws  {
+		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		handleSelected = nil
 		TransactionLogUtils.setCborTransactionLogResponseInfo(self, transactionLog: &transactionLog)
 	}

@@ -20,6 +20,7 @@ import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
 import enum OpenID4VP.ResponseEncryptionConfiguration
+import struct OpenID4VP.SupportedTransactionDataType
 
 /// Client identifier scheme for verifier authentication
 ///
@@ -81,6 +82,10 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// When enabled, claims that are not present are skipped instead of failing the DCQL resolution.
 	/// By default, all requested claims remain mandatory.
 	public let allowPresentingPartialClaims: Bool
+	/// Configuration for supported transaction data types
+	///
+	/// When provided all request with transaction data will be validated against the list
+	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -88,12 +93,14 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.clientIdSchemes = Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = nil
 		self.allowPresentingPartialClaims = false
+		self.supportedTransactionDataTypes = []
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.allowPresentingPartialClaims = allowPresentingPartialClaims
+		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 	}
 }
 
