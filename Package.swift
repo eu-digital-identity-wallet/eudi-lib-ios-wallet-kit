@@ -13,7 +13,7 @@ let package = Package(
 			targets: ["EudiWalletKit"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/beyonkuhre/eudi-lib-ios-iso18013-data-transfer.git", branch: "feat/device-namespaces"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.21.0"),
 		.package(url: "https://github.com/beyonkuhre/eudi-lib-ios-wallet-storage.git", branch: "feat/update_packages"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.14.4"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git", exact: "0.39.0"),
