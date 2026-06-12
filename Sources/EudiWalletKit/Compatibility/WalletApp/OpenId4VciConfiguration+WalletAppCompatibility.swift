@@ -11,7 +11,6 @@ import MdocDataModel18013
 import Security
 
 public protocol WalletAttestationsProviderForWalletAppCompatibility: WalletAttestationsProvider {
-	func getWalletAttestation(key: any JWK, privateKey: SecKey) async throws -> String
 	func getKeysAttestation(docType: String) async throws -> String?
 }
 
@@ -53,9 +52,9 @@ extension OpenId4VciConfiguration {
 			let provider = config.walletAttestationsProvider as? any WalletAttestationsProviderForWalletAppCompatibility,
 			case .secKey(let privateKey) = popConstructor.privateKey
 		{
-			attestation = try await provider.getWalletAttestation(key: popConstructor.jwk, privateKey: privateKey)
+			attestation = try await provider.getWalletAttestation(signingKey: popConstructor.privateKey)
 		} else {
-			attestation = try await config.walletAttestationsProvider.getWalletAttestation(key: popConstructor.jwk)
+			attestation = try await config.walletAttestationsProvider.getWalletAttestation(signingKey: popConstructor.privateKey)
 		}
 
 		guard let signatureAlgorithm = SignatureAlgorithm(rawValue: popConstructor.algorithm.name) else {

@@ -1,3 +1,19 @@
+## v0.31.0
+
+### Breaking Changes
+
+- **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
+  - **Before**: `func getWalletAttestation(key: any JWK) async throws -> String`
+  - **After**: `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String`
+  - The parameter is now a `SigningKeyProxy` (from the OpenID4VCI library) instead of a plain `JWK`. Use `signingKey.getPublicJWK()` to obtain the public JWK:
+
+```swift
+func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+    let key = try signingKey.getPublicJWK()
+    return try await attestationService.getWalletAttestation(for: key)
+}
+```
+
 ## v0.30.0
 
 ### Usage Counter Refresh
@@ -393,7 +409,7 @@ public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: UR
     - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
   
   - **New protocol**: `WalletAttestationsProvider` with two required methods:
-    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet instance attestation JWT for a given public key
+    - `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String` - Obtain wallet instance attestation JWT for a given signing key (use `signingKey.getPublicJWK()` to get the public key)
     - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain unit attestation JWT for multiple keys 
 
 - **OpenId4VciConfiguration changes**:
@@ -427,7 +443,7 @@ let config = OpenId4VciConfiguration(
     - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
   
   - **New protocol**: `WalletAttestationsProvider` with two required methods:
-    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet attestation JWT for a given public key
+    - `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String` - Obtain wallet attestation JWT for a given signing key (use `signingKey.getPublicJWK()` to get the public key)
     - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain key attestation JWT for multiple keys with optional nonce
 
 - **OpenId4VciConfiguration changes**:

@@ -83,7 +83,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
-	public func startQrEngagement(secureAreaName: String?, crv: CoseEcCurve) async throws -> String {
+	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
 		if unlockData == nil {
 			unlockData = [String: Data]()
 			for (id, key) in transferInfo.privateKeyObjects {
@@ -241,7 +241,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		}
 		zkpDocumentIds = [String]()
 		logger.info("Openid4vp request items: \(itemsToSend.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
-		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, crv: .P256) }
+		if unlockData == nil { _ = try await startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256)) }
 		// tuples of inputDescriptor-id, docId and verifiable presentation
 		// the inputDescriptor-id is used to identify the input descriptor in the presentation submission
 		var inputToPresentations = [(String, String?, VerifiablePresentation)]()
@@ -260,7 +260,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
 				let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
 				let dsa = keyInfo.crv.defaultSigningAlgorithm
-				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, ecAlgorithm: dsa, unlockData: unlockData)
+				let publicKeyCose = try await dpk.secureArea.getPublicKey(id: docId, index: dpk.index, curve: keyInfo.crv)
+				let publicKeyJwk = try publicKeyCose.jwk
+				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: keyInfo.crv, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 				let hai = HashingAlgorithmIdentifier(rawValue: transferInfo.hashingAlgs[docId] ?? "") ?? .SHA3256
 				guard let presented = try await OpenId4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {

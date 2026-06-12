@@ -191,7 +191,7 @@ extension OpenId4VciService {
 						promptMessage: promptMessage
 					)
 					await service.setAdditionalOptions(docType.identifier ?? "")
-					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(credentialConfigurations[index])
+					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(credentialConfigurations[index], proofSubject: issuer.config.client.id)
 					let outcome = try await service.issueDocumentByOfferUrl(
 						issuer: issuer,
 						offer: offer,
@@ -262,7 +262,7 @@ extension OpenId4VciService {
 			clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map { $0.name }
 		)
 
-		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration)
+		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration, proofSubject: issuer.config.client.id)
 		let issuanceOutcome = try await compatibilitySubmissionUseCase(
 			refreshed,
 			issuer: issuer,
