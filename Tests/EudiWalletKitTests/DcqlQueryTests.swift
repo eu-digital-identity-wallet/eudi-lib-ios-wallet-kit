@@ -39,6 +39,54 @@ struct DcqlQueryTests {
 		return data
 	}
 
+	/// Builds one queryable from all provided resource files.
+	private func loadDcqlQueryables(resourceFileNames: [String], ext: String = "txt") throws -> DefaultDcqlQueryable {
+		var idsToDocTypes = [WalletStorage.Document.ID: DocType]()
+		var formatsRequested = [DocType: DocDataFormat]()
+		var docsCbor = [WalletStorage.Document.ID: IssuerSigned]()
+		var docsSdJwt = [WalletStorage.Document.ID: SignedSDJWT]()
+
+		for fileName in resourceFileNames {
+			let data = try loadTestResource(fileName: fileName, ext: ext)
+			let credentialId: WalletStorage.Document.ID = fileName
+			// make queryable with the document from the resource file, parsing differently based on whether it's an mdoc (cbor) or sd-jwt (json) resource based on file name prefix
+			if fileName.hasPrefix("mdoc-") {
+				guard let strData = String(data: data, encoding: .utf8) else {
+					throw NSError(domain: "TestError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid UTF-8 in resource: \(fileName).\(ext)"])
+				}
+				guard let base64Data = Data(base64URLEncoded: strData.removeWhitespaceAndNewlines()) else {
+					throw NSError(domain: "TestError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid base64url mdoc payload in resource: \(fileName).\(ext)"])
+				}
+				let issuerSigned = try IssuerSigned(data: [UInt8](base64Data))
+				let docType = issuerSigned.issuerAuth.mso.docType
+				idsToDocTypes[credentialId] = docType
+				formatsRequested[docType] = .cbor
+				docsCbor[credentialId] = issuerSigned
+			} else {
+				guard let sdJwtString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+					throw NSError(domain: "TestError", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid UTF-8 in resource: \(fileName).\(ext)"])
+				}
+				let parser = CompactParser()
+				let signedSdJwt = try parser.getSignedSdJwt(serialisedString: sdJwtString)
+				let recreatedClaims = try signedSdJwt.recreateClaims().recreatedClaims
+				guard let docType = recreatedClaims["vct"].string ?? recreatedClaims["type"].string else {
+					throw NSError(domain: "TestError", code: 5, userInfo: [NSLocalizedDescriptionKey: "Missing vct/type in SD-JWT resource: \(fileName).\(ext)"])
+				}
+				idsToDocTypes[credentialId] = docType
+				formatsRequested[docType] = .sdjwt
+				docsSdJwt[credentialId] = signedSdJwt
+			}
+		}
+
+		let credentials = OpenId4VpUtils.makeCredentialMap(idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
+		var claimPaths = [WalletStorage.Document.ID: [ClaimPath]]()
+		var claimValues = [WalletStorage.Document.ID: [ClaimPath: [String]]]()
+		OpenId4VpUtils.makeCborClaimData(from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
+		OpenId4VpUtils.makeSdJwtClaimData(from: docsSdJwt, claimPaths: &claimPaths, claimValues: &claimValues)
+		// construct a dcql queryable with all claims from all loaded resources
+		return DefaultDcqlQueryable(credentials: credentials, claimPaths: claimPaths, claimValues: claimValues)
+	}
+
 	@Test("DCQL simple query - success case", arguments: ["dcql-vehicle"])
 	func testDcqlQuerySimplificationSuccess(dcqlFile: String) throws {
 		// Load DCQL from resource file
@@ -58,6 +106,25 @@ struct DcqlQueryTests {
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential query result")
 		#expect(result["cred1"]?.count == 2, "Should have both claim paths for cred1")
+	}
+
+	@Test("DCQL document number query - returns one credential")
+	func testDcqlDocumentNumberQueryReturnsOneCredential() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-document-number")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable1 = try loadDcqlQueryables(resourceFileNames: ["sjwt-pid-kotlin"])
+		let result1 = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable1)
+		#expect(result1.count == 1, "Should resolve exactly one credential")
+		let dcqlQueryable2 = try loadDcqlQueryables(resourceFileNames: ["sjwt-pid-python"])
+		do {
+			_ = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable2)
+			Issue.record("Expected WalletError.claimNotFound to be thrown")
+		} catch let error as WalletError {
+			#expect(error.code == .claimNotFound, "Should fail with claimNotFound")
+		}
+		let dcqlQueryable3 = try loadDcqlQueryables(resourceFileNames: ["sjwt-pid-python", "sjwt-pid-kotlin"])
+		let result3 = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable3)
+		#expect(result3.count == 1, "Should resolve exactly one credential")
 	}
 
 	@Test("DCQL simple query - failure", arguments: ["dcql-vehicle"])
@@ -125,7 +192,6 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 2, "Should have two credentials")
 		#expect(result["reduced_id"]?.count == 2, "Should have two claims for reduced_id")
@@ -200,7 +266,6 @@ struct DcqlQueryTests {
 				]
 			]
 		)
-
 		#expect(throws: WalletError.self) {
 			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		}

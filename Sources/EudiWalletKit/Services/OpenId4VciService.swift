@@ -560,7 +560,7 @@ public actor OpenId4VciService {
 
 	private static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, logger: Logger) async throws -> IssuanceOutcome {
 		let toData: (String) -> Data = { str in
-			logger.notice("Base64 mdoc data:\n\(str)")
+			logger.notice(configuration.format == .cbor ? "Base64URL mdoc data:\n\(str)" : "sd-jwt credential data:\n\(str)")
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
 		}
 		let credData: [(Data, Data)] = try credentials.enumerated().flatMap { index, credential in
