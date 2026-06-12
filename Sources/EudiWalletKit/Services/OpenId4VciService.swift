@@ -101,12 +101,21 @@ public actor OpenId4VciService {
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
 		var funcKeyAttestationJWT: FuncKeyAttestationJWT? = nil
 		if config.keyAttestationsConfig != nil, configuration.supportsAttestationProofType {
-			funcKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
+			funcKeyAttestationJWT = { nonce in
+				try await self.getKeyAttestationJWTForWalletAppCompatibility(publicKeys, nonce: nonce)
+			}
 		} else if config.keyAttestationsConfig != nil, configuration.supportsJwtProofTypeWithAttestation {
 			throw PresentationSession.makeError(str: "JWT proof with attestation is not yet supported in wallet")
 		}
-		let bindingKeys = try publicKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: funcKeyAttestationJWT, proofSubject: proofSubject) }
-		return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
+		if funcKeyAttestationJWT != nil {
+			return (
+				[.attestation(keyAttestationJWT: funcKeyAttestationJWT!)],
+				publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) }
+			)
+		} else {
+			let bindingKeys = try publicKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: funcKeyAttestationJWT, proofSubject: proofSubject) }
+			return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
+		}
 	}
 
 	func createKeyBatchWithAttestation(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, nonce: String?) async throws -> BatchCreateKeyResult {
