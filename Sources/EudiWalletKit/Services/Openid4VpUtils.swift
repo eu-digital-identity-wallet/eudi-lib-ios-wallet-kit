@@ -80,6 +80,62 @@ class OpenId4VpUtils {
 		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
 	}
 
+	static func makeCredentialMap(idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [Document.ID: (DocType, DocDataFormat)] {
+		var credentialMap = [Document.ID: (DocType, DocDataFormat)]()
+		for (docId, docType) in idsToDocTypes {
+			if let format = formatsRequested[docType] {
+				credentialMap[docId] = (docType, format)
+			}
+		}
+		return credentialMap
+	}
+
+	static func makeCborClaimData(
+		from docsCbor: [Document.ID: IssuerSigned]?,
+		claimPaths: inout [Document.ID: [ClaimPath]],
+		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+	) {
+		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+
+		for (docId, issuerSigned) in docsCbor ?? [:] {
+			paths.removeAll(); values.removeAll()
+			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
+			for (ns, items) in isNs.nameSpaces {
+				for item in items {
+					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
+					values[paths.last!] = [item.description]
+				}
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+	}
+
+	static func makeSdJwtClaimData(
+		from docsSdJwt: [Document.ID: SignedSDJWT]?,
+		claimPaths: inout [Document.ID: [ClaimPath]],
+		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+	) {
+		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+
+		for (docId, sdjwt) in docsSdJwt ?? [:] {
+			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
+			paths.removeAll(); values.removeAll()
+			for (p, disclosures) in allPathsDict {
+				let mappedElements = p.value.map { element in
+					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
+					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
+					return ClaimPathElement.allArrayElements
+				}
+				let path = ClaimPath(mappedElements)
+				paths.append(path)
+				values[path] = disclosures
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+	}
+
 	static func getRequestItems(_ credentialMaps: [Document.ID: [ClaimsQuery]], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
 		var requestItems = RequestItems()
 		for (id, claims) in credentialMaps {
@@ -167,7 +223,7 @@ extension CredentialQuery {
 		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
 		return docType
 	}
-	
+
 	// https://developers.google.com/wallet/identity/verify/accepting-ids-from-wallet-online#zkp
 	public var zkSpecs: [ZkSystemSpec]? {
 		let zk_system_type = meta["zk_system_type"]
@@ -229,8 +285,11 @@ extension OpenId4VpUtils {
 				} catch {
 					lastError = error
 					logger.warning("Credential \(credId) does not satisfy query \(credQuery.id.value): \(error.localizedDescription)")
-					if dcql.credentialSets == nil { throw error	}
+					// continue trying other credentials that match the docType
 				}
+			}
+			if credentialQueryResults[credQuery.id] == nil, dcql.credentialSets == nil {
+   			 throw lastError ?? WalletError(description: "No credential satisfies query \(credQuery.id.value)", code: .dcqlQueryNotSatisfied)
 			}
 		}
 		// Step 2: Handle credential_sets if present
