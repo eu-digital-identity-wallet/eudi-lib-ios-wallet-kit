@@ -1,4 +1,4 @@
-## v0.31.0
+## v0.32.0
 
 ### Credential Reuse Policy Enforcement
 
