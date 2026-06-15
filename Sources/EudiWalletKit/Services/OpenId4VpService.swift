@@ -184,45 +184,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let docJwtStrings = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
 		docsSdJwt = docJwtStrings.compactMapValues { try? parser.getSignedSdJwt(serialisedString: $0) }
 		// make dcqlQueryable
-		var credentialMap = [Document.ID: (DocType, DocDataFormat)]()
-		for (docId, docType) in transferInfo.idsToDocTypes {
-			if let format = formatsRequested[docType] {
-				credentialMap[docId] = (docType, format)
-			}
-		}
+		let credentialMap = OpenId4VpUtils.makeCredentialMap(
+			idsToDocTypes: transferInfo.idsToDocTypes,
+			formatsRequested: formatsRequested
+		)
 		var claimPaths = [Document.ID: [ClaimPath]]()
 		var claimValues = [Document.ID: [ClaimPath: [String]]]()
-		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
-		// make paths and values for cbor documents
-		for (docId, issuerSigned) in docsCbor ?? [:] {
-			paths.removeAll(); values.removeAll()
-			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
-			for (ns, items) in isNs.nameSpaces {
-				for item in items {
-					logger.info("IssuerSigned document \(docId) namespace \(ns) item: \(item.elementIdentifier)")
-					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
-					values[paths.last!] = [item.description]
-				}
-			}
-			claimPaths[docId] = paths
-			claimValues[docId] = values
-		}
-		for (docId, sdjwt) in docsSdJwt ?? [:] {
-			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
-			paths.removeAll(); values.removeAll()
-			for (p, disclosures) in allPathsDict {
-				let mappedElements = p.value.map { element in
-					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
-					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
-					return ClaimPathElement.allArrayElements
-				}
-				let path = ClaimPath(mappedElements)
-				paths.append(path)
-				values[path] = disclosures
-			}
-			claimPaths[docId] = paths
-			claimValues[docId] = values
-		}
+		OpenId4VpUtils.makeCborClaimData(from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
+		OpenId4VpUtils.makeSdJwtClaimData(from: docsSdJwt, claimPaths: &claimPaths, claimValues: &claimValues)
 		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
 	}
 
@@ -274,11 +243,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		try await SendVpTokens(inputToPresentations, dcql, resolved, onSuccess)
 
 	}
-	
+
 	public func waitForDisconnect() async throws {
 		status = .disconnected
 	}
-	
+
 	/// Filter document accordind to the raw format value
 	static func filterFormat(_ df: DocDataFormat, fmt: DocDataFormat) -> Bool { df == fmt }
 
