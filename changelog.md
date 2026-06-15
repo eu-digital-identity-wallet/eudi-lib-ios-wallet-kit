@@ -1,5 +1,19 @@
 ## v0.31.0
 
+### Credential Reuse Policy Enforcement
+
+Issuer-defined credential reuse policies now take precedence over caller-supplied `CredentialOptions`. Previously, a caller could pass `CredentialOptions` with any `credentialPolicy`, `reissueTriggerUnused`, or `reissueTriggerLifetimeLeft` values and those would be used as-is even when the issuer had published a `credentialReusePolicy` in its metadata.
+
+The new behaviour is:
+
+- When the issuer metadata contains a `credentialReusePolicy`, the resolved `credentialPolicy`, `batchSize`, `reissueTriggerUnused`, and `reissueTriggerLifetimeLeft` fields are always derived from that policy and override the caller's values.
+
+This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
+
+### Bug Fixes
+
+- **`OpenId4VpService.receiveRequest()` now respects custom networking**: The `Fetcher<String>()` used to fetch the authorization request object was created without the configured `networking` session, causing errors when a custom networking implementation was set on `EudiWallet`. The fetcher is now initialized with the same `networking` instance as the rest of the VP flow.
+
 ### Breaking Changes
 
 - **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
