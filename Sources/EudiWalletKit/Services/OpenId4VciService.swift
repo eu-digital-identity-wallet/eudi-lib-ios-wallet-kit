@@ -540,7 +540,7 @@ public actor OpenId4VciService {
 		return authorized
 	}
 
-	private static func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], logger: Logger) async throws -> IssuanceOutcome {
+	static func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], logger: Logger) async throws -> IssuanceOutcome {
 		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
 		switch requestOutcome {
@@ -644,7 +644,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	private func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
+	func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
 		guard authorized.isAccessTokenExpired() || forceRefreshToken else { return authorized }
 		if let refreshTokenExpiresIn = authorized.refreshToken?.expiresIn,
 		   authorized.isRefreshTokenExpired(clock: Date.now.timeIntervalSinceReferenceDate) {

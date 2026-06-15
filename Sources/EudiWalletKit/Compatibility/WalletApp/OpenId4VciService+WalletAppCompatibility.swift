@@ -9,7 +9,6 @@ import MdocDataModel18013
 import JOSESwift
 import Security
 import WalletStorage
-import class eudi_lib_sdjwt_swift.CompactParser
 
 extension OpenId4VciService {
 	func issuePAR(_ docTypeIdentifier: DocTypeIdentifier, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> WalletStorage.Document? {
@@ -228,53 +227,57 @@ extension OpenId4VciService {
 		issueReq.keyOptions?.additionalOptions = Data(value.utf8)
 	}
 
-	func getCredentialsWithRefreshToken(docTypeIdentifier: DocTypeIdentifier, authorizedRequest: AuthorizedRequest, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docId: String) async throws -> (IssuanceOutcome?, DocDataFormat?, AuthorizedRequest?) {
+	func getCredentialsWithRefreshToken(docTypeIdentifier: DocTypeIdentifier, authorized: AuthorizedRequest, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docId: String, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, forceRefreshToken: Bool = false) async throws -> (WalletStorage.Document, AuthorizedRequest) {
 		let dpopConstructor = DPoPConstructor(
 			algorithm: JWSAlgorithm(.ES256),
 			jwk: issuerDPopConstructorParam.jwk,
 			privateKey: .secKey(issuerDPopConstructorParam.privateKey)
 		)
-
-		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
-		let (issuer, offer) = try await fetchIssuerAndOfferWithLatestMetadata(
+		let (issuer, _, configuration) = try await fetchIssuerAndOfferWithLatestMetadata(
 			docTypeIdentifier: docTypeIdentifier,
 			dpopConstructor: dpopConstructor
 		)
 
-		let refreshed = try await issuer.refresh(clientId: config.clientId, authorizedRequest: authorizedRequest)
-		guard let authorizationServer = metadata.authorizationServers?.first else {
-			throw PresentationSession.makeError(str: "Invalid issuer metadata")
+		let refreshed: AuthorizedRequest
+		do {
+			logger.info("Access token issued at: \(Date(timeIntervalSinceReferenceDate: authorized.timeStamp)), now: \(Date()), expires at \(Date(timeIntervalSinceReferenceDate: authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0)))")
+			refreshed = try await refreshAuthorization(issuer: issuer, authorized: authorized, configuration: configuration, forceRefreshToken: forceRefreshToken)
+		} catch CredentialIssuanceError.requestFailed(let code, let error, let description) where (400..<500).contains(code) {
+			logger.error("Refresh token authentication failure with status code: \(code), error: \(error) \(description ?? "").")
+			throw RefreshAuthorizationError.reauthorizationRequired(statusCode: code, description: "\(error) \(description ?? "")")
 		}
-		let authServerMetadata = await AuthorizationServerMetadataResolver(
-			oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking),
-			oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)
-		).resolve(url: authorizationServer)
-		let authorizationServerMetadata = try authServerMetadata.get()
-		let configuration = try getCredentialConfiguration(
-			credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString,
-			issuerDisplay: metadata.display,
-			credentialsSupported: metadata.credentialsSupported,
-			identifier: docTypeIdentifier.configurationIdentifier,
-			docType: docTypeIdentifier.docType,
-			vct: docTypeIdentifier.vct,
-			batchCredentialIssuance: metadata.batchCredentialIssuance,
-			dpopSigningAlgValuesSupported: authorizationServerMetadata.dpopSigningAlgValuesSupported?.map { $0.name },
-			clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map { $0.name }
-		)
 
+		let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
+		try await prepareIssuing(
+			id: UUID().uuidString,
+			docTypeIdentifier: docTypeIdentifier,
+			displayName: nil,
+			credentialOptions: usedCredentialOptions,
+			keyOptions: keyOptions,
+			disablePrompt: false,
+			promptMessage: promptMessage
+		)
+		setAdditionalOptions(configuration.configurationIdentifier.value)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration, proofSubject: issuer.config.client.id)
-		let issuanceOutcome = try await compatibilitySubmissionUseCase(
+		let issuanceOutcome = try await Self.submissionUseCase(
 			refreshed,
 			issuer: issuer,
 			configuration: configuration,
 			bindingKeys: bindingKeys,
-			publicKeys: publicKeys
+			publicKeys: publicKeys,
+			logger: logger
 		)
-		_ = offer
-		return (issuanceOutcome, configuration.format, refreshed)
+		let document = try await finalizeIssuing(
+			issueOutcome: issuanceOutcome,
+			docType: docTypeIdentifier.docType,
+			format: configuration.format,
+			issueReq: issueReq,
+			deleteId: docId
+		)
+		return (document, refreshed)
 	}
 
-	private func fetchIssuerAndOfferWithLatestMetadata(docTypeIdentifier: DocTypeIdentifier, dpopConstructor: DPoPConstructorType) async throws -> (Issuer, CredentialOffer) {
+	private func fetchIssuerAndOfferWithLatestMetadata(docTypeIdentifier: DocTypeIdentifier, dpopConstructor: DPoPConstructorType) async throws -> (Issuer, CredentialOffer, CredentialConfiguration) {
 		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
 		guard let authorizationServer = metadata.authorizationServers?.first else {
 			throw WalletError(description: "Invalid issuer metadata")
@@ -318,7 +321,7 @@ extension OpenId4VciService {
 			noncePoster: Poster(session: networking),
 			dpopConstructor: dpopConstructor
 		)
-		return (issuer, offer)
+		return (issuer, offer, configuration)
 	}
 
 	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil) async throws -> Issuer {
@@ -350,83 +353,4 @@ extension OpenId4VciService {
 		)
 	}
 
-	private func compatibilitySubmissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data]) async throws -> IssuanceOutcome {
-		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
-		let requestOutcome = try await issuer.requestCredential(
-			request: authorized,
-			bindingKeys: bindingKeys,
-			requestPayload: payload
-		) {
-			Issuer.createResponseEncryptionSpec($0)
-		}
-
-		switch requestOutcome {
-		case .success(let response):
-			guard let result = response.credentialResponses.first else {
-				throw PresentationSession.makeError(str: "No credential response results available")
-			}
-
-			switch result {
-			case .deferred(let transactionId, let interval):
-				logger.info("Credential issuance deferred with transactionId: \(transactionId), interval: \(interval) seconds")
-				let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey {
-					try secCall { SecKeyCopyExternalRepresentation(key, $0) } as Data
-				} else {
-					nil
-				}
-				let deferredModel = await DeferredIssuanceModel(
-					deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!,
-					transactionId: transactionId,
-					publicKeys: publicKeys,
-					derKeyData: derKeyData,
-					timeStamp: authorized.timeStamp
-				)
-				return .deferred(deferredModel, configuration, authorized)
-			case .issued(let format, _, _, _):
-				let credentials = response.credentialResponses.compactMap {
-					if case let .issued(_, credential, _, _) = $0 { credential } else { nil }
-				}
-				return try await compatibilityHandleCredentialResponse(
-					credentials: credentials,
-					publicKeys: publicKeys,
-					format: format,
-					configuration: configuration,
-					authorized: authorized
-				)
-			}
-		case .invalidProof(let errorDescription):
-			throw PresentationSession.makeError(str: "Issuer error: " + (errorDescription ?? "The proof is invalid"))
-		case .failed(let error):
-			throw PresentationSession.makeError(str: error.localizedDescription)
-		}
-	}
-
-	private func compatibilityHandleCredentialResponse(credentials: [Credential], publicKeys: [Data], format: String?, configuration: CredentialConfiguration, authorized: AuthorizedRequest) async throws -> IssuanceOutcome {
-		logger.info("Credential issued with format \(format ?? "unknown")")
-		let toData: (String) -> Data = { str in
-			if configuration.format == .cbor {
-				return Data(base64URLEncoded: str) ?? Data()
-			}
-			return str.data(using: .utf8) ?? Data()
-		}
-
-		let credData: [(Data, Data)] = try credentials.enumerated().flatMap { index, credential -> [(Data, Data)] in
-			if case let .string(str) = credential {
-				logger.notice("Issued credential data:\n\(str)")
-				return [(toData(str), publicKeys[index])]
-			}
-			if case let .json(json) = credential, json.type == .array, json.first != nil {
-				let compactParser = CompactParser()
-				let response = json.map { entry in
-					let str = (try? compactParser.stringFromJwsJsonObject(entry.1["credential"])) ?? entry.1["credential"].stringValue
-					return (toData(str), publicKeys[index])
-				}
-				logger.notice("Issued credential data:\n\(String(data: response.first?.0 ?? Data(), encoding: .utf8) ?? "")")
-				return response
-			}
-			throw PresentationSession.makeError(str: "Invalid credential")
-		}
-
-		return .issued(credData, configuration, authorized)
-	}
 }
