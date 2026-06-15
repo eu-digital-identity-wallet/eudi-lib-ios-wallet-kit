@@ -2,11 +2,10 @@
 
 ### Credential Reuse Policy Enforcement
 
-Issuer-defined credential reuse policies now take precedence over caller-supplied `CredentialOptions`. Previously, a caller could pass `CredentialOptions` with any `credentialPolicy`, `reissueTriggerUnused`, or `reissueTriggerLifetimeLeft` values and those would be used as-is even when the issuer had published a `credentialReusePolicy` in its metadata.
+Issuer-defined credential reuse policies (ETSI TS 119 472-3 / ARF Annex II) now take precedence over caller-supplied `[CredentialOptions](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/credentialoptions)`.
+The wallet currently supports 3 ARF Annex II reuse methods: `.limitedTime`, `.onceOnly`, and `.rotatingBatch`.
 
-The new behaviour is:
-
-- When the issuer metadata contains a `credentialReusePolicy`, the resolved `credentialPolicy`, `batchSize`, `reissueTriggerUnused`, and `reissueTriggerLifetimeLeft` fields are always derived from that policy and override the caller's values.
+When the issuer metadata contains a `credentialReusePolicy`, the resolved `credentialPolicy`, `batchSize`, `reissueTriggerUnused`, and `reissueTriggerLifetimeLeft` fields are always derived from that policy and override the caller's values.
 
 This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
 

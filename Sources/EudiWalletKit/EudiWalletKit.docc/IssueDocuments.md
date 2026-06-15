@@ -96,12 +96,16 @@ let defaultOptions = try await wallet.getDefaultCredentialOptions(
 )
 ```
 
-### Credential Reuse Policy Precedence
+### Credential Reuse Policy Precedence (ETSI TS 119 472-3 / ARF Annex II) 
 
 When an issuer publishes a `credentialReusePolicy` in its metadata, the wallet enforces that policy regardless of the `CredentialOptions` passed by the caller. Specifically:
+The wallet currently supports these issuer reuse policies:
 
-- **`credentialPolicy`** (`.oneTimeUse` / `.rotateUse`), **`reissueTriggerUnused`**, and **`reissueTriggerLifetimeLeft`** are always derived from the issuer's published policy and override any values in the caller-supplied `CredentialOptions`.
-- **`batchSize`** is accepted from the caller but is automatically clamped to the issuer's maximum supported batch size. A warning is logged when clamping occurs.
+- `.limitedTime`
+- `.onceOnly`
+- `.rotatingBatch`
+
+- **`credentialPolicy`** (`.oneTimeUse` / `.rotateUse`), **`batchSize`**, **`reissueTriggerUnused`**, and **`reissueTriggerLifetimeLeft`** are always derived from the issuer's published policy and override any values in the caller-supplied `CredentialOptions`.
 - When no issuer reuse policy exists (the issuer metadata contains no `credentialReusePolicy`), the caller's `CredentialOptions` are used as-is.
 
 ```
