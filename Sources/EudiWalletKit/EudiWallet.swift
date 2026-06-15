@@ -47,15 +47,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var transactionLogger: (any TransactionLogger)?
 	/// OpenID4VCI issuer parameters
 	public private(set) var openID4VciConfigurations: [String: OpenId4VciConfiguration]?
-	/// This variable can be used to set a custom networking client for network requests.
+	/// Can be used to set a custom networking client for network requests during OpenID4VCI operations.
 	let networkingVci: OpenID4VCINetworking
+	/// Can be used to set a custom networking client for network requests during OpenID4VP operations.
 	let networkingVp: OpenID4VPNetworking
 	/// Optional model factory type to create custom stronly-typed models
 	public private(set) var modelFactory: (any DocClaimsDecodableFactory)?
 	/// Ble transfer mode
 	public var bleTransferMode: BleTransferMode = .server
+	/// Repository for zk system parameters, used in mdoc presentation when zk proofs are required.
 	public var zkSystemRepository: ZkSystemRepository?
-	//public static let defaultOpenId4VCIConfig =
+
 	/// Initialize a wallet instance using a configuration object.
 	/// - Parameters:
 	///   - eudiWalletConfig: Wallet configuration containing user preferences and settings.
