@@ -266,29 +266,31 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [String: [ClaimsQuery]] {
-		var result: [String: [ClaimsQuery]] = [:]
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [Document.ID: [ClaimsQuery]] {
+		var result: [Document.ID: [ClaimsQuery]] = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: (matchedCredId: Document.ID, claimQueries: [ClaimsQuery])] = [:]
+		var credentialQueryResults: [QueryId: [(matchedCredId: Document.ID, claimQueries: [ClaimsQuery])]] = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
 			let format = credQuery.dataFormat
+			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
 			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
-			// Try to find a credential that satisfies the claim requirements
+			// Try to find credentials that satisfy the claim requirements
 			for credId in matchingCredIds {
 				do {
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
-					credentialQueryResults[credQuery.id] = (credId, claimPaths)
+					credentialQueryResults[credQuery.id, default: []].append((credId, claimPaths))
+					if !isMultiple { break } // for non-multiple queries, stop at first match
 				} catch {
 					lastError = error
 					logger.warning("Credential \(credId) does not satisfy query \(credQuery.id.value): \(error.localizedDescription)")
 					// continue trying other credentials that match the docType
 				}
 			}
-			if credentialQueryResults[credQuery.id] == nil, dcql.credentialSets == nil {
+			if credentialQueryResults[credQuery.id]?.isEmpty != false, dcql.credentialSets == nil {
    			 throw lastError ?? WalletError(description: "No credential satisfies query \(credQuery.id.value)", code: .dcqlQueryNotSatisfied)
 			}
 		}
@@ -298,11 +300,11 @@ extension OpenId4VpUtils {
 			for credSet in credentialSets {
 				var isSetSatisfied = false
 				for option in credSet.options {
-					isSetSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId] != nil}
+					isSetSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
 					if isSetSatisfied {
 						// Add the credentials from this option to the result
 						for queryId in option {
-							if let match = credentialQueryResults[queryId] {
+							for match in credentialQueryResults[queryId] ?? [] {
 								// If the credential ID already exists, merge claim paths
 								if let existingPaths = result[match.matchedCredId] {
 									// Merge and deduplicate claim paths
@@ -325,12 +327,14 @@ extension OpenId4VpUtils {
 				}
 			}
 		} else {
-			for (_, match) in credentialQueryResults {
-				result[match.matchedCredId] = match.claimQueries
+			for (_, matches) in credentialQueryResults {
+				for match in matches {
+					result[match.matchedCredId] = match.claimQueries
+				}
 			}
 		}
 		if result.isEmpty {
-			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id] == nil }
+			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
 			if let notFoundCred {logger.warning("No credential found matching docType: \(notFoundCred.docType ?? "") with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
