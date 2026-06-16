@@ -143,8 +143,7 @@ class OpenId4VpUtils {
 			var nsItems: [String: [RequestItem]] = [:]
 			for claim in claims {
 				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
-				if nsItems[pair.0] == nil { nsItems[pair.0] = [] }
-				if !nsItems[pair.0]!.contains(pair.1) { nsItems[pair.0]!.append(pair.1) }
+				if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
 			}
 			requestItems[docType] = nsItems
 		}
