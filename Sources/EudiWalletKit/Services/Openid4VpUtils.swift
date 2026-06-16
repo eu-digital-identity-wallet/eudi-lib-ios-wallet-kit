@@ -136,12 +136,12 @@ class OpenId4VpUtils {
 		}
 	}
 
-	static func getRequestItems(_ credentialMaps: [Document.ID: [ClaimsQuery]], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
+	static func getRequestItems(_ credentialMaps: [Document.ID: CredentialSelection], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
 		var requestItems = RequestItems()
-		for (id, claims) in credentialMaps {
+		for (id, selection) in credentialMaps {
 			guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
 			var nsItems: [String: [RequestItem]] = [:]
-			for claim in claims {
+			for claim in selection.claimQueries {
 				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
 				if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
 			}
@@ -265,10 +265,10 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [Document.ID: [ClaimsQuery]] {
-		var result: [Document.ID: [ClaimsQuery]] = [:]
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [Document.ID: CredentialSelection] {
+		var result: [Document.ID: CredentialSelection] = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: [(matchedCredId: Document.ID, claimQueries: [ClaimsQuery])]] = [:]
+		var credentialQueryResults: [QueryId: [CredentialSelection]] = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
@@ -281,7 +281,7 @@ extension OpenId4VpUtils {
 			for credId in matchingCredIds {
 				do {
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
-					credentialQueryResults[credQuery.id, default: []].append((credId, claimPaths))
+					credentialQueryResults[credQuery.id, default: []].append(CredentialSelection(credentialId: credId, docType: docType, queryId: credQuery.id, claimQueries: claimPaths))
 					if !isMultiple { break } // for non-multiple queries, stop at first match
 				} catch {
 					lastError = error
@@ -305,15 +305,13 @@ extension OpenId4VpUtils {
 						for queryId in option {
 							for match in credentialQueryResults[queryId] ?? [] {
 								// If the credential ID already exists, merge claim paths
-								if let existingPaths = result[match.matchedCredId] {
+								if let existingSelection = result[match.credentialId] {
 									// Merge and deduplicate claim paths
-									let mergedPaths = existingPaths + match.claimQueries
-									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { pathValue in
-										mergedPaths.first { $0.path.value == pathValue }
-									}
-									result[match.matchedCredId] = uniquePaths
+									let mergedPaths = existingSelection.claimQueries + match.claimQueries
+									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
+									result[match.credentialId] = CredentialSelection(credentialId: match.credentialId, docType: match.docType, queryId: existingSelection.queryId, claimQueries: uniquePaths)
 								} else {
-									result[match.matchedCredId] = match.claimQueries
+									result[match.credentialId] = match
 								}
 							}
 						}
@@ -328,7 +326,7 @@ extension OpenId4VpUtils {
 		} else {
 			for (_, matches) in credentialQueryResults {
 				for match in matches {
-					result[match.matchedCredId] = match.claimQueries
+					result[match.credentialId] = match
 				}
 			}
 		}
