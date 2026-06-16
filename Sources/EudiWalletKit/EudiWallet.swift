@@ -239,6 +239,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await vciService.createKeyBatchWithAttestation(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions, nonce: nonce)
 	}
 
+	/// Returns stored credential options for a previously issued document.
+	/// - Parameter documentId: The document identifier.
+	/// - Returns: The credential options persisted in document metadata.
+	/// - Throws: If document metadata is not found or does not include credential options.
+	public func getDocumentCredentialOptions(documentId: WalletStorage.Document.ID) async throws -> CredentialOptions {
+		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
+			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found", code: .credentialNotFound, context: ["documentId": documentId])
+		}
+		guard let credentialOptions = docMetadata.credentialOptions else {
+			throw PresentationSession.makeError(str: "Credential options not found for document id: \(documentId)", code: .claimNotFound, context: ["documentId": documentId, "claim": "credentialOptions"])
+		}
+		return credentialOptions
+	}
+
 	/// Reissue an existing document using previously stored issuance metadata and authorization data.
 	///
 	/// This method retrieves the document's metadata from storage and uses its credential issuer identifier
