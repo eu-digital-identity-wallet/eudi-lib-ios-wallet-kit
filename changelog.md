@@ -9,6 +9,10 @@ When the issuer metadata contains a `credentialReusePolicy`, the resolved `crede
 
 This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
 
+- When ETSI TS 119 472-3 Once-Only reuse method is applied, the oneTimeUse credential policy is used.
+- When ETSI TS 119 472-3 Limited-time reuse method is applied, the rotateUse credential policy is used and the batch size is set to 1.
+- When ETSI TS 119 472-3 Rotating-Batch reuse method is applied, the rotateUse credential policy is used.
+
 ### API Additions
 
 - Added `EudiWallet.getDocumentCredentialOptions(documentId:)` to retrieve persisted `CredentialOptions` from stored document metadata.
