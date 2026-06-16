@@ -35,6 +35,95 @@ func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
 }
 ```
 
+## v0.31.3
+
+### What's Changed
+
+- 393 dcql resolution fails fix.
+
+## v0.31.2
+
+### What's Changed
+
+- Refactor binding key creation to include proof subject.
+
+## v0.31.1
+
+### What's Changed
+
+- Append `client_id` to redirect URL in authorization code flow.
+
+## v0.31.0
+
+### What's Changed
+
+- Preserve `WalletError.code` in `receiveRequest` error handling.
+- Refactor wallet attestation handling and update dependencies.
+
+### Breaking Changes
+
+- **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
+  - **Before**: `func getWalletAttestation(key: any JWK) async throws -> String`
+  - **After**: `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String`
+  - The parameter is now a `SigningKeyProxy` (from the OpenID4VCI library) instead of a plain `JWK`. Use `signingKey.getPublicJWK()` to obtain the public JWK:
+
+```swift
+func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+    let key = try signingKey.getPublicJWK()
+    return try await attestationService.getWalletAttestation(for: key)
+}
+```
+
+## v0.30.7
+
+### What's Changed
+
+- Update dependencies for `eudi-lib-ios-sdjwt-swift` and `eudi-lib-ios-openid4vci-swift`.
+
+## v0.30.6
+
+### What's Changed
+
+- Update `eudi-lib-ios-iso18013-data-transfer` dependency version to `0.20.3`.
+
+## v0.30.5
+
+### What's Changed
+
+- Refactor QR engagement method and update dependency.
+- Fix BLE presentation to not require Face ID / Touch ID.
+
+## v0.30.4
+
+### What's Changed
+
+- Update default `clientId` in `OpenId4VciConfiguration`.
+- Refactor credential configuration and update dependencies.
+- Fix issuing EHIC document with Kotlin issuer (configuration identifier: `urn:eudi:ehic:1:dc+sd-jwt-jws-json`).
+- Set key user-presence policy by default. To avoid biometric authentication during issuing, set empty `accessControl`:
+
+```swift
+let keyOptions = KeyOptions(curve: .P256, secureAreaName: "Software", accessControl: [])
+```
+
+## v0.30.3
+
+### What's Changed
+
+- Fix SD-JWT array resolution to omit undisclosed elements.
+
+## v0.30.2
+
+### What's Changed
+
+- Enhance deferred issuance handling.
+
+## v0.30.1
+
+### What's Changed
+
+- Update `wallet-storage` dependency version to `0.20.0`.
+
 ## v0.30.0
 
 ### Usage Counter Refresh
