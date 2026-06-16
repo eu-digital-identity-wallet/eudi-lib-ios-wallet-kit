@@ -9,6 +9,10 @@ When the issuer metadata contains a `credentialReusePolicy`, the resolved `crede
 
 This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
 
+### API Additions
+
+- Added `EudiWallet.getDocumentCredentialOptions(documentId:)` to retrieve persisted `CredentialOptions` from stored document metadata.
+
 ### Bug Fixes
 
 - **`OpenId4VpService.receiveRequest()` now respects custom networking**: The `Fetcher<String>()` used to fetch the authorization request object was created without the configured `networking` session, causing errors when a custom networking implementation was set on `EudiWallet`. The fetcher is now initialized with the same `networking` instance as the rest of the VP flow.
