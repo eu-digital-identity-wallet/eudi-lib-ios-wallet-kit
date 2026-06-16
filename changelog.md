@@ -1,4 +1,25 @@
-## v0.31.0
+## v0.32.0
+
+### Credential Reuse Policy Enforcement
+
+Issuer-defined credential reuse policies (ETSI TS 119 472-3 / ARF Annex II) now take precedence over caller-supplied `[CredentialOptions](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/credentialoptions)`.
+The wallet currently supports 3 ARF Annex II reuse methods: `.limitedTime`, `.onceOnly`, and `.rotatingBatch`.
+
+When the issuer metadata contains a `credentialReusePolicy`, the resolved `credentialPolicy`, `batchSize`, `reissueTriggerUnused`, and `reissueTriggerLifetimeLeft` fields are always derived from that policy and override the caller's values.
+
+This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
+
+- When ETSI TS 119 472-3 Once-Only reuse method is applied, the oneTimeUse credential policy is used.
+- When ETSI TS 119 472-3 Limited-time reuse method is applied, the rotateUse credential policy is used and the batch size is set to 1.
+- When ETSI TS 119 472-3 Rotating-Batch reuse method is applied, the rotateUse credential policy is used.
+
+### API Additions
+
+- Added `EudiWallet.getDocumentCredentialOptions(documentId:)` to retrieve persisted `CredentialOptions` from stored document metadata.
+
+### Bug Fixes
+
+- **`OpenId4VpService.receiveRequest()` now respects custom networking**: The `Fetcher<String>()` used to fetch the authorization request object was created without the configured `networking` session, causing errors when a custom networking implementation was set on `EudiWallet`. The fetcher is now initialized with the same `networking` instance as the rest of the VP flow.
 
 ### Breaking Changes
 
@@ -13,6 +34,95 @@ func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
     return try await attestationService.getWalletAttestation(for: key)
 }
 ```
+
+## v0.31.3
+
+### What's Changed
+
+- 393 dcql resolution fails fix.
+
+## v0.31.2
+
+### What's Changed
+
+- Refactor binding key creation to include proof subject.
+
+## v0.31.1
+
+### What's Changed
+
+- Append `client_id` to redirect URL in authorization code flow.
+
+## v0.31.0
+
+### What's Changed
+
+- Preserve `WalletError.code` in `receiveRequest` error handling.
+- Refactor wallet attestation handling and update dependencies.
+
+### Breaking Changes
+
+- **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
+  - **Before**: `func getWalletAttestation(key: any JWK) async throws -> String`
+  - **After**: `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String`
+  - The parameter is now a `SigningKeyProxy` (from the OpenID4VCI library) instead of a plain `JWK`. Use `signingKey.getPublicJWK()` to obtain the public JWK:
+
+```swift
+func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+    let key = try signingKey.getPublicJWK()
+    return try await attestationService.getWalletAttestation(for: key)
+}
+```
+
+## v0.30.7
+
+### What's Changed
+
+- Update dependencies for `eudi-lib-ios-sdjwt-swift` and `eudi-lib-ios-openid4vci-swift`.
+
+## v0.30.6
+
+### What's Changed
+
+- Update `eudi-lib-ios-iso18013-data-transfer` dependency version to `0.20.3`.
+
+## v0.30.5
+
+### What's Changed
+
+- Refactor QR engagement method and update dependency.
+- Fix BLE presentation to not require Face ID / Touch ID.
+
+## v0.30.4
+
+### What's Changed
+
+- Update default `clientId` in `OpenId4VciConfiguration`.
+- Refactor credential configuration and update dependencies.
+- Fix issuing EHIC document with Kotlin issuer (configuration identifier: `urn:eudi:ehic:1:dc+sd-jwt-jws-json`).
+- Set key user-presence policy by default. To avoid biometric authentication during issuing, set empty `accessControl`:
+
+```swift
+let keyOptions = KeyOptions(curve: .P256, secureAreaName: "Software", accessControl: [])
+```
+
+## v0.30.3
+
+### What's Changed
+
+- Fix SD-JWT array resolution to omit undisclosed elements.
+
+## v0.30.2
+
+### What's Changed
+
+- Enhance deferred issuance handling.
+
+## v0.30.1
+
+### What's Changed
+
+- Update `wallet-storage` dependency version to `0.20.0`.
 
 ## v0.30.0
 

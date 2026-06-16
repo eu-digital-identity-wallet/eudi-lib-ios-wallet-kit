@@ -47,15 +47,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var transactionLogger: (any TransactionLogger)?
 	/// OpenID4VCI issuer parameters
 	public private(set) var openID4VciConfigurations: [String: OpenId4VciConfiguration]?
-	/// This variable can be used to set a custom networking client for network requests.
+	/// Can be used to set a custom networking client for network requests during OpenID4VCI operations.
 	let networkingVci: OpenID4VCINetworking
+	/// Can be used to set a custom networking client for network requests during OpenID4VP operations.
 	let networkingVp: OpenID4VPNetworking
 	/// Optional model factory type to create custom stronly-typed models
 	public private(set) var modelFactory: (any DocClaimsDecodableFactory)?
 	/// Ble transfer mode
 	public var bleTransferMode: BleTransferMode = .server
+	/// Repository for zk system parameters, used in mdoc presentation when zk proofs are required.
 	public var zkSystemRepository: ZkSystemRepository?
-	//public static let defaultOpenId4VCIConfig =
+
 	/// Initialize a wallet instance using a configuration object.
 	/// - Parameters:
 	///   - eudiWalletConfig: Wallet configuration containing user preferences and settings.
@@ -235,6 +237,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public func createKeyBatchWithAttestation(issuerName: String, id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil, nonce: String? = nil) async throws -> BatchCreateKeyResult {
 		let vciService = try await resolveVCIService(issuerName: issuerName)
 		return try await vciService.createKeyBatchWithAttestation(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions, nonce: nonce)
+	}
+
+	/// Returns stored credential options for a previously issued document.
+	/// - Parameter documentId: The document identifier.
+	/// - Returns: The credential options persisted in document metadata.
+	/// - Throws: If document metadata is not found or does not include credential options.
+	public func getDocumentCredentialOptions(documentId: WalletStorage.Document.ID) async throws -> CredentialOptions {
+		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
+			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found", code: .credentialNotFound, context: ["documentId": documentId])
+		}
+		guard let credentialOptions = docMetadata.credentialOptions else {
+			throw PresentationSession.makeError(str: "Credential options not found for document id: \(documentId)", code: .claimNotFound, context: ["documentId": documentId, "claim": "credentialOptions"])
+		}
+		return credentialOptions
 	}
 
 	/// Reissue an existing document using previously stored issuance metadata and authorization data.
