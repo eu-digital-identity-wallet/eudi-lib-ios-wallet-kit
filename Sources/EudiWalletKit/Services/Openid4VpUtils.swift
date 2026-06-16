@@ -136,18 +136,23 @@ class OpenId4VpUtils {
 		}
 	}
 
-	static func getRequestItems(_ credentialMaps: [Document.ID: CredentialSelection], idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> RequestItems {
-		var requestItems = RequestItems()
-		for (id, selection) in credentialMaps {
-			guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
-			var nsItems: [String: [RequestItem]] = [:]
-			for claim in selection.claimQueries {
-				guard let pair =  Self.parseClaim(claim, formatRequested) else { continue }
-				if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
+	static func getRequestItems(_ credentialSet: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [RequestItems] {
+		var requestItemsArray = [RequestItems]()
+		for selection in credentialSet.values {
+			var requestItems = RequestItems()
+			for credentialSelectionSet in selection {
+				let id = credentialSelectionSet.credentialId
+				guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
+				var nsItems: [String: [RequestItem]] = [:]
+				for claim in credentialSelectionSet.claimQueries {
+					guard let pair = Self.parseClaim(claim, formatRequested) else { continue }
+					if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
+				}
+				requestItems[id] = nsItems
 			}
-			requestItems[id] = nsItems
+			requestItemsArray.append(requestItems)
 		}
-		return requestItems
+		return requestItemsArray
 	}
 
 	/// parse claim-query and return (namespace, itemIdentifier) pair
@@ -265,15 +270,16 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [Document.ID: CredentialSelection] {
-		var result: [Document.ID: CredentialSelection] = [:]
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> CredentialSelectionSetOptions {
+		var result: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?
 		var credentialQueryResults: [QueryId: [CredentialSelection]] = [:]
+		let isMultipleByQueryId = Dictionary(uniqueKeysWithValues: dcql.credentials.map { ($0.id, $0.multiple == true) })
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
 			let format = credQuery.dataFormat
-			let isMultiple = credQuery.multiple == true
+			//let isMultiple = credQuery.multiple == true
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
 			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
@@ -282,7 +288,7 @@ extension OpenId4VpUtils {
 				do {
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
 					credentialQueryResults[credQuery.id, default: []].append(CredentialSelection(credentialId: credId, docType: docType, queryId: credQuery.id, claimQueries: claimPaths))
-					if !isMultiple { break } // for non-multiple queries, stop at first match
+					//if !isMultiple { break } // for non-multiple queries, stop at first match
 				} catch {
 					lastError = error
 					logger.warning("Credential \(credId) does not satisfy query \(credQuery.id.value): \(error.localizedDescription)")
@@ -295,27 +301,28 @@ extension OpenId4VpUtils {
 		}
 		// Step 2: Handle credential_sets if present
 		if let credentialSets = dcql.credentialSets {
-			// When credential_sets are present, we need to satisfy at least all required sets
+			// Collect all satisfying options; key is the option (CredentialSet = Set<QueryId>)
 			for credSet in credentialSets {
 				var isSetSatisfied = false
 				for option in credSet.options {
-					isSetSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
-					if isSetSatisfied {
-						// Add the credentials from this option to the result
+					let baseOptionKey = option.map(\.value).joined(separator: ",") // key for this option based on queryIds it contains
+					let optionSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
+					if optionSatisfied {
+						isSetSatisfied = true
 						for queryId in option {
-							for match in credentialQueryResults[queryId] ?? [] {
-								// If the credential ID already exists, merge claim paths
-								if let existingSelection = result[match.credentialId] {
-									// Merge and deduplicate claim paths
-									let mergedPaths = existingSelection.claimQueries + match.claimQueries
+							for match in (credentialQueryResults[queryId] ?? []).enumerated() {
+								let optionKey = if isMultipleByQueryId[queryId] == true { baseOptionKey } else { "\(baseOptionKey):\(queryId.value):\(match.offset)" }
+								if let existingSelection = result[optionKey]?.first(where: { $0.credentialId == match.element.credentialId }) {
+									let mergedPaths = existingSelection.claimQueries + match.element.claimQueries
 									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
-									result[match.credentialId] = CredentialSelection(credentialId: match.credentialId, docType: match.docType, queryId: existingSelection.queryId, claimQueries: uniquePaths)
+									result[optionKey]?.remove(existingSelection)
+									result[optionKey, default: []].insert(CredentialSelection(credentialId: match.element.credentialId, docType: match.element.docType, queryId: existingSelection.queryId, claimQueries: uniquePaths))
 								} else {
-									result[match.credentialId] = match
+									result[optionKey, default: []].insert(match.element)
 								}
 							}
 						}
-						break // Take the first satisfiable option for this credential_set
+						// Continue to collect all satisfying options (no break)
 					}
 				}
 				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
@@ -324,9 +331,11 @@ extension OpenId4VpUtils {
 				}
 			}
 		} else {
+			// No credential_sets: collect results under nil key
 			for (_, matches) in credentialQueryResults {
-				for match in matches {
-					result[match.credentialId] = match
+				for match in matches.enumerated() {
+					let optionKey = if isMultipleByQueryId[match.element.queryId] == true { "" } else { "\(match.element.queryId.value):\(match.offset)" }
+					result[optionKey, default: []].insert(match.element)
 				}
 			}
 		}

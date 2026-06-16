@@ -398,8 +398,8 @@ struct EudiWalletKitTests {
 				"attested_issuer": OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
-					requirePAR: false,
-					requireDpop: false
+					requirePAR: .required(authorizationCodeDPoPBinding: false),
+					requireDpop: true
 				)
 			],
 			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
@@ -427,7 +427,7 @@ struct EudiWalletKitTests {
 	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true)
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
