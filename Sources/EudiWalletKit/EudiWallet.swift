@@ -341,27 +341,36 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
-		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
-		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { .ignoreSigned }
-		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
-		let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
-		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
-		let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networkingVci)
-		let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
-		let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
-		let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: policy)
-		switch result {
-		case .success(let offer):
-			let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
-			let urlString = credentialIssuerIdentifier.url.absoluteString
-			// CHECK: Must be pre-registered in registry
-			let vciService: OpenId4VciService = if let registeredService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString) {
-				registeredService
-			} else { try await autoRegisterVciConfiguration(urlString, authFlowRedirectionURI) }
-			return try await vciService.resolveOfferDocTypes(offerUri: offerUri, offer: offer)
-		case .failure(let error):
-			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
+		let offer: CredentialOffer
+		// Reuse a previously resolved offer for this URI if present. A `credential_offer_uri` can be single-use,
+		// so resolving it more than once (e.g. the screen resolving twice, or resolve-then-issue) would fetch it
+		// again and the issuer would reject it as "already consumed". Only fetch when there is no cached offer.
+		if let cachedOffer = OpenId4VciService.credentialOfferCache[offerUri] {
+			offer = cachedOffer
+		} else {
+			let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
+			let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { .ignoreSigned }
+			let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
+			let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
+			let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
+			let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networkingVci)
+			let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
+			let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
+			let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: policy)
+			switch result {
+			case .success(let resolved):
+				offer = resolved
+			case .failure(let error):
+				throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
+			}
 		}
+		let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
+		let urlString = credentialIssuerIdentifier.url.absoluteString
+		// CHECK: Must be pre-registered in registry
+		let vciService: OpenId4VciService = if let registeredService = await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: urlString) {
+			registeredService
+		} else { try await autoRegisterVciConfiguration(urlString, authFlowRedirectionURI) }
+		return try await vciService.resolveOfferDocTypes(offerUri: offerUri, offer: offer)
 	}
 
 	/// Issue documents by offer URI.
@@ -373,23 +382,34 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///  - configuration: Optional OpenId4VciConfiguration to override the default one for this issuance
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
-		let issuerMetadataPolicy = configuration?.issuerMetadataPolicy ?? .ignoreSigned
-		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
-		let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
-		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
-		let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networkingVci)
-		let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
-		let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
-		let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: issuerMetadataPolicy)
-		switch result {
-		case .success(let offer):
-			let urlString = offer.credentialIssuerIdentifier.url.absoluteString
-			let vciService = try await resolveVCIService(issuerName: urlString)
-			if let configuration {	await vciService.setConfiguration(configuration) }
-			return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
-		case .failure(let error):
-			throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
+		let offer: CredentialOffer
+		// Reuse the offer already resolved (and cached) by resolveOfferUrlDocTypes. A `credential_offer_uri`
+		// can be single-use — re-resolving it here would fetch it a second time and the issuer would reject
+		// it as "credential offer not found or already consumed". Only resolve when there is no cached offer
+		// (e.g. issuing without a prior resolve), and cache it so the downstream service can read it.
+		if let cachedOffer = OpenId4VciService.credentialOfferCache[offerUri] {
+			offer = cachedOffer
+		} else {
+			let issuerMetadataPolicy = configuration?.issuerMetadataPolicy ?? .ignoreSigned
+			let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
+			let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
+			let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
+			let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networkingVci)
+			let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
+			let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
+			let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: issuerMetadataPolicy)
+			switch result {
+			case .success(let resolved):
+				offer = resolved
+				OpenId4VciService.credentialOfferCache[offerUri] = resolved
+			case .failure(let error):
+				throw PresentationSession.makeError(str: "Unable to resolve credential offer: \(error.localizedDescription)")
+			}
 		}
+		let urlString = offer.credentialIssuerIdentifier.url.absoluteString
+		let vciService = try await resolveVCIService(issuerName: urlString)
+		if let configuration {	await vciService.setConfiguration(configuration) }
+		return try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
 	}
 
 	/// Begin issuing a document by generating an issue request
