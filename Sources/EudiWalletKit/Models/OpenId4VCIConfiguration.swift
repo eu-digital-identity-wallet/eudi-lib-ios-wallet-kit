@@ -168,7 +168,7 @@ extension OpenId4VciConfiguration {
 				.public(id: clientId)
 			}
 		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder? = if keyAttestationsConfig != nil { DefaultClientAttestationPoPBuilder() } else { nil }
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: requirePAR, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: requirePAR ? .required(authorizationCodeDPoPBinding: true) : .never, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
 	}
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
