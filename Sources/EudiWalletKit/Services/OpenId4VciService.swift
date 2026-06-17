@@ -481,7 +481,7 @@ public actor OpenId4VciService {
 				group.addTask {
 					let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(credentialInfos[i], proofSubject: proofSubject)
 					let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage)
-					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, dpopKeyId: dpopKeyId, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl)
+					return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, issuer: issuer, dpopKeyId: dpopKeyId, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl)
 				}
 			}
 			var result =  [WalletStorage.Document]()
@@ -601,9 +601,9 @@ public actor OpenId4VciService {
 					let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey { try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data } else { nil }
 					let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp)
 					return .deferred(deferredModel, configuration, authorized)
-				case .issued(_, _, _, _):
+				case .issued(_, _, let notificationId, _):
 					let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
-					return try await Self.handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, configuration: configuration, authorized: authorized, logger: logger)
+					return try await Self.handleCredentialResponse(credentials: credentials, publicKeys: publicKeys, configuration: configuration, authorized: authorized, notificationId: notificationId, logger: logger)
 				}
 			} else {
 				throw PresentationSession.makeError(str: "No credential response results available")
@@ -615,7 +615,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	private static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, logger: Logger) async throws -> IssuanceOutcome {
+	private static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, notificationId: String?, logger: Logger) async throws -> IssuanceOutcome {
 		let toData: (String) -> Data = { str in
 			logger.notice(configuration.format == .cbor ? "Base64URL mdoc data:\n\(str)" : "sd-jwt credential data:\n\(str)")
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
@@ -641,7 +641,7 @@ public actor OpenId4VciService {
 		} }
 		// keep dpop key may be reused
 		// if config.dpopKeyOptions != nil { try? await issueReq.secureArea.deleteKeyBatch(id: issueReq.dpopKeyId, startIndex: 0, batchSize: 1); try? await issueReq.secureArea.deleteKeyInfo(id: issueReq.dpopKeyId) }
-		return .issued(credData, configuration, authorized)
+		return .issued(credData, configuration, authorized, notificationId: notificationId)
 	}
 
 		/// Request a deferred issuance based on a stored deferred document. On success, the deferred document is replaced with the issued document.
@@ -655,7 +655,7 @@ public actor OpenId4VciService {
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
 		guard deferredDoc.status == .deferred else { throw PresentationSession.makeError(str: "Invalid document status for deferred issuance: \(deferredDoc.status)") }
 		let data = try await requestDeferredIssuanceInternal(deferredDoc: deferredDoc, credentialOptions: credentialOptions)
-		guard case .issued(_, _, _) = data else { return deferredDoc }
+		guard case .issued(_, _, _, _) = data else { return deferredDoc }
 		return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, deleteId: nil)
 	}
 
@@ -784,7 +784,7 @@ public actor OpenId4VciService {
 			accessToken: authorized.accessToken, transactionId: transactionId, dPopNonce: nil, maxRetries: Constants.MAX_RETRIES, issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec)
 		switch deferredRequestResponse {
 		case .issued(let credential):
-			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, configuration: configuration, authorized: authorized, logger: logger)
+			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, configuration: configuration, authorized: authorized, notificationId: nil, logger: logger)
 		case .issuancePending(let transactionId, let interval):
 			logger.info("Credential not ready yet. Try after \(interval)")
 			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp)
@@ -897,7 +897,9 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, dpopKeyId: String? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, issuer: Issuer? = nil, dpopKeyId: String? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
+		var issuedNotificationId: String? = nil
+		var issuedAuthorizedRequest: AuthorizedRequest? = nil
 		do {
 			let savedDpopKeyId = dpopKeyId ?? issueReq.dpopKeyId
 			var dataToSave: Data; var docTypeToSave = ""
@@ -907,7 +909,10 @@ public actor OpenId4VciService {
 			var publicKeys: [Data] = []
 			var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialOptions.credentialPolicy)
 			switch issueOutcome {
-			case .issued(let dataPairs, let cc, let authorized):
+			case .issued(let dataPairs, let cc, let authorized, let notificationId):
+				// Capture for potential failure notification outside switch scope
+				issuedNotificationId = notificationId
+				issuedAuthorizedRequest = authorized
 				guard dataPairs.first != nil else { throw PresentationSession.makeError(str: "Empty issued data array") }
 				dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 				docMetadata = cc.convertToDocMetadata(authorized: authorized, keyOptions: issueReq.keyOptions, credentialOptions: issueReq.credentialOptions, dpopKeyId: savedDpopKeyId)
@@ -942,10 +947,34 @@ public actor OpenId4VciService {
 			await storage.refreshPublishedVars()
 			if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
 			await logIssuanceTransaction(status: .completed, format: format, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, documentId: newDocument.id, docType: newDocument.docType, docDisplayName: newDocument.displayName, docMetadata: newDocument.metadata)
+			// Notify issuer of successful credential acceptance (fire-and-forget, after storage completes)
+			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
+				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialAccepted)
+			}
 			return newDocument
 		} catch {
+			// Notify issuer of credential failure if the issuer sent a notification_id (fire-and-forget)
+			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
+				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialFailure)
+			}
 			await logIssuanceTransaction(status: .failed, format: format, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, docType: docType, errorMessage: error.localizedDescription)
 			throw error
+		}
+	}
+
+	private func sendIssuanceNotification(issuer: Issuer, authorized: AuthorizedRequest, notificationId: String, event: NotifiedEvent) {
+		Task {
+			do {
+				let notifId = try NotificationId(value: notificationId)
+				try await issuer.notify(
+					authorizedRequest: authorized,
+					notification: NotificationObject(id: notifId, event: event, eventDescription: nil),
+					dPopNonce: nil
+				)
+				logger.info("Issuance notification sent: \(event) [\(notificationId)]")
+			} catch {
+				logger.warning("Issuance notification failed (non-blocking): \(error)")
+			}
 		}
 	}
 
