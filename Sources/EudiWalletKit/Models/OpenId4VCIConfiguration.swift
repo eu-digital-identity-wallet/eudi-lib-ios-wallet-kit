@@ -38,7 +38,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// Configuration that determines how authorization issuance should be handled
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	/// Whether to use Pushed Authorization Request (PAR) for enhanced security
-	public let requirePAR: ParUsage
+	public let parUsage: ParUsage
 	/// Whether to require DPoP (Demonstrating Proof-of-Possession)
 	public let requireDpop: Bool
 	/// Policy for handling signed issuer metadata fetched from `/.well-known/openid-credential-issuer`.
@@ -58,7 +58,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		keyAttestationsConfig: KeyAttestationConfiguration? = nil,
 		authFlowRedirectionURI: URL? = nil,
 		authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes,
-		requirePAR: ParUsage = .required(authorizationCodeDPoPBinding: true),
+		parUsage: ParUsage = .required(authorizationCodeDPoPBinding: true),
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
 		cacheIssuerMetadata: Bool = true,
@@ -71,7 +71,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.keyAttestationsConfig = keyAttestationsConfig
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
-		self.requirePAR = requirePAR
+		self.parUsage = parUsage
 		self.requireDpop = requireDpop
 		self.issuerMetadataPolicy = issuerMetadataPolicy
 		self.userAuthenticationRequired = userAuthenticationRequired
@@ -168,7 +168,7 @@ extension OpenId4VciConfiguration {
 				.public(id: clientId)
 			}
 		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder? = if keyAttestationsConfig != nil { DefaultClientAttestationPoPBuilder() } else { nil }
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: requirePAR, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
 	}
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
