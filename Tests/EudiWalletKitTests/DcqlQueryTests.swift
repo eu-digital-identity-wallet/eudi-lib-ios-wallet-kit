@@ -6,7 +6,6 @@ import MdocDataModel18013
 
 import OpenID4VP
 
-import SwiftCBOR
 /*
  * Copyright (c) 2026 European Commission
  *
@@ -23,18 +22,27 @@ import SwiftCBOR
  * limitations under the License.
  */
 
+import SwiftCBOR
+
 import Testing
+
 import WalletStorage
+
 import eudi_lib_sdjwt_swift
+
 import struct OpenID4VP.ClaimPath
+
 import enum OpenID4VP.ClaimPathElement
+
 @testable import EudiWalletKit
+
 @testable import JOSESwift
 
 struct DcqlQueryTests {
 
 	fileprivate func getMdocClaims(_ namespace: String, _ claimTypes: [String]) -> [ClaimPath] {
-		claimTypes.map { claimType in ClaimPath([.claim(name: namespace), .claim(name: claimType)]) }
+		claimTypes.map { claimType in ClaimPath([.claim(name: namespace), .claim(name: claimType)])
+		}
 	}
 
 	fileprivate func getSdjwtClaims(_ claimPaths: [[String]]) -> [ClaimPath] {
@@ -56,6 +64,64 @@ struct DcqlQueryTests {
 		return data
 	}
 
+	/// Loads a single resource file and returns parsed credential data with a given index suffix on the credential ID.
+	private func loadDcqlQueryable(resourceFileName: String, index: Int, ext: String = "txt") throws
+		-> (
+			id: WalletStorage.Document.ID, docType: DocType, format: DocDataFormat,
+			cbor: IssuerSigned?, sdJwt: SignedSDJWT?
+		)
+	{
+		let data = try loadTestResource(fileName: resourceFileName, ext: ext)
+		let credentialId: WalletStorage.Document.ID = "\(resourceFileName)-\(index)"
+		if resourceFileName.hasPrefix("mdoc-") {
+			guard let strData = String(data: data, encoding: .utf8) else {
+				throw NSError(
+					domain: "TestError", code: 2,
+					userInfo: [
+						NSLocalizedDescriptionKey:
+							"Invalid UTF-8 in resource: \(resourceFileName).\(ext)"
+					])
+			}
+			guard let base64Data = Data(base64URLEncoded: strData.removeWhitespaceAndNewlines())
+			else {
+				throw NSError(
+					domain: "TestError", code: 3,
+					userInfo: [
+						NSLocalizedDescriptionKey:
+							"Invalid base64url mdoc payload in resource: \(resourceFileName).\(ext)"
+					])
+			}
+			let issuerSigned = try IssuerSigned(data: [UInt8](base64Data))
+			let docType = issuerSigned.issuerAuth.mso.docType
+			return (credentialId, docType, .cbor, issuerSigned, nil)
+		} else {
+			guard
+				let sdJwtString = String(data: data, encoding: .utf8)?.trimmingCharacters(
+					in: .whitespacesAndNewlines)
+			else {
+				throw NSError(
+					domain: "TestError", code: 4,
+					userInfo: [
+						NSLocalizedDescriptionKey:
+							"Invalid UTF-8 in resource: \(resourceFileName).\(ext)"
+					])
+			}
+			let parser = CompactParser()
+			let signedSdJwt = try parser.getSignedSdJwt(serialisedString: sdJwtString)
+			let recreatedClaims = try signedSdJwt.recreateClaims().recreatedClaims
+			guard let docType = recreatedClaims["vct"].string ?? recreatedClaims["type"].string
+			else {
+				throw NSError(
+					domain: "TestError", code: 5,
+					userInfo: [
+						NSLocalizedDescriptionKey:
+							"Missing vct/type in SD-JWT resource: \(resourceFileName).\(ext)"
+					])
+			}
+			return (credentialId, docType, .sdjwt, nil, signedSdJwt)
+		}
+	}
+
 	/// Builds one queryable from all provided resource files.
 	private func loadDcqlQueryables(resourceFileNames: [String], ext: String = "txt") throws
 		-> DefaultDcqlQueryable
@@ -65,51 +131,12 @@ struct DcqlQueryTests {
 		var docsCbor = [WalletStorage.Document.ID: IssuerSigned]()
 		var docsSdJwt = [WalletStorage.Document.ID: SignedSDJWT]()
 
-		for fileName in resourceFileNames {
-			let data = try loadTestResource(fileName: fileName, ext: ext)
-			let credentialId: WalletStorage.Document.ID = fileName
-			// make queryable with the document from the resource file, parsing differently based on whether it's an mdoc (cbor) or sd-jwt (json) resource based on file name prefix
-			if fileName.hasPrefix("mdoc-") {
-				guard let strData = String(data: data, encoding: .utf8) else {
-					throw NSError(domain: "TestError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid UTF-8 in resource: \(fileName).\(ext)"])
-				}
-				guard let base64Data = Data(base64URLEncoded: strData.removeWhitespaceAndNewlines())
-				else {
-					throw NSError(domain: "TestError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid base64url mdoc payload in resource: \(fileName).\(ext)"])
-				}
-				let issuerSigned = try IssuerSigned(data: [UInt8](base64Data))
-				let docType = issuerSigned.issuerAuth.mso.docType
-				idsToDocTypes[credentialId] = docType
-				formatsRequested[docType] = .cbor
-				docsCbor[credentialId] = issuerSigned
-			} else {
-				guard
-					let sdJwtString = String(data: data, encoding: .utf8)?.trimmingCharacters(
-						in: .whitespacesAndNewlines)
-				else {
-					throw NSError(
-						domain: "TestError", code: 4,
-						userInfo: [
-							NSLocalizedDescriptionKey:
-								"Invalid UTF-8 in resource: \(fileName).\(ext)"
-						])
-				}
-				let parser = CompactParser()
-				let signedSdJwt = try parser.getSignedSdJwt(serialisedString: sdJwtString)
-				let recreatedClaims = try signedSdJwt.recreateClaims().recreatedClaims
-				guard let docType = recreatedClaims["vct"].string ?? recreatedClaims["type"].string
-				else {
-					throw NSError(
-						domain: "TestError", code: 5,
-						userInfo: [
-							NSLocalizedDescriptionKey:
-								"Missing vct/type in SD-JWT resource: \(fileName).\(ext)"
-						])
-				}
-				idsToDocTypes[credentialId] = docType
-				formatsRequested[docType] = .sdjwt
-				docsSdJwt[credentialId] = signedSdJwt
-			}
+		for (index, fileName) in resourceFileNames.enumerated() {
+			let parsed = try loadDcqlQueryable(resourceFileName: fileName, index: index, ext: ext)
+			idsToDocTypes[parsed.id] = parsed.docType
+			formatsRequested[parsed.docType] = parsed.format
+			if let cbor = parsed.cbor { docsCbor[parsed.id] = cbor }
+			if let sdJwt = parsed.sdJwt { docsSdJwt[parsed.id] = sdJwt }
 		}
 
 		let credentials = OpenId4VpUtils.makeCredentialMap(
@@ -143,10 +170,12 @@ struct DcqlQueryTests {
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential query result")
-		#expect(result["cred1"]?.count == 2, "Should have both claim paths for cred1")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 2,
+			"Should have both claim paths for cred1")
 	}
 
-	@Test("DCQL document number query - returns one credential")
+	@Test("DCQL Document Number query - returns one credential")
 	func testDcqlDocumentNumberQueryReturnsOneCredential() throws {
 		let dcqlData = try loadTestResource(fileName: "dcql-document-number")
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
@@ -195,15 +224,23 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has the "pid" credential that satisfies the first option of the first credential_set
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["given_name"], ["family_name"], ["address", "street_address"]])
+				"pid_cred": getSdjwtClaims([
+					["given_name"], ["family_name"], ["address", "street_address"],
+				])
 			]
 		)
 
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 3, "Should have all three claims for pid")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 3,
+			"Should have all three claims for pid")
 	}
 
 	@Test(
@@ -215,7 +252,10 @@ struct DcqlQueryTests {
 		// Wallet has both reduced credentials (third option of first credential_set)
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: [
-				"reduced_id": ("https://credentials.example.com/reduced_identity_credential", DocDataFormat.sdjwt),
+				"reduced_id": (
+					"https://credentials.example.com/reduced_identity_credential",
+					DocDataFormat.sdjwt
+				),
 				"residence": ("https://cred.example/residence_credential", DocDataFormat.sdjwt),
 			],
 			claimPaths: [
@@ -224,9 +264,15 @@ struct DcqlQueryTests {
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result.count == 2, "Should have two credentials")
-		#expect(result["reduced_id"]?.count == 2, "Should have two claims for reduced_id")
-		#expect(result["residence"]?.count == 3, "Should have three claims for residence")
+		#expect(result.count == 1, "Should have one option combination")
+		let combo = result.values.first
+		#expect(combo?.count == 2, "Should have two credentials in the combination")
+		#expect(
+			combo?.first(where: { $0.credentialId == "reduced_id" })?.claimQueries.count == 2,
+			"Should have two claims for reduced_id")
+		#expect(
+			combo?.first(where: { $0.credentialId == "residence" })?.claimQueries.count == 3,
+			"Should have three claims for residence")
 	}
 
 	@Test(
@@ -238,21 +284,29 @@ struct DcqlQueryTests {
 		// Wallet has "pid" and optional "nice_to_have" credential
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: [
-				"pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt),
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				),
 				"rewards": ("https://company.example/company_rewards", DocDataFormat.sdjwt),
 			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["given_name"], ["family_name"], ["address", "street_address"]]),
+				"pid_cred": getSdjwtClaims([
+					["given_name"], ["family_name"], ["address", "street_address"],
+				]),
 				"rewards": getSdjwtClaims([["rewards_number"]]),
 			]
 		)
 
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result.count == 2, "Should have two credentials including optional")
-		#expect(result["pid_cred"] != nil, "Should have pid credential")
-		#expect(result["rewards"] != nil, "Should have optional rewards credential")
-		#expect(result["pid_cred"]?.count == 3, "Should have three claims for pid_cred")
-		#expect(result["rewards"]?.count == 1, "Should have one claim for rewards")
+		#expect(result.count == 2, "Should have two options: with and without optional")
+		let pidOnly = result.values.first(where: { $0.count == 1 })
+		let withOptional = result.values.first(where: { $0.count == 2 })
+		#expect(pidOnly != nil, "Should have pid-only option")
+		#expect(withOptional != nil, "Should have option with optional rewards")
+		#expect(pidOnly?.first?.claimQueries.count == 3, "Should have three claims for pid_cred")
+		#expect(
+			withOptional?.first(where: { $0.credentialId == "rewards" })?.claimQueries.count == 1,
+			"Should have one claim for rewards")
 	}
 
 	@Test(
@@ -283,7 +337,11 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has "pid" credential but missing one required claim
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_cred": getSdjwtClaims([
 					["given_name"],
@@ -305,12 +363,15 @@ struct DcqlQueryTests {
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: ["mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)],
 			claimPaths: [
-				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
+				"mdl_cred": getMdocClaims(
+					"org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["mdl_cred"]?.count == 3, "Should have three identity claims")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 3, "Should have three identity claims"
+		)
 	}
 
 	@Test("DCQL mdl-or-photoid - pass with photo card", arguments: ["dcql-mdl-or-photoid"])
@@ -321,16 +382,20 @@ struct DcqlQueryTests {
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: ["photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor)],
 			claimPaths: [
-				"photo_cred": getMdocClaims("org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
+				"photo_cred": getMdocClaims(
+					"org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["photo_cred"]?.count == 3, "Should have three identity claims")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 3, "Should have three identity claims"
+		)
 	}
 
-
-	@Test("DCQL mdl-or-photoid - pass with photo card and address", arguments: ["dcql-mdl-or-photoid"])
+	@Test(
+		"DCQL mdl-or-photoid - pass with photo card and address", arguments: ["dcql-mdl-or-photoid"]
+	)
 	func testDcqlMdlOrPhotoIdWithPhotoCardAndAddress(dcqlFile: String) throws {
 		let dcqlData = try loadTestResource(fileName: dcqlFile)
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
@@ -338,14 +403,20 @@ struct DcqlQueryTests {
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: ["photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor)],
 			claimPaths: [
-				"photo_cred": getMdocClaims(IsoMdlModel.isoNamespace, ["given_name", "family_name", "portrait", "resident_address", "resident_country"])
+				"photo_cred": getMdocClaims(
+					IsoMdlModel.isoNamespace,
+					[
+						"given_name", "family_name", "portrait", "resident_address",
+						"resident_country",
+					])
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result.count == 1, "Should have one credential")
+		#expect(result.count == 2, "Should have two options: with and without address")
 		// photo_cred satisfies the photo_card-id option (3 identity claims) plus photo_card-address option (2 more)
-		// merged across all satisfying options
-		#expect(result["photo_cred"] != nil, "Should have photo credential")
+		#expect(
+			result.values.contains(where: { $0.first?.credentialId == "photo_cred" }),
+			"Should have photo credential")
 	}
 
 	@Test(
@@ -361,14 +432,18 @@ struct DcqlQueryTests {
 				"photo_cred": ("org.iso.23220.photoid.1", DocDataFormat.cbor),
 			],
 			claimPaths: [
-				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["given_name", "family_name", "portrait"]),
-				"photo_cred": getMdocClaims("org.iso.18013.5.1", ["given_name", "family_name", "portrait"]),
+				"mdl_cred": getMdocClaims(
+					"org.iso.18013.5.1", ["given_name", "family_name", "portrait"]),
+				"photo_cred": getMdocClaims(
+					"org.iso.18013.5.1", ["given_name", "family_name", "portrait"]),
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		// Both mDL and photo card satisfy their respective options; all are collected
-		#expect(result.count >= 1, "Should have at least one credential")
-		#expect(result["mdl_cred"] != nil, "mDL credential should be included")
+		#expect(result.count >= 1, "Should have at least one option")
+		#expect(
+			result.values.contains(where: { $0.contains(where: { $0.credentialId == "mdl_cred" }) }
+			), "mDL credential should be included")
 	}
 
 	@Test(
@@ -398,13 +473,15 @@ struct DcqlQueryTests {
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: ["mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor)],
 			claimPaths: [
-				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
+				"mdl_cred": getMdocClaims(
+					"org.iso.18013.5.1", ["given_name", "family_name", "portrait"])
 				// No address claims
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["mdl_cred"]?.count == 3, "Should have only identity claims")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 3, "Should have only identity claims")
 	}
 
 	@Test("DCQL claim_sets - pass with second claim set", arguments: ["dcql-claim-sets"])
@@ -413,14 +490,20 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has all claims from second set: last_name, postal_code, date_of_birth
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_cred": getSdjwtClaims([["last_name"], ["postal_code"], ["date_of_birth"]])
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 3, "Should have three claims from second set")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 3,
+			"Should have three claims from second set")
 	}
 
 	@Test(
@@ -431,17 +514,27 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has all possible claims
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["postal_code"], ["locality"], ["region"], ["date_of_birth"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["postal_code"], ["locality"], ["region"], ["date_of_birth"],
+				])
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 4, "Should select first claim set with 4 claims")
+		#expect(
+			result.values.first?.first?.claimQueries.count == 4,
+			"Should select first claim set with 4 claims")
 		// Verify it's the first set by checking for locality/region (not postal_code)
 		let paths =
-			result["pid_cred"]?.map { $0.path.value.map(\.claimName).joined(separator: ".") } ?? []
+			result.values.first?.first?.claimQueries.map {
+				$0.path.value.map(\.claimName).joined(separator: ".")
+			} ?? []
 		#expect(paths.contains("locality"), "Should have locality from first set")
 		#expect(paths.contains("region"), "Should have region from first set")
 	}
@@ -453,7 +546,11 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has last_name and date_of_birth but missing other claims from both sets
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_cred": getSdjwtClaims([
 					["last_name"],
@@ -492,9 +589,15 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential with exact matching values
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -505,7 +608,7 @@ struct DcqlQueryTests {
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
+		#expect(result.values.first?.first?.claimQueries.count == 4, "Should have all four claims")
 	}
 
 	@Test("DCQL query values - pass with alternative postal code", arguments: ["dcql-query-values"])
@@ -514,9 +617,15 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential with second postal code option
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -527,7 +636,7 @@ struct DcqlQueryTests {
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
+		#expect(result.values.first?.first?.claimQueries.count == 4, "Should have all four claims")
 	}
 
 	@Test("DCQL query values - fail with wrong last name", arguments: ["dcql-query-values"])
@@ -536,9 +645,15 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential but last_name doesn't match
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -558,9 +673,15 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential but postal_code doesn't match any option
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -582,7 +703,11 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential but missing postal_code claim entirely
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_cred": getSdjwtClaims([
 					["last_name"],
@@ -609,9 +734,15 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential with both postal code values available
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -622,7 +753,7 @@ struct DcqlQueryTests {
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should have one credential")
-		#expect(result["pid_cred"]?.count == 4, "Should have all four claims")
+		#expect(result.values.first?.first?.claimQueries.count == 4, "Should have all four claims")
 	}
 
 	// MARK: - Structured WalletError.Code tests
@@ -673,9 +804,11 @@ struct DcqlQueryTests {
 		)
 
 		#expect(result.count == 1, "Should still resolve the matching credential")
-		#expect(result["cred1"]?.count == 1, "Should keep only the claims that are present")
 		#expect(
-			result["cred1"]?.first?.path.value
+			result.values.first?.first?.claimQueries.count == 1,
+			"Should keep only the claims that are present")
+		#expect(
+			result.values.first?.first?.claimQueries.first?.path.value
 				== ClaimPath([.claim(name: "org.iso.7367.1"), .claim(name: "vehicle_holder")]).value,
 			"Should only include the available claim path"
 		)
@@ -711,9 +844,15 @@ struct DcqlQueryTests {
 		let dcqlData = try loadTestResource(fileName: dcqlFile)
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
-				"pid_cred": getSdjwtClaims([["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"]])
+				"pid_cred": getSdjwtClaims([
+					["last_name"], ["first_name"], ["address", "street_address"], ["postal_code"],
+				])
 			],
 			claimValues: [
 				"pid_cred": [
@@ -740,7 +879,11 @@ struct DcqlQueryTests {
 		let dcqlData = try loadTestResource(fileName: dcqlFile)
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_cred": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_cred": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_cred": getSdjwtClaims([
 					["last_name"],
@@ -771,8 +914,12 @@ struct DcqlQueryTests {
 		// Wallet has two credentials of the same type
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: [
-				"pid_1": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt),
-				"pid_2": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt),
+				"pid_1": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				),
+				"pid_2": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				),
 			],
 			claimPaths: [
 				"pid_1": getSdjwtClaims([["given_name"], ["family_name"]]),
@@ -780,9 +927,15 @@ struct DcqlQueryTests {
 			]
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-		#expect(result.count == 2, "Should return both matching credentials when multiple is true")
-		#expect(result["pid_1"] != nil, "Should include pid_1")
-		#expect(result["pid_2"] != nil, "Should include pid_2")
+		#expect(result.count == 1, "Should bundle all matching credentials when multiple is true")
+		let bundled = result.values.first
+		#expect(bundled?.count == 2, "Should contain both matching credentials")
+		#expect(
+			bundled?.contains(where: { $0.credentialId == "pid_1" }) == true, "Should include pid_1"
+		)
+		#expect(
+			bundled?.contains(where: { $0.credentialId == "pid_2" }) == true, "Should include pid_2"
+		)
 	}
 
 	@Test("DCQL multiple flag - returns single credential when only one matches")
@@ -792,7 +945,9 @@ struct DcqlQueryTests {
 		// Wallet has one credential of the matching type and one of a different type
 		let dcqlQueryable = DefaultDcqlQueryable(
 			credentials: [
-				"pid_1": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt),
+				"pid_1": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				),
 				"other": ("https://example.com/other_credential", DocDataFormat.sdjwt),
 			],
 			claimPaths: [
@@ -802,7 +957,9 @@ struct DcqlQueryTests {
 		)
 		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 		#expect(result.count == 1, "Should return the single matching credential")
-		#expect(result["pid_1"] != nil, "Should include pid_1")
+		#expect(
+			result.values.first?.contains(where: { $0.credentialId == "pid_1" }) == true,
+			"Should include pid_1")
 	}
 
 	@Test("DCQL multiple flag - throws when no credential satisfies claims")
@@ -811,10 +968,14 @@ struct DcqlQueryTests {
 		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
 		// Wallet has credential of the right type but missing required claims
 		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["pid_1": ("https://credentials.example.com/identity_credential", DocDataFormat.sdjwt)],
+			credentials: [
+				"pid_1": (
+					"https://credentials.example.com/identity_credential", DocDataFormat.sdjwt
+				)
+			],
 			claimPaths: [
 				"pid_1": getSdjwtClaims([
-					["given_name"],
+					["given_name"]
 					// Missing family_name
 				])
 			]
@@ -844,5 +1005,232 @@ struct DcqlQueryTests {
 		#expect(error.code == .claimNotFound)
 		#expect(error.context["claimPath"] == "family_name_birth")
 		#expect(error.errorDescription == "Claim not found: family_name_birth")
+	}
+
+	// MARK: - mdoc mDL + (PhotoID OR PID)
+
+	@Test("mdoc mDL + (PhotoID OR PID) - pass with mDL and PhotoID")
+	func testDcqlMdlPlusPhotoIdOption() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-photoid-or-pid")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"photoid_cred": [
+					ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])
+				],
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		#expect(result.count == 1, "Should have one option (mdl+photoid)")
+		let combo = result.values.first
+		#expect(combo?.count == 2, "Should have two credentials in the combination")
+		#expect(combo?.contains(where: { $0.credentialId == "mdl_cred" }) == true)
+		#expect(combo?.contains(where: { $0.credentialId == "photoid_cred" }) == true)
+		#expect(combo?.first(where: { $0.credentialId == "mdl_cred" })?.claimQueries.count == 2)
+		#expect(combo?.first(where: { $0.credentialId == "photoid_cred" })?.claimQueries.count == 1)
+	}
+
+	@Test("mdoc mDL + (PhotoID OR PID) - pass with mDL and PID")
+	func testDcqlMdlPlusPidOption() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-photoid-or-pid")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"pid_cred": [
+					ClaimPath([.claim(name: "eu.europa.ec.eudi.pid.1"), .claim(name: "birth_date")])
+				],
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		#expect(result.count == 1, "Should have one option (mdl+pid)")
+		let combo = result.values.first
+		#expect(combo?.count == 2, "Should have two credentials in the combination")
+		#expect(combo?.contains(where: { $0.credentialId == "mdl_cred" }) == true)
+		#expect(combo?.contains(where: { $0.credentialId == "pid_cred" }) == true)
+	}
+
+	@Test("mdoc mDL + (PhotoID OR PID) - pass with all three returns two options")
+	func testDcqlMdlPlusPhotoIdAndPid() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-photoid-or-pid")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"photoid_cred": [
+					ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])
+				],
+				"pid_cred": [
+					ClaimPath([.claim(name: "eu.europa.ec.eudi.pid.1"), .claim(name: "birth_date")])
+				],
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		#expect(result.count == 2, "Should have two options (mdl+photoid and mdl+pid)")
+		// Both options should include mDL
+		#expect(result.values.allSatisfy { $0.contains(where: { $0.credentialId == "mdl_cred" }) })
+	}
+
+	@Test("mdoc mDL + (PhotoID OR PID) - pass with two mDLs returns two options per alternative")
+	func testDcqlTwoMdlsPlusPhotoId() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-photoid-or-pid")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_1": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"mdl_2": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_1": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"mdl_2": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"photoid_cred": [
+					ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])
+				],
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		// mdl has 2 matches × photoid option = 2 combinations
+		#expect(result.count == 2, "Should have two options for the two mDL alternatives")
+		#expect(
+			result.values.allSatisfy { $0.contains(where: { $0.credentialId == "photoid_cred" }) })
+	}
+
+	@Test("mdoc mDL + (PhotoID OR PID) - fail without mDL")
+	func testDcqlMdlPlusPhotoIdOrPidFailsWithoutMdl() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-photoid-or-pid")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"photoid_cred": [
+					ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])
+				],
+				"pid_cred": [
+					ClaimPath([.claim(name: "eu.europa.ec.eudi.pid.1"), .claim(name: "birth_date")])
+				],
+			]
+		)
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
+	}
+
+	// MARK: - mDL + PID required, PhotoID optional
+
+	@Test("mDL + PID required, PhotoID optional - pass with all three")
+	func testDcqlMdlPidRequiredPhotoidOptionalAllThree() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-pid-required-photoid-optional")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"pid_cred": getMdocClaims("eu.europa.ec.eudi.pid.1", ["family_name", "given_name"]),
+				"photoid_cred": [ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])],
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		// Two options: one with required only (mdl+pid), one with required+optional (mdl+pid+photoid)
+		#expect(result.count == 2)
+		let withoutOptional = result.values.first(where: { $0.count == 2 })
+		let withOptional = result.values.first(where: { $0.count == 3 })
+		#expect(withoutOptional != nil, "Should have option with just mDL + PID")
+		#expect(withOptional != nil, "Should have option with mDL + PID + PhotoID")
+		#expect(withOptional?.contains(where: { $0.credentialId == "mdl_cred" }) == true)
+		#expect(withOptional?.contains(where: { $0.credentialId == "pid_cred" }) == true)
+		#expect(withOptional?.contains(where: { $0.credentialId == "photoid_cred" }) == true)
+	}
+
+	@Test("mDL + PID required, PhotoID optional - pass without PhotoID")
+	func testDcqlMdlPidRequiredPhotoidOptionalNoPhotoid() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-pid-required-photoid-optional")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_cred": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_cred": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"pid_cred": getMdocClaims("eu.europa.ec.eudi.pid.1", ["family_name", "given_name"]),
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		// Should still pass — PhotoID is optional
+		#expect(result.count == 1)
+		let combo = result.values.first
+		#expect(combo?.count == 2, "Should have mDL + PID only")
+		#expect(combo?.contains(where: { $0.credentialId == "mdl_cred" }) == true)
+		#expect(combo?.contains(where: { $0.credentialId == "pid_cred" }) == true)
+	}
+
+	@Test("mDL + PID required, PhotoID optional - fail without mDL")
+	func testDcqlMdlPidRequiredPhotoidOptionalNoMdl() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-pid-required-photoid-optional")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+				"photoid_cred": ("org.iso.23220.2.photoid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"pid_cred": getMdocClaims("eu.europa.ec.eudi.pid.1", ["family_name", "given_name"]),
+				"photoid_cred": [ClaimPath([.claim(name: "org.iso.23220.photoid.1"), .claim(name: "birth_date")])],
+			]
+		)
+		#expect(throws: WalletError.self) {
+			try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		}
+	}
+
+	@Test("mDL + PID required, PhotoID optional - two mDLs expands Cartesian")
+	func testDcqlMdlPidRequiredPhotoidOptionalTwoMdls() throws {
+		let dcqlData = try loadTestResource(fileName: "dcql-mdl-pid-required-photoid-optional")
+		let dcql = try JSONDecoder().decode(DCQL.self, from: dcqlData)
+		let dcqlQueryable = DefaultDcqlQueryable(
+			credentials: [
+				"mdl_1": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"mdl_2": ("org.iso.18013.5.1.mDL", DocDataFormat.cbor),
+				"pid_cred": ("eu.europa.ec.eudi.pid.1", DocDataFormat.cbor),
+			],
+			claimPaths: [
+				"mdl_1": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"mdl_2": getMdocClaims("org.iso.18013.5.1", ["family_name", "given_name"]),
+				"pid_cred": getMdocClaims("eu.europa.ec.eudi.pid.1", ["family_name", "given_name"]),
+			]
+		)
+		let result = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
+		print("Keys: \(Array(result.keys))")
+		// 2 mDLs × 1 PID = 2 combinations (no photoid available)
+		#expect(result.count == 2, "Should have two options for the two mDL alternatives")
+		#expect(result.values.allSatisfy { $0.contains(where: { $0.credentialId == "pid_cred" }) })
 	}
 }

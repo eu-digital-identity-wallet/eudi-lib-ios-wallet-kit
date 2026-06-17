@@ -17,50 +17,27 @@
 import Foundation
 import MdocDataModel18013
 import OpenID4VP
+import OrderedCollections
 import struct WalletStorage.Document
 
-public typealias CredentialSelections = [Document.ID: CredentialSelection]
-public typealias CredentialSelectionSet = Set<CredentialSelection>
-public typealias CredentialSelectionSetOptions = [String: CredentialSelectionSet]
+public typealias CredentialSelectionSet = OrderedSet<CredentialSelection>
+public typealias CredentialSelectionSetOptions = OrderedDictionary<String, CredentialSelectionSet>
 
-extension CredentialSelectionSet {
-	public subscript(credentialId: Document.ID) -> CredentialSelection? {
-		first { $0.credentialId == credentialId }
-	}
-}
 
-extension CredentialSelectionSetOptions {
-	/// Finds a CredentialSelection by credential ID across all sets.
-	public subscript(credentialId: Document.ID) -> CredentialSelection? {
-		values.lazy.compactMap { $0[credentialId] }.first
-	}
-
-	/// Total number of unique credentials across all sets.
-	public var count: Int {
-		Set(values.flatMap { $0.map(\.credentialId) }).count
-	}
-}
-
-public struct CredentialSelection: Sendable, Hashable, RandomAccessCollection {
-	public typealias Element = ClaimsQuery
-	public typealias Index = Array<ClaimsQuery>.Index
-
+public struct CredentialSelection: Sendable, Hashable {
 	public let credentialId: Document.ID
 	public let docType: DocType
 	public let queryId: QueryId
+	public let optionId: String
 	public let claimQueries: [ClaimsQuery]
 
-	public init(credentialId: Document.ID, docType: DocType, queryId: QueryId, claimQueries: [ClaimsQuery]) {
+	public init(credentialId: Document.ID, docType: DocType, queryId: QueryId, optionId: String, claimQueries: [ClaimsQuery]) {
 		self.credentialId = credentialId
 		self.docType = docType
 		self.queryId = queryId
+		self.optionId = optionId
 		self.claimQueries = claimQueries
 	}
-
-	public var startIndex: Index { claimQueries.startIndex }
-	public var endIndex: Index { claimQueries.endIndex }
-	public func index(after i: Index) -> Index { claimQueries.index(after: i) }
-	public subscript(position: Index) -> ClaimsQuery { claimQueries[position] }
 
 	public static func == (lhs: CredentialSelection, rhs: CredentialSelection) -> Bool {
 		lhs.credentialId == rhs.credentialId

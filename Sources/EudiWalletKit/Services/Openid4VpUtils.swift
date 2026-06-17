@@ -18,6 +18,7 @@ import Foundation
 import SwiftCBOR
 import CryptoKit
 import Logging
+import OrderedCollections
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
@@ -250,6 +251,20 @@ extension DCQL {
 	}
 }
 
+extension CredentialSelectionSet {
+	/// Merges claims if the credential already exists in the set, otherwise appends
+	mutating func mergeOrAppend(_ sel: CredentialSelection) {
+		if let existing = first(where: { $0.credentialId == sel.credentialId }) {
+			let mergedPaths = existing.claimQueries + sel.claimQueries
+			let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
+			remove(existing)
+			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths))
+		} else {
+			append(sel)
+		}
+	}
+}
+
 extension OpenId4VpUtils {
 	/// Resolves a DCQL query against available credentials in the wallet
 	///
@@ -271,23 +286,23 @@ extension OpenId4VpUtils {
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> CredentialSelectionSetOptions {
-		var result: CredentialSelectionSetOptions = [:]
+		var resultDict: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: [CredentialSelection]] = [:]
-		let isMultipleByQueryId = Dictionary(uniqueKeysWithValues: dcql.credentials.map { ($0.id, $0.multiple == true) })
+		var credentialQueryResults: OrderedDictionary<QueryId, [CredentialSelection]> = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
 			let format = credQuery.dataFormat
-			//let isMultiple = credQuery.multiple == true
+			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
 			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
 			// Try to find credentials that satisfy the claim requirements
-			for credId in matchingCredIds {
+			for (credIndex, credId) in matchingCredIds.enumerated() {
 				do {
+					let optionId = !isMultiple ? "\(credQuery.id.value)-\(credIndex)" : credQuery.id.value
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
-					credentialQueryResults[credQuery.id, default: []].append(CredentialSelection(credentialId: credId, docType: docType, queryId: credQuery.id, claimQueries: claimPaths))
+					credentialQueryResults[credQuery.id, default: []].append(CredentialSelection(credentialId: credId, docType: docType, queryId: credQuery.id, optionId: optionId, claimQueries: claimPaths))
 					//if !isMultiple { break } // for non-multiple queries, stop at first match
 				} catch {
 					lastError = error
@@ -301,54 +316,115 @@ extension OpenId4VpUtils {
 		}
 		// Step 2: Handle credential_sets if present
 		if let credentialSets = dcql.credentialSets {
-			// Collect all satisfying options; key is the option (CredentialSet = Set<QueryId>)
-			for (credSetIndex, credSet) in credentialSets.enumerated() {
+			// For each credential set, collect satisfiable options expanded by credential alternatives
+			let setsWithOptions: [(isRequired: Bool, options: [(String, CredentialSelectionSet)])] = credentialSets.map { credSet in
 				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
-				var isSetSatisfied = false
-				for (optionIndex, option) in credSet.options.enumerated() {
-					let baseOptionKey = option.map(\.value).joined(separator: ",") // key for this option based on queryIds it contains
-					if !isSetRequired {
-						let optionalOptionKey = "optional:\(credSetIndex):\(optionIndex):\(baseOptionKey)"
-						result[optionalOptionKey, default: []] = []
-					}
+				let setOptions: [(String, CredentialSelectionSet)] = credSet.options.flatMap { option -> [(String, CredentialSelectionSet)] in
 					let optionSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
-					if optionSatisfied {
-						isSetSatisfied = true
-						for queryId in option {
-							for match in (credentialQueryResults[queryId] ?? []).enumerated() {
-								let optionKey = if isMultipleByQueryId[queryId] == true { baseOptionKey } else { "\(baseOptionKey):\(match.element.credentialId):\(match.offset)" }
-								if let existingSelection = result[optionKey]?.first(where: { $0.credentialId == match.element.credentialId }) {
-									let mergedPaths = existingSelection.claimQueries + match.element.claimQueries
-									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
-									result[optionKey]?.remove(existingSelection)
-									result[optionKey, default: []].insert(CredentialSelection(credentialId: match.element.credentialId, docType: match.element.docType, queryId: existingSelection.queryId, claimQueries: uniquePaths))
-								} else {
-									result[optionKey, default: []].insert(match.element)
-								}
-							}
+					guard optionSatisfied else { return [] }
+					// For each queryId in the option, get match groups (bundled for multiple, individual otherwise)
+					let matchGroups: [[(String, [CredentialSelection])]] = option.map { queryId in
+						let matches = credentialQueryResults[queryId] ?? []
+						let isMultiple = dcql.findQuery(id: queryId.value)?.multiple == true
+						if isMultiple {
+							// Bundle all matches together as one group
+							return [(matches.first?.optionId ?? queryId.value, matches)]
+						} else {
+							// Each match is a separate alternative
+							return matches.map { ($0.optionId, [$0]) }
 						}
-						// Continue to collect all satisfying options (no break)
+					}
+					// Cartesian product across match groups
+					let combinations = matchGroups.reduce([([String](), [CredentialSelection]())]) { acc, groups in
+						acc.flatMap { (keys, sels) in
+							groups.map { (key, groupSels) in (keys + [key], sels + groupSels) }
+						}
+					}
+					return combinations.map { (keys, sels) in
+						let optionKey = keys.joined(separator: "+")
+						let selections = sels.reduce(into: CredentialSelectionSet()) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (optionKey, selections)
 					}
 				}
-				if isSetRequired, !isSetSatisfied {
-					throw WalletError(description: "Required credential_set \(credSet.options) cannot be satisfied", code: .credentialSetNotSatisfied)
+				return (isSetRequired, setOptions)
+			}
+
+			let requiredSetsOptions = setsWithOptions.filter(\.isRequired).map(\.options)
+			let optionalSetsOptions = setsWithOptions.filter { !$0.isRequired && !$0.options.isEmpty }.map(\.options)
+
+			// Verify all required sets are satisfiable
+			if requiredSetsOptions.contains(where: \.isEmpty) {
+				throw WalletError(description: "Required credential_set cannot be satisfied", code: .credentialSetNotSatisfied)
+			}
+
+			// Cartesian product across all required sets
+			let requiredCombinations = requiredSetsOptions.reduce([(String, CredentialSelectionSet)]()) { acc, setOptions in
+				if acc.isEmpty { return setOptions }
+				return acc.flatMap { (existingKey, existingSet) in
+					setOptions.map { (optKey, optSet) in
+						let combinedKey = existingKey.isEmpty ? optKey : "\(existingKey)|\(optKey)"
+						let combinedSet = optSet.reduce(into: existingSet) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (combinedKey, combinedSet)
+					}
 				}
+			}
+
+			// Expand with optional sets (include variants with and without each optional)
+			let combinations = optionalSetsOptions.reduce(requiredCombinations) { acc, optSetOptions in
+				acc.flatMap { (existingKey, existingSet) in
+					// Keep without optional + add each optional variant
+					[(existingKey, existingSet)] + optSetOptions.map { (optKey, optSet) in
+						let combinedKey = existingKey.isEmpty ? optKey : "\(existingKey)|\(optKey)"
+						let combinedSet = optSet.reduce(into: existingSet) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (combinedKey, combinedSet)
+					}
+				}
+			}
+
+			for (key, set) in combinations {
+				resultDict[key] = set
 			}
 		} else {
-			// No credential_sets: collect results under nil key
-			for (_, matches) in credentialQueryResults {
-				for (matchIndex, match) in matches.enumerated() {
-					let optionKey = if isMultipleByQueryId[match.queryId] == true { "" } else { "\(match.queryId.value):\(match.credentialId):\(matchIndex)" }
-					result[optionKey, default: []].insert(match)
+			// No credential_sets: Cartesian product across credential query results
+			// For `multiple` queries, all matches are bundled together; otherwise each match is a separate alternative
+			let matchGroups: [(String, [(String, [CredentialSelection])])] = credentialQueryResults.map { (queryId, matches) in
+				let isMultiple = dcql.findQuery(id: queryId.value)?.multiple == true
+				if isMultiple {
+					// All matches bundled as one group
+					return (queryId.value, [(matches.first?.optionId ?? queryId.value, matches)])
+				} else {
+					// Each match is a separate alternative
+					return (queryId.value, matches.map { ($0.optionId, [$0]) })
 				}
 			}
+
+			let combinations = matchGroups.reduce([([String](), [CredentialSelection]())]) { acc, entry in
+				let (_, groups) = entry
+				return acc.flatMap { (keys, sels) in
+					groups.map { (key, groupSels) in (keys + [key], sels + groupSels) }
+				}
+			}
+
+			for (keys, sels) in combinations {
+				let optionKey = keys.joined(separator: "|")
+				let selectionSet = sels.reduce(into: CredentialSelectionSet()) { set, sel in
+					set.mergeOrAppend(sel)
+				}
+				resultDict[optionKey] = selectionSet
+			}
 		}
-		if result.isEmpty {
+		if resultDict.isEmpty {
 			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
 			if let notFoundCred {logger.warning("No credential found matching docType: \(notFoundCred.docType ?? "") with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
-		return result
+		return resultDict
 	}
 
 	/// Resolves claims for a specific credential query and credential
