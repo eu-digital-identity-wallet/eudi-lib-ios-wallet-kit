@@ -298,6 +298,7 @@ extension OpenId4VciService {
 			deleteId: docId,
 			dpopKeyId: storedDpopKeyId
 		)
+		logger.info("Refresh token: credential re-issued successfully (replaced docId \(docId) with new docId \(document.id)).")
 		return (document, refreshed)
 	}
 

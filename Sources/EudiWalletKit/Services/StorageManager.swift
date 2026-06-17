@@ -66,7 +66,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		case .issued:
 			let models = await docs.asyncCompactMap { d -> DocClaimsModel? in
 				let mdoc = Self.toClaimsModel(doc:d, uiCulture: uiCulture, modelFactory: modelFactory)
-				if let mdoc { mdoc.credentialsUsageCounts = try? await Self.getCredentialsUsageCount(id: mdoc.id, secureAreaName: mdoc.secureAreaName) }
+				if let mdoc { mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: mdoc.id) }
 				return mdoc
 			}
 			await MainActor.run { docModels = models }
@@ -90,7 +90,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 		case .issued:
 			let mdoc: DocClaimsModel? = Self.toClaimsModel(doc: doc, uiCulture: uiCulture, modelFactory: modelFactory)
 			if let mdoc {
-				mdoc.credentialsUsageCounts = try? await Self.getCredentialsUsageCount(id: doc.id, secureAreaName: mdoc.secureAreaName)
+				mdoc.credentialsUsageCounts = try? await getCredentialsUsageCount(id: doc.id)
 				await MainActor.run { docModels.append(mdoc) }
 			} else { logger.error("Could not decode claims of \(doc.docType)") }
 			return mdoc
