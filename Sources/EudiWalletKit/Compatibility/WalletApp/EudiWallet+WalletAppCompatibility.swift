@@ -44,21 +44,21 @@ extension EudiWallet {
 	}
 
 	@MainActor
-	@discardableResult public func getCredentialsWithRefreshToken(issuerName: String, docTypeIdentifier: DocTypeIdentifier, authorizedRequestParams: AuthorizedRequestParams, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docId: String, credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, forceRefreshToken: Bool = false) async throws -> (document: WalletStorage.Document, authorizedRequestParams: AuthorizedRequestParams) {
+	@discardableResult public func getCredentialsWithRefreshToken(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], authorizedRequestParams: AuthorizedRequestParams, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docIds: [String], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, forceRefreshToken: Bool = false) async throws -> (documents: [WalletStorage.Document], authorizedRequestParams: AuthorizedRequestParams) {
 		guard let vciService = OpenId4VCIServiceRegistry.shared.get(name: issuerName) else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)")
 		}
 		let authorized = try authorizedRequestParams.toAuthorizedRequest()
-		let (document, refreshed) = try await vciService.getCredentialsWithRefreshToken(
-			docTypeIdentifier: docTypeIdentifier,
+		let (documents, refreshed) = try await vciService.getCredentialsWithRefreshToken(
+			docTypeIdentifiers: docTypeIdentifiers,
 			authorized: authorized,
 			issuerDPopConstructorParam: issuerDPopConstructorParam,
-			docId: docId,
+			docIds: docIds,
 			credentialOptions: credentialOptions,
 			keyOptions: keyOptions,
 			promptMessage: promptMessage,
 			forceRefreshToken: forceRefreshToken
 		)
-		return (document, AuthorizedRequestParams(from: refreshed))
+		return (documents, AuthorizedRequestParams(from: refreshed))
 	}
 }
