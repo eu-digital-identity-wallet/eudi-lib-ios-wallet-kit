@@ -164,6 +164,7 @@ extension OpenId4VciService {
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
+		let tokenDpopKeyId = issueReq.dpopKeyId
 
 		return try await withThrowingTaskGroup(of: WalletStorage.Document.self) { group in
 			for (index, docType) in docTypes.enumerated() {
@@ -207,7 +208,7 @@ extension OpenId4VciService {
 						format: credentialConfigurations[index].format,
 						issueReq: service.issueReq,
 						deleteId: nil,
-						dpopKeyId: nil,
+						dpopKeyId: tokenDpopKeyId,
 						issuerName: issuerName,
 						issuerIdentifier: issuerIdentifier,
 						issuerLogoUrl: issuerLogoUrl
@@ -228,24 +229,7 @@ extension OpenId4VciService {
 	}
 
 	func getCredentialsWithRefreshToken(docTypeIdentifier: DocTypeIdentifier, authorized: AuthorizedRequest, issuerDPopConstructorParam: IssuerDPoPConstructorParam, docId: String, credentialOptions: CredentialOptions?, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, forceRefreshToken: Bool = false) async throws -> (WalletStorage.Document, AuthorizedRequest) {
-		let dpopConstructor = DPoPConstructor(
-			algorithm: JWSAlgorithm(.ES256),
-			jwk: issuerDPopConstructorParam.jwk,
-			privateKey: .secKey(issuerDPopConstructorParam.privateKey)
-		)
-		let (issuer, _, configuration) = try await fetchIssuerAndOfferWithLatestMetadata(
-			docTypeIdentifier: docTypeIdentifier,
-			dpopConstructor: dpopConstructor
-		)
-
-		let refreshed: AuthorizedRequest
-		do {
-			logger.info("Access token issued at: \(Date(timeIntervalSinceReferenceDate: authorized.timeStamp)), now: \(Date()), expires at \(Date(timeIntervalSinceReferenceDate: authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0)))")
-			refreshed = try await refreshAuthorization(issuer: issuer, authorized: authorized, configuration: configuration, forceRefreshToken: forceRefreshToken)
-		} catch CredentialIssuanceError.requestFailed(let code, let error, let description) where (400..<500).contains(code) {
-			logger.error("Refresh token authentication failure with status code: \(code), error: \(error) \(description ?? "").")
-			throw RefreshAuthorizationError.reauthorizationRequired(statusCode: code, description: "\(error) \(description ?? "")")
-		}
+		let storedDpopKeyId = try await storageService.loadDocumentMetadata(id: docId)?.dpopKeyId
 
 		let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
 		try await prepareIssuing(
@@ -257,34 +241,14 @@ extension OpenId4VciService {
 			disablePrompt: false,
 			promptMessage: promptMessage
 		)
-		setAdditionalOptions(configuration.configurationIdentifier.value)
-		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration, proofSubject: issuer.config.client.id)
-		let issuanceOutcome = try await Self.submissionUseCase(
-			refreshed,
-			issuer: issuer,
-			configuration: configuration,
-			bindingKeys: bindingKeys,
-			publicKeys: publicKeys,
-			logger: logger
-		)
-		let document = try await finalizeIssuing(
-			issueOutcome: issuanceOutcome,
-			docType: docTypeIdentifier.docType,
-			format: configuration.format,
-			issueReq: issueReq,
-			deleteId: docId
-		)
-		return (document, refreshed)
-	}
 
-	private func fetchIssuerAndOfferWithLatestMetadata(docTypeIdentifier: DocTypeIdentifier, dpopConstructor: DPoPConstructorType) async throws -> (Issuer, CredentialOffer, CredentialConfiguration) {
 		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
 		guard let authorizationServer = metadata.authorizationServers?.first else {
 			throw WalletError(description: "Invalid issuer metadata")
 		}
 		let authServerMetadata = await AuthorizationServerMetadataResolver(
-			oidcFetcher: Fetcher(session: networking),
-			oauthFetcher: Fetcher(session: networking)
+			oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking),
+			oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)
 		).resolve(url: authorizationServer)
 		let authorizationServerMetadata = try authServerMetadata.get()
 		let configuration = try getCredentialConfiguration(
@@ -305,31 +269,44 @@ extension OpenId4VciService {
 			grants: nil,
 			authorizationServerMetadata: authorizationServerMetadata
 		)
-		let vciConfig = try await config.toOpenId4VCIConfig(
-			credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString,
-			clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported
+		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, dpopKeyId: storedDpopKeyId)
+
+		let refreshed: AuthorizedRequest
+		do {
+			refreshed = try await refreshAuthorization(issuer: issuer, authorized: authorized, configuration: configuration, forceRefreshToken: forceRefreshToken)
+		} catch CredentialIssuanceError.requestFailed(let code, let error, let description) where (400..<500).contains(code) {
+			throw RefreshAuthorizationError.reauthorizationRequired(statusCode: code, description: "\(error) \(description ?? "")")
+		} catch PostError.requestError(let code, let error) where (400..<500).contains(code) {
+			throw RefreshAuthorizationError.reauthorizationRequired(statusCode: code, description: "\(error)")
+		}
+
+		setAdditionalOptions(configuration.configurationIdentifier.value)
+		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration, proofSubject: issuer.config.client.id)
+		let issuanceOutcome = try await Self.submissionUseCase(
+			refreshed,
+			issuer: issuer,
+			configuration: configuration,
+			bindingKeys: bindingKeys,
+			publicKeys: publicKeys,
+			logger: logger
 		)
-		let issuer = try Issuer(
-			authorizationServerMetadata: offer.authorizationServerMetadata,
-			issuerMetadata: offer.credentialIssuerMetadata,
-			config: vciConfig,
-			parPoster: Poster(session: networking),
-			tokenPoster: Poster(session: networking),
-			requesterPoster: Poster(session: networking),
-			deferredRequesterPoster: Poster(session: networking),
-			notificationPoster: Poster(session: networking),
-			noncePoster: Poster(session: networking),
-			dpopConstructor: dpopConstructor
+		let document = try await finalizeIssuing(
+			issueOutcome: issuanceOutcome,
+			docType: docTypeIdentifier.docType,
+			format: configuration.format,
+			issueReq: issueReq,
+			deleteId: docId,
+			dpopKeyId: storedDpopKeyId
 		)
-		return (issuer, offer, configuration)
+		return (document, refreshed)
 	}
 
-	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil) async throws -> Issuer {
+	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
 		if config.requireDpop {
 			dpopConstructor = try await config.makePoPConstructor(
 				popUsage: .dpop,
-				privateKeyId: issueReq.dpopKeyId,
+				privateKeyId: dpopKeyId ?? issueReq.dpopKeyId,
 				algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported,
 				keyOptions: config.dpopKeyOptions
 			)
