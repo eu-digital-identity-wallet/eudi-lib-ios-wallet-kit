@@ -897,7 +897,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, issuer: Issuer? = nil, dpopKeyId: String? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, issuer: (any IssuerType)? = nil, dpopKeyId: String? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
 		var issuedNotificationId: String? = nil
 		var issuedAuthorizedRequest: AuthorizedRequest? = nil
 		do {
@@ -955,20 +955,20 @@ public actor OpenId4VciService {
 		} catch {
 			// Notify issuer of credential failure if the issuer sent a notification_id (fire-and-forget)
 			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
-				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialFailure)
+				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialFailure, eventDescription: error.localizedDescription)
 			}
 			await logIssuanceTransaction(status: .failed, format: format, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, docType: docType, errorMessage: error.localizedDescription)
 			throw error
 		}
 	}
 
-	private func sendIssuanceNotification(issuer: Issuer, authorized: AuthorizedRequest, notificationId: String, event: NotifiedEvent) {
+	private func sendIssuanceNotification(issuer: any IssuerType, authorized: AuthorizedRequest, notificationId: String, event: NotifiedEvent, eventDescription: String? = nil) {
 		Task {
 			do {
 				let notifId = try NotificationId(value: notificationId)
 				try await issuer.notify(
 					authorizedRequest: authorized,
-					notification: NotificationObject(id: notifId, event: event, eventDescription: nil),
+					notification: NotificationObject(id: notifId, event: event, eventDescription: eventDescription),
 					dPopNonce: nil
 				)
 				logger.info("Issuance notification sent: \(event) [\(notificationId)]")
