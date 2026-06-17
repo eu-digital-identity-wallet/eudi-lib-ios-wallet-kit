@@ -282,16 +282,35 @@ extension OpenId4VciService {
 
 		setAdditionalOptions(configuration.configurationIdentifier.value)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(configuration, proofSubject: issuer.config.client.id)
-		let issuanceOutcome = try await Self.submissionUseCase(
-			refreshed,
+
+		let service = try OpenId4VciService(
+			uiCulture: uiCulture,
+			config: config,
+			networking: networking,
+			storage: storage,
+			storageService: storageService
+		)
+
+		let outcome = try await service.issueDocumentByOfferUrl(
 			issuer: issuer,
+			offer: offer,
+			authorizedOutcome: .authorized(authorized),
 			configuration: configuration,
 			bindingKeys: bindingKeys,
 			publicKeys: publicKeys,
-			logger: logger
+			promptMessage: promptMessage
 		)
+
+//		let issuanceOutcome = try await Self.submissionUseCase(
+//			refreshed,
+//			issuer: issuer,
+//			configuration: configuration,
+//			bindingKeys: bindingKeys,
+//			publicKeys: publicKeys,
+//			logger: logger
+//		)
 		let document = try await finalizeIssuing(
-			issueOutcome: issuanceOutcome,
+			issueOutcome: outcome,
 			docType: docTypeIdentifier.docType,
 			format: configuration.format,
 			issueReq: issueReq,
