@@ -152,9 +152,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
 			let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 			var results = [UserRequestInfo]()
-			for requestItems in requestItemsArray {
+			for (requestName, requestItems) in requestItemsArray {
 				//guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-				var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes)
+				var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes, requestName: requestName)
 				logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 				result.readerAuthResults = ["": rar]
 				TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)

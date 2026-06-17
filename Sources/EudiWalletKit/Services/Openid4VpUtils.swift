@@ -136,11 +136,11 @@ class OpenId4VpUtils {
 		}
 	}
 
-	static func getRequestItems(_ credentialSet: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [RequestItems] {
-		var requestItemsArray = [RequestItems]()
-		for selection in credentialSet.values {
+	static func getRequestItems(_ credentialSetOptions: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [(String, RequestItems)] {
+		var requestItemsArray = [(String, RequestItems)]()
+		for (requestName, credentialSet) in credentialSetOptions {
 			var requestItems = RequestItems()
-			for credentialSelectionSet in selection {
+			for credentialSelectionSet in credentialSet {
 				let id = credentialSelectionSet.credentialId
 				guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
 				var nsItems: [String: [RequestItem]] = [:]
@@ -150,7 +150,7 @@ class OpenId4VpUtils {
 				}
 				requestItems[id] = nsItems
 			}
-			requestItemsArray.append(requestItems)
+			requestItemsArray.append((requestName, requestItems))
 		}
 		return requestItemsArray
 	}
@@ -302,16 +302,21 @@ extension OpenId4VpUtils {
 		// Step 2: Handle credential_sets if present
 		if let credentialSets = dcql.credentialSets {
 			// Collect all satisfying options; key is the option (CredentialSet = Set<QueryId>)
-			for credSet in credentialSets {
+			for (credSetIndex, credSet) in credentialSets.enumerated() {
+				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
 				var isSetSatisfied = false
-				for option in credSet.options {
+				for (optionIndex, option) in credSet.options.enumerated() {
 					let baseOptionKey = option.map(\.value).joined(separator: ",") // key for this option based on queryIds it contains
+					if !isSetRequired {
+						let optionalOptionKey = "optional:\(credSetIndex):\(optionIndex):\(baseOptionKey)"
+						result[optionalOptionKey, default: []] = []
+					}
 					let optionSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
 					if optionSatisfied {
 						isSetSatisfied = true
 						for queryId in option {
 							for match in (credentialQueryResults[queryId] ?? []).enumerated() {
-								let optionKey = if isMultipleByQueryId[queryId] == true { baseOptionKey } else { "\(baseOptionKey):\(queryId.value):\(match.offset)" }
+								let optionKey = if isMultipleByQueryId[queryId] == true { baseOptionKey } else { "\(baseOptionKey):\(match.element.credentialId):\(match.offset)" }
 								if let existingSelection = result[optionKey]?.first(where: { $0.credentialId == match.element.credentialId }) {
 									let mergedPaths = existingSelection.claimQueries + match.element.claimQueries
 									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
@@ -325,7 +330,6 @@ extension OpenId4VpUtils {
 						// Continue to collect all satisfying options (no break)
 					}
 				}
-				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
 				if isSetRequired, !isSetSatisfied {
 					throw WalletError(description: "Required credential_set \(credSet.options) cannot be satisfied", code: .credentialSetNotSatisfied)
 				}
@@ -333,9 +337,9 @@ extension OpenId4VpUtils {
 		} else {
 			// No credential_sets: collect results under nil key
 			for (_, matches) in credentialQueryResults {
-				for match in matches.enumerated() {
-					let optionKey = if isMultipleByQueryId[match.element.queryId] == true { "" } else { "\(match.element.queryId.value):\(match.offset)" }
-					result[optionKey, default: []].insert(match.element)
+				for (matchIndex, match) in matches.enumerated() {
+					let optionKey = if isMultipleByQueryId[match.queryId] == true { "" } else { "\(match.queryId.value):\(match.credentialId):\(matchIndex)" }
+					result[optionKey, default: []].insert(match)
 				}
 			}
 		}
