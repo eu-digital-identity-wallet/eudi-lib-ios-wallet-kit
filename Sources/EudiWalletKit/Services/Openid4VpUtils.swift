@@ -183,9 +183,7 @@ class OpenId4VpUtils {
 		var payload = [Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: issuedAtTimestamp, Keys.sdHash.rawValue: sdHash] as [String : Any]
 		  // Process transaction data hashes if available
 		if let transactionData, !transactionData.isEmpty {
-			let transactionDataHashes = transactionData.map { td -> String in
-				switch td {	case .sdJwtVc(let v): return sha256Hash(v) }
-			}
+			let transactionDataHashes = transactionData.map { sha256Hash($0.value) }
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
 		}
