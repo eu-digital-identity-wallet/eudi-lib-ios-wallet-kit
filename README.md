@@ -580,13 +580,16 @@ On view appearance the attestations are presented with the receiveRequest method
 	 _ = await presentationSession.receiveRequest()
 }
 ```
-After the request is received the ``presentationSession.disclosedDocuments`` contains the requested attested items. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
+After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
 
 ```swift
+// Use the first credential selection option (or let the user choose)
+let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
+
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
  await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() }, onSuccess: {
+  itemsToSend: selectedOption.items, onCancel: { dismiss() }, onSuccess: {
 			if let url = $0 { 
         // handle URL
        }
