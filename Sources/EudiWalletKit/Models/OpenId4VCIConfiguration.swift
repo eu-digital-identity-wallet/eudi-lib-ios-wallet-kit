@@ -114,6 +114,7 @@ extension OpenId4VciConfiguration {
 			let existingKeyInfo: KeyBatchInfo? = if let privateKeyId { try? await secureArea.getKeyBatchInfo(id: privateKeyId) } else { nil }
 			let hasCompatibleExistingKey = existingKeyInfo != nil && keyOptions.secureAreaName == existingKeyInfo?.secureAreaName && keyOptions.curve == ecCurve && existingKeyInfo?.usedCounts.count == 1
 			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey, let privateKeyId { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
+			if hasCompatibleExistingKey, let privateKeyId, existingPublicKey == nil { try await secureArea.deleteKeyInfo(id: privateKeyId) }
 			let publicCoseKey: CoseKey =
 				if let existingPublicKey { existingPublicKey } else {
 					(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first!
