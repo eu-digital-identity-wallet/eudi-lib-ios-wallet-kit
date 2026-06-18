@@ -342,9 +342,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
 		let offer: CredentialOffer
-		// Reuse a previously resolved offer for this URI if present. A `credential_offer_uri` can be single-use,
-		// so resolving it more than once (e.g. the screen resolving twice, or resolve-then-issue) would fetch it
-		// again and the issuer would reject it as "already consumed". Only fetch when there is no cached offer.
 		if let cachedOffer = OpenId4VciService.credentialOfferCache[offerUri] {
 			offer = cachedOffer
 		} else {
@@ -383,10 +380,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
 		let offer: CredentialOffer
-		// Reuse the offer already resolved (and cached) by resolveOfferUrlDocTypes. A `credential_offer_uri`
-		// can be single-use — re-resolving it here would fetch it a second time and the issuer would reject
-		// it as "credential offer not found or already consumed". Only resolve when there is no cached offer
-		// (e.g. issuing without a prior resolve), and cache it so the downstream service can read it.
 		if let cachedOffer = OpenId4VciService.credentialOfferCache[offerUri] {
 			offer = cachedOffer
 		} else {
