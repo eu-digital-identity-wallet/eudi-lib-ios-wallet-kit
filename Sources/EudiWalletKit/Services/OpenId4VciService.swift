@@ -644,7 +644,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	private func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
+	func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
 		guard authorized.isAccessTokenExpired() || forceRefreshToken else { return authorized }
 		if let refreshTokenExpiresIn = authorized.refreshToken?.expiresIn,
 		   authorized.isRefreshTokenExpired(clock: Date.now.timeIntervalSinceReferenceDate) {
