@@ -56,13 +56,20 @@ On view appearance the attestations are presented with the ``PresentationService
 }
 ```
 
-After the request is received the ``PresentationSession/disclosedDocuments`` contains the requested attested items that can be satisfied by the selected credential. When partial-claim presentation is enabled, this includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
+## Credential Selection
+
+After the request is received, ``PresentationSession/disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` array representing one valid combination of credentials that satisfies the verifier's DCQL query. When credential sets or the `multiple` flag produce multiple satisfiable combinations, the UI should allow the user to pick which option to present.
+
+When partial-claim presentation is enabled, each option includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding.
 
 ```swift
+// Example: use the first credential selection option
+let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
+
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
 await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() }, onSuccess: {
+  itemsToSend: selectedOption.items, onCancel: { dismiss() }, onSuccess: {
     if let url = $0 {
       // handle URL
     }

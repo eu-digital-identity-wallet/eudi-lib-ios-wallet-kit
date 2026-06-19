@@ -40,7 +40,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
-	@Published public var disclosedDocuments: [DocElements] = []
+	@Published public var disclosedDocumentSets: [[DocElements]] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// Device engagement data (QR data for the BLE flow)
@@ -76,39 +76,43 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Decodes a presentation request
 	///
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
-	/// - Parameter request: Request information
-	func decodeRequest(_ request: UserRequestInfo) throws {
+	/// - Parameter requests: Request information
+	func decodeRequest(_ requests: [UserRequestInfo]) throws {
 		guard docIdToPresentInfo.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
 		// show the items as checkboxes
-		disclosedDocuments = [DocElements]()
-		for (docId, docPresentInfo) in docIdToPresentInfo {
-			let docType = docPresentInfo.docType
-			let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { OpenId4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
-			if requestFormat != docPresentInfo.docDataFormat  { continue }
-			switch requestFormat {
-				case .cbor:
-					guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
-					guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
-					let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
-					disclosedDocuments.append(.msoMdoc(msoElements))
-				case .sdjwt:
-					guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
-					guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
-					let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
-					guard let sdJwtElements else { continue }
-					disclosedDocuments.append(.sdJwt(sdJwtElements))
-				default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
-			}
+		disclosedDocumentSets = [[DocElements]]()
+		for request in requests {
+			var disclosedDocuments = [DocElements]()
+			for (docId, docPresentInfo) in docIdToPresentInfo {
+				let docType = docPresentInfo.docType
+				let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { OpenId4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
+				if requestFormat != docPresentInfo.docDataFormat  { continue }
+				switch requestFormat {
+					case .cbor:
+						guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
+						guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+						let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
+						disclosedDocuments.append(.msoMdoc(msoElements))
+					case .sdjwt:
+						guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
+						guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
+						let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
+						guard let sdJwtElements else { continue }
+						disclosedDocuments.append(.sdJwt(sdJwtElements))
+					default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
+				}
 
+			}
+			if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
+				readerCertIssuer = readerAuthority
+				readerCertIssuerValid = authResult.isValidated
+				readerCertValidationMessage = authResult.validationMessage
+			}
+			readerLegalName = request.defaultReaderAuthResult?.legalName
+			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
+			if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
+			disclosedDocumentSets.append(disclosedDocuments)
 		}
-		if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
-			readerCertIssuer = readerAuthority
-			readerCertIssuerValid = authResult.isValidated
-			readerCertValidationMessage = authResult.validationMessage
-		}
-		readerLegalName = request.defaultReaderAuthResult?.legalName
-		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-		if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 		status = .requestReceived
 	}
 
@@ -166,7 +170,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request object
-	public func receiveRequest() async -> UserRequestInfo? {
+	public func receiveRequest() async -> [UserRequestInfo]? {
 		do {
 			let request = try await presentationService.receiveRequest()
 			try await decodeRequest(request)

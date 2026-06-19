@@ -1,3 +1,25 @@
+## v0.33.0
+
+### DCQL Multiple Credential Selection
+
+DCQL query resolution now supports the `multiple` flag on credential queries and produces multiple selectable credential combinations when more than one credential matches a query.
+
+- `resolveDcql` returns `CredentialSelectionSetOptions` (an `OrderedDictionary<String, CredentialSelectionSet>`) instead of `[String: [ClaimsQuery]]`. Each entry represents a selectable combination of credentials that satisfies the query.
+- `credential_sets` with multiple options and optional sets are fully supported, including Cartesian product expansion across required and optional sets.
+
+### Breaking Changes
+
+- **`PresentationService.receiveRequest()` return type changed**: Returns `[UserRequestInfo]` instead of `UserRequestInfo`. Each element corresponds to a credential selection option.
+- **`PresentationSession.disclosedDocuments` renamed to `disclosedDocumentSets`**: The type changed from `[DocElements]` to `[[DocElements]]` to support multiple credential selection options.
+- **`PresentationSession.receiveRequest()` return type changed**: Returns `[UserRequestInfo]?` instead of `UserRequestInfo?`.
+- **`OpenId4VciConfiguration.requirePAR` renamed to `parUsage`**: The type changed from `Bool` to `ParUsage`. The default value is `.required(authorizationCodeDPoPBinding: true)`.
+
+### Dependency Updates
+
+- Updated `eudi-lib-ios-siop-openid4vp-swift` to version 0.34.1.
+- Updated `eudi-lib-ios-openid4vci-swift` to version 0.40.1.
+- Updated `eudi-lib-ios-iso18013-data-transfer` to version 0.21.3.
+
 ## v0.32.0
 
 ### Credential Reuse Policy Enforcement
