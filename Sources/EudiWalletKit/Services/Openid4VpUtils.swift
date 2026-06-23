@@ -18,6 +18,7 @@ import Foundation
 import SwiftCBOR
 import CryptoKit
 import Logging
+import OrderedCollections
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
@@ -94,6 +95,16 @@ class OpenId4VpUtils {
 		}
 		return requestItems
 	}
+
+	static func makeCredentialMap(idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [Document.ID: (DocType, DocDataFormat)] {
+		var credentialMap = [Document.ID: (DocType, DocDataFormat)]()
+		for (docId, docType) in idsToDocTypes {
+			if let format = formatsRequested[docType] {
+				credentialMap[docId] = (docType, format)
+			}
+		}
+		return credentialMap
+	}
 	
 	static func getTransactionDataRequested(_ credentialMaps: [Document.ID: (QueryId, [ClaimsQuery])], transactionDataList: [TransactionData]) throws -> RequestTransactionData {
 		var requestTransactionData: RequestTransactionData = [:]
@@ -139,6 +150,71 @@ class OpenId4VpUtils {
 		return requestVerifierInfo
 	}
 
+	static func makeCborClaimData(
+		from docsCbor: [Document.ID: IssuerSigned]?,
+		claimPaths: inout [Document.ID: [ClaimPath]],
+		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+	) {
+		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+
+		for (docId, issuerSigned) in docsCbor ?? [:] {
+			paths.removeAll(); values.removeAll()
+			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
+			for (ns, items) in isNs.nameSpaces {
+				for item in items {
+					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
+					values[paths.last!] = [item.description]
+				}
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+	}
+
+	static func makeSdJwtClaimData(
+		from docsSdJwt: [Document.ID: SignedSDJWT]?,
+		claimPaths: inout [Document.ID: [ClaimPath]],
+		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+	) {
+		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+
+		for (docId, sdjwt) in docsSdJwt ?? [:] {
+			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
+			paths.removeAll(); values.removeAll()
+			for (p, disclosures) in allPathsDict {
+				let mappedElements = p.value.map { element in
+					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
+					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
+					return ClaimPathElement.allArrayElements
+				}
+				let path = ClaimPath(mappedElements)
+				paths.append(path)
+				values[path] = disclosures
+			}
+			claimPaths[docId] = paths
+			claimValues[docId] = values
+		}
+	}
+
+	static func getRequestItems(_ credentialSetOptions: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [(String, RequestItems)] {
+		var requestItemsArray = [(String, RequestItems)]()
+		for (requestName, credentialSet) in credentialSetOptions {
+			var requestItems = RequestItems()
+			for credentialSelectionSet in credentialSet {
+				let id = credentialSelectionSet.credentialId
+				guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
+				var nsItems: [String: [RequestItem]] = [:]
+				for claim in credentialSelectionSet.claimQueries {
+					guard let pair = Self.parseClaim(claim, formatRequested) else { continue }
+					if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
+				}
+				requestItems[id] = nsItems
+			}
+			requestItemsArray.append((requestName, requestItems))
+		}
+		return requestItemsArray
+	}
+
 	/// parse claim-query and return (namespace, itemIdentifier) pair
 	static func parseClaim(_ claim: ClaimsQuery, _ docDataFormat: DocDataFormat) -> (String, RequestItem)? {
 		let elementPath = claim.path.value.map(\.claimName)
@@ -166,9 +242,7 @@ class OpenId4VpUtils {
 		var payload = [Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: issuedAtTimestamp, Keys.sdHash.rawValue: sdHash] as [String : Any]
 		  // Process transaction data hashes if available
 		if let transactionData, !transactionData.isEmpty {
-			let transactionDataHashes = transactionData.map { td -> String in
-				return sha256Hash(td.value)
-			}
+			let transactionDataHashes = transactionData.map { sha256Hash($0.value) }
 			payload["transaction_data_hashes_alg"] = "sha-256"
 			payload["transaction_data_hashes"] = transactionDataHashes
 		}
@@ -211,7 +285,7 @@ extension CredentialQuery {
 		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
 		return docType
 	}
-	
+
 	// https://developers.google.com/wallet/identity/verify/accepting-ids-from-wallet-online#zkp
 	public var zkSpecs: [ZkSystemSpec]? {
 		let zk_system_type = meta["zk_system_type"]
@@ -231,6 +305,20 @@ extension ClaimPath {
 extension DCQL {
 	public func findQuery(id: String) -> CredentialQuery? {
 		credentials.first { $0.id.value == id }
+	}
+}
+
+extension CredentialSelectionSet {
+	/// Merges claims if the credential already exists in the set, otherwise appends
+	mutating func mergeOrAppend(_ sel: CredentialSelection) {
+		if let existing = first(where: { $0.credentialId == sel.credentialId }) {
+			let mergedPaths = existing.claimQueries + sel.claimQueries
+			let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
+			remove(existing)
+			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths))
+		} else {
+			append(sel)
+		}
 	}
 }
 
@@ -254,72 +342,141 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> [String: (QueryId, [ClaimsQuery])] {
-		var result: [String: (QueryId, [ClaimsQuery])]  = [:]
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> CredentialSelectionSetOptions {
+		var resultDict: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?
-		var credentialQueryResults: [QueryId: (matchedCredId: Document.ID, claimQueries: [ClaimsQuery])] = [:]
+		var credentialQueryResults: OrderedDictionary<QueryId, [CredentialSelection]> = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
 			let format = credQuery.dataFormat
+			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
 			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
-			// Try to find a credential that satisfies the claim requirements
-			for credId in matchingCredIds {
+			// Try to find credentials that satisfy the claim requirements
+			for (credIndex, credId) in matchingCredIds.enumerated() {
 				do {
+					let optionId = !isMultiple ? "\(credQuery.id.value)-\(credIndex)" : credQuery.id.value
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable, allowPresentingPartialClaims: allowPresentingPartialClaims)
-					credentialQueryResults[credQuery.id] = (credId, claimPaths)
+					credentialQueryResults[credQuery.id, default: []].append(CredentialSelection(credentialId: credId, docType: docType, queryId: credQuery.id, optionId: optionId, claimQueries: claimPaths))
+					//if !isMultiple { break } // for non-multiple queries, stop at first match
 				} catch {
 					lastError = error
 					logger.warning("Credential \(credId) does not satisfy query \(credQuery.id.value): \(error.localizedDescription)")
-					if dcql.credentialSets == nil { throw error	}
+					// continue trying other credentials that match the docType
 				}
+			}
+			if credentialQueryResults[credQuery.id]?.isEmpty != false, dcql.credentialSets == nil {
+   			 throw lastError ?? WalletError(description: "No credential satisfies query \(credQuery.id.value)", code: .dcqlQueryNotSatisfied)
 			}
 		}
 		// Step 2: Handle credential_sets if present
 		if let credentialSets = dcql.credentialSets {
-			// When credential_sets are present, we need to satisfy at least all required sets
-			for credSet in credentialSets {
-				var isSetSatisfied = false
-				for option in credSet.options {
-					isSetSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId] != nil}
-					if isSetSatisfied {
-						// Add the credentials from this option to the result
-						for queryId in option {
-							if let match = credentialQueryResults[queryId] {
-								// If the credential ID already exists, merge claim paths
-								if let (existingQueryId, existingPaths) = result[match.matchedCredId] {
-									// Merge and deduplicate claim paths
-									let mergedPaths = existingPaths + match.claimQueries
-									let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { pathValue in
-										mergedPaths.first { $0.path.value == pathValue }
-									}
-									result[match.matchedCredId] = (existingQueryId, uniquePaths)
-								} else {
-									result[match.matchedCredId] = (queryId, match.claimQueries)
-								}
-							}
+			// For each credential set, collect satisfiable options expanded by credential alternatives
+			let setsWithOptions: [(isRequired: Bool, options: [(String, CredentialSelectionSet)])] = credentialSets.map { credSet in
+				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
+				let setOptions: [(String, CredentialSelectionSet)] = credSet.options.flatMap { option -> [(String, CredentialSelectionSet)] in
+					let optionSatisfied = option.allSatisfy { queryId in credentialQueryResults[queryId]?.isEmpty == false }
+					guard optionSatisfied else { return [] }
+					// For each queryId in the option, get match groups (bundled for multiple, individual otherwise)
+					let matchGroups: [[(String, [CredentialSelection])]] = option.map { queryId in
+						let matches = credentialQueryResults[queryId] ?? []
+						let isMultiple = dcql.findQuery(id: queryId.value)?.multiple == true
+						if isMultiple {
+							// Bundle all matches together as one group
+							return [(matches.first?.optionId ?? queryId.value, matches)]
+						} else {
+							// Each match is a separate alternative
+							return matches.map { ($0.optionId, [$0]) }
 						}
-						break // Take the first satisfiable option for this credential_set
+					}
+					// Cartesian product across match groups
+					let combinations = matchGroups.reduce([([String](), [CredentialSelection]())]) { acc, groups in
+						acc.flatMap { (keys, sels) in
+							groups.map { (key, groupSels) in (keys + [key], sels + groupSels) }
+						}
+					}
+					return combinations.map { (keys, sels) in
+						let optionKey = keys.joined(separator: "+")
+						let selections = sels.reduce(into: CredentialSelectionSet()) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (optionKey, selections)
 					}
 				}
-				let isSetRequired = credSet.required ?? CredentialSetQuery.defaultRequiredValue
-				if isSetRequired, !isSetSatisfied {
-					throw WalletError(description: "Required credential_set \(credSet.options) cannot be satisfied", code: .credentialSetNotSatisfied)
+				return (isSetRequired, setOptions)
+			}
+			let requiredSetsOptions = setsWithOptions.filter(\.isRequired).map(\.options)
+			let optionalSetsOptions = setsWithOptions.filter { !$0.isRequired && !$0.options.isEmpty }.map(\.options)
+			// Verify all required sets are satisfiable
+			if requiredSetsOptions.contains(where: \.isEmpty) {
+				throw WalletError(description: "Required credential_set cannot be satisfied", code: .credentialSetNotSatisfied)
+			}
+			// Cartesian product across all required sets
+			let requiredCombinations = requiredSetsOptions.reduce([(String, CredentialSelectionSet)]()) { acc, setOptions in
+				if acc.isEmpty { return setOptions }
+				return acc.flatMap { (existingKey, existingSet) in
+					setOptions.map { (optKey, optSet) in
+						let combinedKey = existingKey.isEmpty ? optKey : "\(existingKey)|\(optKey)"
+						let combinedSet = optSet.reduce(into: existingSet) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (combinedKey, combinedSet)
+					}
 				}
 			}
+			// Expand with optional sets (include variants with and without each optional)
+			let combinations = optionalSetsOptions.reduce(requiredCombinations) { acc, optSetOptions in
+				acc.flatMap { (existingKey, existingSet) in
+					// Keep without optional + add each optional variant
+					[(existingKey, existingSet)] + optSetOptions.map { (optKey, optSet) in
+						let combinedKey = existingKey.isEmpty ? optKey : "\(existingKey)|\(optKey)"
+						let combinedSet = optSet.reduce(into: existingSet) { set, sel in
+							set.mergeOrAppend(sel)
+						}
+						return (combinedKey, combinedSet)
+					}
+				}
+			}
+			for (key, set) in combinations {
+				resultDict[key] = set
+			}
 		} else {
-			for (queryId, match) in credentialQueryResults {
-				result[match.matchedCredId] = (queryId, match.claimQueries)
+			// No credential_sets: Cartesian product across credential query results
+			// For `multiple` queries, all matches are bundled together; otherwise each match is a separate alternative
+			let matchGroups: [(String, [(String, [CredentialSelection])])] = credentialQueryResults.map { (queryId, matches) in
+				let isMultiple = dcql.findQuery(id: queryId.value)?.multiple == true
+				if isMultiple {
+					// All matches bundled as one group
+					return (queryId.value, [(matches.first?.optionId ?? queryId.value, matches)])
+				} else {
+					// Each match is a separate alternative
+					return (queryId.value, matches.map { ($0.optionId, [$0]) })
+				}
+			}
+
+			let combinations = matchGroups.reduce([([String](), [CredentialSelection]())]) { acc, entry in
+				let (_, groups) = entry
+				return acc.flatMap { (keys, sels) in
+					groups.map { (key, groupSels) in (keys + [key], sels + groupSels) }
+				}
+			}
+
+			for (keys, sels) in combinations {
+				let optionKey = keys.joined(separator: "|")
+				let selectionSet = sels.reduce(into: CredentialSelectionSet()) { set, sel in
+					set.mergeOrAppend(sel)
+				}
+				resultDict[optionKey] = selectionSet
 			}
 		}
-		if result.isEmpty {
-			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id] == nil }
+		if resultDict.isEmpty {
+			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
 			if let notFoundCred {logger.warning("No credential found matching docType: \(notFoundCred.docType ?? "") with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
-		return result
+		return resultDict
 	}
 
 	/// Resolves claims for a specific credential query and credential

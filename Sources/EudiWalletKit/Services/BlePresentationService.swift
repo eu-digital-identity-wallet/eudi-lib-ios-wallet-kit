@@ -248,12 +248,12 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	///  Receive request via BLE
 	///
 	/// - Returns: The requested items.
-	public func receiveRequest() async throws -> UserRequestInfo {
+	public func receiveRequest() async throws -> [UserRequestInfo] {
 		let userRequestInfo = try await withCheckedThrowingContinuation { c in
 			continuationRequest = c
 		}
 		TransactionLogUtils.setCborTransactionLogRequestInfo(userRequestInfo, transactionLog: &transactionLog)
-		return userRequestInfo
+		return [userRequestInfo]
 	}
 
 	public func unlockKey(id: String) async throws -> Data? {

@@ -32,7 +32,7 @@ public protocol PresentationService: Sendable {
 	/// Generate a QR code to be shown to verifier (optional)
 	func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String
 	/// Receive request.
-	func receiveRequest() async throws -> UserRequestInfo
+	func receiveRequest() async throws -> [UserRequestInfo]
 
 	var transactionLog: TransactionLog { get }
 	
