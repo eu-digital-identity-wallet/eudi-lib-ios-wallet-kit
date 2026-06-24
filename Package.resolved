@@ -1,5 +1,5 @@
 {
-  "originHash" : "b6a5cddc9406ff898a4a9fbad6fb3973ff5bbadc998a75e08ad55561e742f7c7",
+  "originHash" : "862746ed6230fc93a4d63d0cfd46d6ed0a9d64af8b06c317020c8c2093a0041c",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git",
       "state" : {
-        "revision" : "cea34f3aab37389bd04c8d08b1bc1b0311c62421",
-        "version" : "0.21.2"
+        "revision" : "763619eea0901c7a0e42700dbfb6abc25d7be676",
+        "version" : "0.22.0"
       }
     },
     {
@@ -150,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-docc-plugin",
       "state" : {
-        "revision" : "e977f65879f82b375a044c8837597f690c067da6",
-        "version" : "1.4.6"
+        "revision" : "647c708be89f834fa6a6d4945442793a77ddf5b6",
+        "version" : "1.5.0"
       }
     },
     {
