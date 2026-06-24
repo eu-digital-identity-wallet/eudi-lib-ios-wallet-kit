@@ -238,7 +238,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let vciService = try await resolveVCIService(issuerName: issuerName)
 		return try await vciService.createKeyBatchWithAttestation(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions, nonce: nonce)
 	}
-	
+
 	func getDocumentMetadata(documentId: WalletStorage.Document.ID) async throws -> DocMetadata {
 		let status: DocumentStatus =  if storage.docModels.contains(where: { $0.id == documentId }) { .issued } else if storage.deferredDocuments.contains(where: { $0.id == documentId }) { .deferred } else if storage.pendingDocuments.contains(where: { $0.id == documentId }) { .pending } else { .issued }
 		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId, status: status) else {
