@@ -69,8 +69,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
+	public let crlRevocationPolicy: RevocationPolicy
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) async throws {
+	public init(
+		parameters: InitializeTransferData,
+		qrCode: Data,
+		openID4VpConfig: OpenId4VpConfiguration,
+		networking: Networking,
+		crlRevocationPolicy: RevocationPolicy
+	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.transferInfo = objs
@@ -80,6 +87,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openid4VPlink = openid4VPlink
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
+		self.crlRevocationPolicy = crlRevocationPolicy
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
@@ -311,7 +319,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
 		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		(isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: transferInfo.iaca)
+		(isValid, validationMessages, _) = SecurityHelpers
+			.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, revocationPolicy: crlRevocationPolicy, rootIaca: transferInfo.iaca)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		self.certificateChain = certsData
