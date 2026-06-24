@@ -152,13 +152,29 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
-			self.transactionData = vp.transactionData
+			let transactionDataRequestedArray = transactionData != nil
+				? try OpenId4VpUtils.getTransactionDataRequested(
+					credentialSelectionSets,
+					transactionDataList: transactionData!)
+				: nil
+			let verifierInfoRequestedArray = verifierInfo != nil
+				? OpenId4VpUtils.getVerifierInfoRequested(credentialSelectionSets, verifierInfoList: verifierInfo!)
+				: nil
 			let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
 			let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 			var results = [UserRequestInfo]()
 			for (requestName, requestItems) in requestItemsArray {
+				let transactionDataRequested = transactionDataRequestedArray?.first(where: { $0.0 == requestName })
+				let verifierInfoRequested = verifierInfoRequestedArray?.first(where: { $0.0 == requestName })
 				//guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-				var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes, requestName: requestName)
+				var result = UserRequestInfo(
+					docDataFormats: formatsRequested,
+					itemsRequested: requestItems,
+					deviceRequestBytes: deviceRequestBytes,
+					transactionDataRequested: transactionDataRequested?.1,
+					verifierInfo: verifierInfoRequested?.1,
+					requestName: requestName
+				)
 				logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 				result.readerAuthResults = ["": rar]
 				TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
