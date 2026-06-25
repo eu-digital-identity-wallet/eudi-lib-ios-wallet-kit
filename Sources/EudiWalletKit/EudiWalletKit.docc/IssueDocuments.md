@@ -95,6 +95,20 @@ let defaultOptions = try await wallet.getDefaultCredentialOptions(
   docTypeIdentifier: .msoMdoc(docType: EuPidModel.euPidDocType)
 )
 ```
+
+### Credential Reuse Policy Precedence (ETSI TS 119 472-3 / ARF Annex II) 
+
+When an issuer publishes a `credentialReusePolicy` in its metadata, the wallet enforces that policy regardless of the `CredentialOptions` passed by the caller. Specifically:
+The wallet currently supports these issuer reuse policies:
+
+- `.limitedTime`
+- `.onceOnly`
+- `.rotatingBatch`
+
+- **`credentialPolicy`** (`.oneTimeUse` / `.rotateUse`), **`batchSize`**, **`reissueTriggerUnused`**, and **`reissueTriggerLifetimeLeft`** are always derived from the issuer's published policy and override any values in the caller-supplied `CredentialOptions`.
+- When no issuer reuse policy exists (the issuer metadata contains no `credentialReusePolicy`), the caller's `CredentialOptions` are used as-is.
+
+```
 ### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(offerUri:authFlowRedirectionURI:)` method that resolves the credential offer URI.
@@ -121,7 +135,10 @@ The following example shows how to issue documents by offer URL:
 
 ```swift
 // Configure issuer with signed metadata policy and certificate chain trust
-let trust: CertificateChainTrust = TrustedChainValidator(iacaRoots: [eudic])
+let trust: CertificateChainTrust = TrustedChainValidator(
+  iacaRoots: [eudic],
+  crlRevocationPolicy: .hardFail
+)
 let issuerMetadataPolicy: IssuerMetadataPolicy = .requireSigned(
   issuerTrust: .byCertificateChain(certificateChainTrust: trust)
 )

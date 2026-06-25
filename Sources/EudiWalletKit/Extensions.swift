@@ -122,6 +122,11 @@ extension WalletStorage.Document {
 		return urlString
 	}
 
+	public var credentialOptions: CredentialOptions? {
+		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
+		return docMetadata?.credentialOptions
+	}
+
 	public func getDisplayName(_ uiCulture: String?) -> String?  {
 		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
 		return docMetadata?.getDisplayName(uiCulture)

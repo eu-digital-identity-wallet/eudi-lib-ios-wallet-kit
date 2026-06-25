@@ -1,0 +1,35 @@
+{
+  "credentials": [
+    {
+      "id": "mdl",
+      "format": "mso_mdoc",
+      "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+      "claims": [
+        { "path": ["org.iso.18013.5.1", "family_name"], "intent_to_retain": false },
+        { "path": ["org.iso.18013.5.1", "given_name"], "intent_to_retain": false }
+      ]
+    },
+    {
+      "id": "pid",
+      "format": "mso_mdoc",
+      "meta": { "doctype_value": "eu.europa.ec.eudi.pid.1" },
+      "claims": [
+        { "path": ["eu.europa.ec.eudi.pid.1", "family_name"], "intent_to_retain": false },
+        { "path": ["eu.europa.ec.eudi.pid.1", "given_name"], "intent_to_retain": false }
+      ]
+    },
+    {
+      "id": "photoid",
+      "format": "mso_mdoc",
+      "meta": { "doctype_value": "org.iso.23220.2.photoid.1" },
+      "claims": [
+        { "path": ["org.iso.23220.photoid.1", "birth_date"], "intent_to_retain": false }
+      ]
+    }
+  ],
+  "credential_sets": [
+    { "options": [ ["mdl"] ],     "required": true  },
+    { "options": [ ["pid"] ],     "required": true  },
+    { "options": [ ["photoid"] ], "required": false }
+  ]
+}
