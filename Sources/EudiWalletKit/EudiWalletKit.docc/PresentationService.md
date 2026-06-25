@@ -47,6 +47,20 @@ let wallet = try! EudiWallet(
 )
 ```
 
+## Reader Certificate Revocation Policy
+
+Reader authentication certificate validation uses ``EudiWalletConfiguration/crlRevocationPolicy`` in both proximity (BLE) and OpenID4VP flows.
+
+- **`.hardFail`** (default): presentation fails when revocation status cannot be determined.
+- **`.softFail`**: presentation may continue when revocation status is temporarily unavailable, but still fails for explicitly revoked certificates.
+
+```swift
+let config = EudiWalletConfiguration(
+  trustedReaderRootCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+  crlRevocationPolicy: .hardFail
+)
+```
+
 On view appearance the attestations are presented with the ``PresentationService/receiveRequest()`` method. For the BLE (proximity) case, the ``PresentationSession/deviceEngagement`` property is populated with the QR code to be displayed on the holder device.
 
 ```swift

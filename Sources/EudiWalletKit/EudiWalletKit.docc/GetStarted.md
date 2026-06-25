@@ -49,6 +49,21 @@ let wallet = try! EudiWallet(eudiWalletConfig: config)
 wallet.bleTransferMode = .client
 ```
 
+### Reader Certificate Revocation Policy
+
+Use ``EudiWalletConfiguration/crlRevocationPolicy`` to control how CRL revocation checks are enforced when validating reader certificates in BLE and OpenID4VP presentation flows.
+
+- **`.hardFail`** (default): if revocation status cannot be confirmed (for example due to missing or unreachable CRL), validation fails.
+- **`.softFail`**: certificate validation continues when revocation status cannot be determined, but still fails when a certificate is explicitly revoked.
+
+```swift
+let config = EudiWalletConfiguration(
+    trustedReaderRootCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
+    crlRevocationPolicy: .hardFail
+)
+let wallet = try! EudiWallet(eudiWalletConfig: config)
+```
+
 ### OpenID4VCI Configuration
 
 The wallet now supports multiple OpenID4VCI issuer configurations for enhanced flexibility. You can configure the wallet with a dictionary of issuer configurations:
