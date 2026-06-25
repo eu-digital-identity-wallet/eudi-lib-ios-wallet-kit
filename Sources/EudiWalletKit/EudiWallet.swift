@@ -239,14 +239,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await vciService.createKeyBatchWithAttestation(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions, nonce: nonce)
 	}
 
+	func getDocumentMetadata(documentId: WalletStorage.Document.ID) async throws -> DocMetadata {
+		let status: DocumentStatus =  if storage.docModels.contains(where: { $0.id == documentId }) { .issued } else if storage.deferredDocuments.contains(where: { $0.id == documentId }) { .deferred } else if storage.pendingDocuments.contains(where: { $0.id == documentId }) { .pending } else { .issued }
+		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId, status: status) else {
+			throw PresentationSession.makeError(str: "Document metadata not found for id: \(documentId)", localizationKey: "doc_metadata_not_found", code: .credentialNotFound, context: ["documentId": documentId])
+		}
+		return docMetadata
+	}
+
 	/// Returns stored credential options for a previously issued document.
 	/// - Parameter documentId: The document identifier.
 	/// - Returns: The credential options persisted in document metadata.
 	/// - Throws: If document metadata is not found or does not include credential options.
 	public func getDocumentCredentialOptions(documentId: WalletStorage.Document.ID) async throws -> CredentialOptions {
-		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
-			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found", code: .credentialNotFound, context: ["documentId": documentId])
-		}
+		let docMetadata = try await getDocumentMetadata(documentId: documentId)
 		guard let credentialOptions = docMetadata.credentialOptions else {
 			throw PresentationSession.makeError(str: "Credential options not found for document id: \(documentId)", code: .claimNotFound, context: ["documentId": documentId, "claim": "credentialOptions"])
 		}
@@ -274,9 +280,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		promptMessage: String? = nil,
 		backgroundOnly: Bool = false
 	) async throws -> WalletStorage.Document {
-		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: documentId) else {
-			throw PresentationSession.makeError(str: "Issued document metadata not found for id: \(documentId)", localizationKey: "issued_doc_not_found")
-		}
+		let docMetadata = try await getDocumentMetadata(documentId: documentId)
 		let vciService = try await resolveVCIService(issuerName: docMetadata.credentialIssuerIdentifier)
 		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
 			.flatMap { try? JSONDecoder().decode(AuthorizedRequestData.self, from: $0) }
@@ -602,7 +606,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let iaca = eudiWalletConfig.trustedReaderRootCertificates ?? []
 		let dataFormats = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt))
 		let deviceAuthMethod = eudiWalletConfig.deviceAuthMethod.rawValue
-		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, zkSystemRepository: zkSystemRepository)
+		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, bleTransferMode: bleTransferMode, crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy, zkSystemRepository: zkSystemRepository)
 		return (parameters, docs)
 	}
 
@@ -619,10 +623,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters, bleTransferMode: bleTransferMode)
+				let bleSvc = try await BlePresentationService(parameters: parameters)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
-				let openIdSvc = try await OpenId4VpService(parameters: parameters, qrCode: qrCode, openID4VpConfig: self.openID4VpConfig, networking: networkingVp)
+				let openIdSvc = try await OpenId4VpService(
+					parameters: parameters,
+					qrCode: qrCode,
+					openID4VpConfig: self.openID4VpConfig,
+					networking: networkingVp,
+					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy
+				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			default:
 				let fallbackError = PresentationSession.makeError(str: "Use beginPresentation(service:)")

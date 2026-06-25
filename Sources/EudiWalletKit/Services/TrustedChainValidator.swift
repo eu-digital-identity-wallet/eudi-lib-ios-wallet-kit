@@ -20,14 +20,16 @@ import X509
 
 public struct TrustedChainValidator: CertificateChainTrust {
     private let iacaRoots: [x5chain]
+	private let crlRevocationPolicy: RevocationPolicy
     public var readerCertificateIssuer: String?
     public var validationMessages: [String] = []
 
-    public init(iacaRoots: [x5chain]) {
+    public init(iacaRoots: [x5chain], crlRevocationPolicy: RevocationPolicy) {
         self.iacaRoots = iacaRoots
+		self.crlRevocationPolicy = crlRevocationPolicy
     }
 
-    public func isValid(chain: [String]) -> Bool {
+	public func isValid(chain: [String]) -> Bool {
         var isValid: Bool = false
         let b64certs = chain
         let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
@@ -40,7 +42,8 @@ public struct TrustedChainValidator: CertificateChainTrust {
             logger.error("Chain verification error: \(result.message)")
             return false
         }
-        (isValid, _, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: iacaRoots)
+		(isValid, _, _) = SecurityHelpers
+			.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, revocationPolicy: crlRevocationPolicy, rootIaca: iacaRoots)
         return isValid
     }
 }

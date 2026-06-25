@@ -1,3 +1,12 @@
+## v0.33.1
+
+### What's Changed
+
+- Wire up credential issuer notification endpoint support (OpenID4VCI §11).
+- Fix DPoP signing to recreate the key when an existing key is incompatible.
+- Add tests for issuance notification endpoint wiring.
+- Update `eudi-lib-ios-openid4vci-swift` dependency to version `0.40.0`.
+
 ## v0.33.0
 
 ### DCQL Multiple Credential Selection
@@ -19,6 +28,12 @@ DCQL query resolution now supports the `multiple` flag on credential queries and
 - Updated `eudi-lib-ios-siop-openid4vp-swift` to version 0.34.1.
 - Updated `eudi-lib-ios-openid4vci-swift` to version 0.40.1.
 - Updated `eudi-lib-ios-iso18013-data-transfer` to version 0.21.3.
+
+## v0.32.1
+
+### What's Changed
+
+- Refactor batch size handling in `OpenId4VciService` to correctly accommodate issuer-specified limited-time reuse policy.
 
 ## v0.32.0
 
@@ -161,6 +176,13 @@ When a counter value changes, the corresponding document model publishes the cha
     Task { try? await wallet.refreshUsageCounters() }
 }
 ```
+
+## v0.29.5
+
+### What's Changed
+
+- Expose `ConfigurationCredentialMetadata` on `OfferedDocModel`.
+- Update `eudi-lib-sdjwt-swift` dependency versions (`0.14.2`, then `0.14.3`).
 
 ## v0.29.4
 ### Credential Display Images Downloaded at Issuance Time

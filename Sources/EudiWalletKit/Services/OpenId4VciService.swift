@@ -213,10 +213,12 @@ public actor OpenId4VciService {
 			issuerPolicy: credentialReusePolicy,
 			walletSupported: OpenId4VciConfiguration.supportedCredentialReusePolicies
 		)
-		let defaultBatchSize = CredentialReusePolicyValidator.determineBatchSize(
+		var issuerSpecifiedBatchSize = CredentialReusePolicyValidator.determineBatchSize(
 			selectedPolicy: selectedPolicy,
 			issuerBatchSize: batchCredentialIssuance?.batchSize
 		) ?? 1
+		// Limited-time dictates that a single instance of the attestation is issued that can be used for a limited period.
+		if let selectedPolicy, selectedPolicy.method == .limitedTime { issuerSpecifiedBatchSize = 1 }
 		let reissueTriggerUnused: Int?
 		let reissueTriggerLifetimeLeft: Int?
 		switch selectedPolicy {
@@ -239,18 +241,18 @@ public actor OpenId4VciService {
 		let resolvedPolicy: CredentialPolicy = if case .onceOnly = selectedPolicy { .oneTimeUse } else { .rotateUse }
 		var resolved = userCredentialOptions ?? CredentialOptions(
 			credentialPolicy: resolvedPolicy,
-			batchSize: defaultBatchSize,
+			batchSize: issuerSpecifiedBatchSize,
 			reissueTriggerUnused: reissueTriggerUnused,
 			reissueTriggerLifetimeLeft: reissueTriggerLifetimeLeft
 		)
-		if resolved.batchSize > defaultBatchSize {
-			logger.warning("Credential options batch size \(resolved.batchSize) is larger than the default batch size \(defaultBatchSize). Using the default batch size.")
-			resolved.batchSize = defaultBatchSize
+		if resolved.batchSize > issuerSpecifiedBatchSize {
+			logger.warning("Credential options batch size \(resolved.batchSize) is larger than the default batch size \(issuerSpecifiedBatchSize). Using the default batch size.")
+			resolved.batchSize = issuerSpecifiedBatchSize
 		}
 		if credentialReusePolicy != nil {
 			// Issuer-defined reuse policy takes precedence over user-provided policy fields.
 			resolved.credentialPolicy = resolvedPolicy
-			resolved.batchSize = defaultBatchSize
+			resolved.batchSize = issuerSpecifiedBatchSize
 			resolved.reissueTriggerUnused = reissueTriggerUnused
 			resolved.reissueTriggerLifetimeLeft = reissueTriggerLifetimeLeft
 		}

@@ -135,7 +135,10 @@ The following example shows how to issue documents by offer URL:
 
 ```swift
 // Configure issuer with signed metadata policy and certificate chain trust
-let trust: CertificateChainTrust = TrustedChainValidator(iacaRoots: [eudic])
+let trust: CertificateChainTrust = TrustedChainValidator(
+  iacaRoots: [eudic],
+  crlRevocationPolicy: .hardFail
+)
 let issuerMetadataPolicy: IssuerMetadataPolicy = .requireSigned(
   issuerTrust: .byCertificateChain(certificateChainTrust: trust)
 )

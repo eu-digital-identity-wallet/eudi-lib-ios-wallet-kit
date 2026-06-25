@@ -33,7 +33,7 @@ struct IssuanceNotificationTests {
 	) throws -> OpenId4VciService {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true)
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
