@@ -28,7 +28,7 @@ extension OpenId4VciService {
 			throw PresentationSession.makeError(str: "Invalid credential configuration for \(docTypeIdentifier.docType ?? docTypeIdentifier.vct ?? "")")
 		}
 
-		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer)
+		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, useDpop: false)
 		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer)
 		authRequested = parPlaced
 
@@ -327,9 +327,9 @@ extension OpenId4VciService {
 		return (documents, refreshed)
 	}
 
-	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil) async throws -> Issuer {
+	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil, useDpop: Bool? = nil) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
-		if config.requireDpop {
+		if useDpop ?? config.requireDpop {
 			dpopConstructor = try await config.makePoPConstructor(
 				popUsage: .dpop,
 				privateKeyId: dpopKeyId ?? issueReq.dpopKeyId,
