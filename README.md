@@ -123,7 +123,8 @@ let config = EudiWalletConfiguration(
     deviceAuthMethod: .deviceSignature,
     uiCulture: "en",
     logFileName: "wallet.log",
-    bleTransferMode: .server  // .server (default), .client, or .both
+    bleTransferMode: .server,  // .server (default), .client, or .both
+    crlRevocationPolicy: .hardFail // default
 )
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
@@ -136,6 +137,8 @@ let wallet = try! EudiWallet(
 ```
 
 Set `allowPresentingPartialClaims` to `true` when you want OpenID4VP DCQL resolution to skip claims that are missing from an otherwise matching credential. The default value is `false`, which keeps all requested claims mandatory.
+
+Set `crlRevocationPolicy` in `EudiWalletConfiguration` to control how CRL revocation checks are enforced when validating reader certificates during presentation. The default value is `.hardFail`.
 
 ### OpenID4VCI Configuration
 

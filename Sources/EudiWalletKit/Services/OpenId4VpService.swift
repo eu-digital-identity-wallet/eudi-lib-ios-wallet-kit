@@ -71,8 +71,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
+	public let crlRevocationPolicy: RevocationPolicy
 
-	public init(parameters: InitializeTransferData, qrCode: Data, openID4VpConfig: OpenId4VpConfiguration, networking: Networking) async throws {
+	public init(
+		parameters: InitializeTransferData,
+		qrCode: Data,
+		openID4VpConfig: OpenId4VpConfiguration,
+		networking: Networking,
+		crlRevocationPolicy: RevocationPolicy
+	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.transferInfo = objs
@@ -82,6 +89,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openid4VPlink = openid4VPlink
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
+		self.crlRevocationPolicy = crlRevocationPolicy
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
@@ -258,13 +266,13 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				inputToPresentations.append((inputDescrId, docId, vpToken.0))
 			} else if transferInfo.dataFormats[docId] == .sdjwt {
 				let docSigned = docsSdJwt[docId]; let dpk = transferInfo.privateKeyObjects[docId]
-				guard let docSigned, let dpk, let items = nsItems.first?.value else { continue }
+				let docData = transferInfo.documentObjects[docId]
+				guard let docSigned, let docData, let dpk, let items = nsItems.first?.value else { continue }
+				guard let holderPublicJwk = try SdJwtUtils.parseCnfBindingKeys(fromDocumentData: docData).first else { continue }
 				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
 				let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
 				let dsa = keyInfo.crv.defaultSigningAlgorithm
-				let publicKeyCose = try await dpk.secureArea.getPublicKey(id: docId, index: dpk.index, curve: keyInfo.crv)
-				let publicKeyJwk = try publicKeyCose.jwk
-				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: keyInfo.crv, ecAlgorithm: dsa, unlockData: unlockData)
+				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, publicKey: holderPublicJwk, curve: keyInfo.crv, ecAlgorithm: dsa, unlockData: unlockData)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 				let hai = HashingAlgorithmIdentifier(rawValue: transferInfo.hashingAlgs[docId] ?? "") ?? .SHA3256
 				guard let presented = try await OpenId4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {
@@ -343,7 +351,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
 		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		(isValid, validationMessages, _) = SecurityHelpers.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, rootIaca: transferInfo.iaca)
+		(isValid, validationMessages, _) = SecurityHelpers
+			.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, revocationPolicy: crlRevocationPolicy, rootIaca: transferInfo.iaca)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
 		self.certificateChain = certsData

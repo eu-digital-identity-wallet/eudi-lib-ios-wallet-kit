@@ -213,10 +213,12 @@ public actor OpenId4VciService {
 			issuerPolicy: credentialReusePolicy,
 			walletSupported: OpenId4VciConfiguration.supportedCredentialReusePolicies
 		)
-		let defaultBatchSize = CredentialReusePolicyValidator.determineBatchSize(
+		var issuerSpecifiedBatchSize = CredentialReusePolicyValidator.determineBatchSize(
 			selectedPolicy: selectedPolicy,
 			issuerBatchSize: batchCredentialIssuance?.batchSize
 		) ?? 1
+		// Limited-time dictates that a single instance of the attestation is issued that can be used for a limited period.
+		if let selectedPolicy, selectedPolicy.method == .limitedTime { issuerSpecifiedBatchSize = 1 }
 		let reissueTriggerUnused: Int?
 		let reissueTriggerLifetimeLeft: Int?
 		switch selectedPolicy {
@@ -239,18 +241,18 @@ public actor OpenId4VciService {
 		let resolvedPolicy: CredentialPolicy = if case .onceOnly = selectedPolicy { .oneTimeUse } else { .rotateUse }
 		var resolved = userCredentialOptions ?? CredentialOptions(
 			credentialPolicy: resolvedPolicy,
-			batchSize: defaultBatchSize,
+			batchSize: issuerSpecifiedBatchSize,
 			reissueTriggerUnused: reissueTriggerUnused,
 			reissueTriggerLifetimeLeft: reissueTriggerLifetimeLeft
 		)
-		if resolved.batchSize > defaultBatchSize {
-			logger.warning("Credential options batch size \(resolved.batchSize) is larger than the default batch size \(defaultBatchSize). Using the default batch size.")
-			resolved.batchSize = defaultBatchSize
+		if resolved.batchSize > issuerSpecifiedBatchSize {
+			logger.warning("Credential options batch size \(resolved.batchSize) is larger than the default batch size \(issuerSpecifiedBatchSize). Using the default batch size.")
+			resolved.batchSize = issuerSpecifiedBatchSize
 		}
 		if credentialReusePolicy != nil {
 			// Issuer-defined reuse policy takes precedence over user-provided policy fields.
 			resolved.credentialPolicy = resolvedPolicy
-			resolved.batchSize = defaultBatchSize
+			resolved.batchSize = issuerSpecifiedBatchSize
 			resolved.reissueTriggerUnused = reissueTriggerUnused
 			resolved.reissueTriggerLifetimeLeft = reissueTriggerLifetimeLeft
 		}
@@ -1038,15 +1040,7 @@ public actor OpenId4VciService {
 	}
 
 	private func validateSdJwtBindingKeys(_ serialized: String, publicCoseKeys: inout [CoseKey]) throws {
-		let (_, payload, _) = SdJwtUtils.extractJWTParts(serialized)
-		guard let payloadData = Data(base64URLEncoded: payload) else {
-			throw PresentationSession.makeError(str: "Failed to decode SD-JWT payload")
-		}
-		let payloadJson = try JSON(data: payloadData)
-		guard payloadJson["cnf"].exists(), payloadJson["cnf"].type == .dictionary else {
-			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a valid cnf claim")
-		}
-		let cnfKeys = try parseCnfBindingKeys(payloadJson["cnf"])
+		let cnfKeys = try SdJwtUtils.parseCnfBindingKeys(fromSerializedCredential: serialized)
 		let availableKeys = publicCoseKeys.map(\.x963Representation)
 		for key in cnfKeys {
 			guard let x = Data(base64URLEncoded: key.x), let y = Data(base64URLEncoded: key.y) else {
@@ -1059,31 +1053,6 @@ public actor OpenId4VciService {
 			} else {
 				throw PresentationSession.makeError(str: "Failed to find matching public key for SD-JWT cnf binding key")
 			}
-		}
-	}
-
-	private func parseCnfBindingKeys(_ cnf: JSON) throws -> [ECPublicKey] {
-		var jwks: [JSON] = []
-		if cnf["jwk"].type == .dictionary {
-			jwks.append(cnf["jwk"])
-		} else if cnf["jwk"].type == .array {
-			jwks.append(contentsOf: cnf["jwk"].arrayValue)
-		}
-		if cnf["jwks"]["keys"].type == .array {
-			jwks.append(contentsOf: cnf["jwks"]["keys"].arrayValue)
-		}
-		guard !jwks.isEmpty else {
-			throw PresentationSession.makeError(str: "Issued SD-JWT cnf claim does not contain JWK binding keys")
-		}
-		return try jwks.map { jwk in
-			guard let kty = jwk["kty"].string, kty == "EC",
-					let curveName = jwk["crv"].string,
-					let curve = ECCurveType(rawValue: curveName),
-					let x = jwk["x"].string,
-					let y = jwk["y"].string else {
-				throw PresentationSession.makeError(str: "Issued SD-JWT cnf JWK is missing required key material")
-			}
-			return ECPublicKey(crv: curve, x: x, y: y)
 		}
 	}
 
