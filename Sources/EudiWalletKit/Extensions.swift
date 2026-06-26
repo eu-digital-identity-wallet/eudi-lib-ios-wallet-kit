@@ -23,6 +23,9 @@ import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
 import JOSESwift
+import protocol JSONWebAlgorithms.JWKRepresentable
+import struct JSONWebAlgorithms.SecKeyExtended
+import struct JSONWebKey.JWK
 import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 
@@ -117,6 +120,11 @@ extension WalletStorage.Document {
 	public var authorizePresentationUrl: String? {
 		guard status == .pending, let model = try? JSONDecoder().decode(PendingIssuanceModel.self, from: data), case .presentation_request_url(let urlString) = model.pendingReason else { return nil	}
 		return urlString
+	}
+
+	public var credentialOptions: CredentialOptions? {
+		let docMetadata: DocMetadata? = DocMetadata(from: metadata)
+		return docMetadata?.credentialOptions
 	}
 
 	public func getDisplayName(_ uiCulture: String?) -> String?  {
@@ -448,6 +456,16 @@ extension CoseEcCurve {
 	}
 }
 
+extension ECCurveType {
+	var coseEcCurve: CoseEcCurve {
+		switch self {
+		case .P256: .P256
+		case .P384: .P384
+		case .P521: .P521
+		}
+	}
+}
+
 extension BindingKey {
 
   static func createSigner(with header: JWSHeader, and payload: Payload, for privateKey: SigningKeyProxy, and signatureAlgorithm: SignatureAlgorithm) async throws -> Signer {
@@ -519,6 +537,59 @@ extension DocClaimsModelConfiguration {
 			docClaims: docClaims, docDataFormat: docDataFormat,
 			hashingAlg: hashingAlg, nameSpaces: nameSpaces
 		)
+	}
+}
+
+extension MdocDataModel18013.CoseKey {
+	var jwk: JSONWebKey.JWK {
+		get throws {
+			guard let curve = JSONWebKey.JWK.CryptographicCurve(rawValue: crv.jwkName) else {
+				throw WalletError(description: "Unsupported CoseKey curve for JWK conversion: \(crv.jwkName)")
+			}
+			return JSONWebKey.JWK(keyType: .ellipticCurve, curve: curve, x: Data(x), y: Data(y))
+		}
+	}
+}
+
+extension SigningKeyProxy: @retroactive JWKRepresentable {
+	/// get the public JWK representation
+	public var jwkRepresentation: JSONWebKey.JWK {
+		switch self {
+		case .secKey(let secKey):
+			return try! SecKeyExtended(secKey: secKey).jwk()
+		case .custom(let signer):
+			return try! signer.publicKey.toJsonWebKeyJWK()
+		}
+	}
+	
+	/// get the public JWK key
+	public func getPublicJWK() throws -> any JOSESwift.JWK {
+		switch self {
+		case .secKey(let secKey):
+			return try SecKeyExtended(secKey: secKey).jwk().toJoseSwiftJWK()
+		case .custom(let signer):
+			return signer.publicKey
+		}
+	}
+}
+
+extension JSONWebKey.JWK {
+	/// Converts a jose-swift `JWK` struct to a JOSESwift `JWK` protocol existential.
+	func toJoseSwiftJWK() throws -> any JOSESwift.JWK {
+		let data = try JSONEncoder().encode(self)
+		return switch keyType {
+		case .ellipticCurve: try ECPublicKey(data: data)
+		case .rsa: try RSAPublicKey(data: data)
+		default: throw WalletError(description: "Unsupported JWK key type for JOSESwift conversion: \(keyType)")
+		}
+	}
+}
+
+extension JOSESwift.JWK {
+	/// Converts a JOSESwift `JWK` rotocol existential to a jose-swift `JWK` struct.
+	func toJsonWebKeyJWK() throws -> JSONWebKey.JWK {
+		let data = try JSONEncoder().encode(self)
+		return try JSONDecoder().decode(JSONWebKey.JWK.self, from: data)
 	}
 }
 

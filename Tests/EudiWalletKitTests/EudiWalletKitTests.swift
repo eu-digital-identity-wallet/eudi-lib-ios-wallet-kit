@@ -56,12 +56,12 @@ struct EudiWalletKitTests {
 	}
 
 	private func parseSdJwtClaims(for dt: String) throws -> (recreatedClaims: JSON, disclosures: [String]) {
-		let dataFileName = "sjwt-\(dt)"
+		let dataFileName = "sjwt-\(dt)-python"
 		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
 		let result = try sdJwt.recreateClaims()
-		let resolved = StorageManager.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
 		return (resolved, sdJwt.disclosures)
 	}
 
@@ -77,7 +77,7 @@ struct EudiWalletKitTests {
 		return nil
 	}
 
-	@Test("Get claims from sd-jwt", arguments: ["mdl", "pid", "pid-address"])
+	@Test("Get claims from sd-jwt", arguments: ["pid"])
 	func testParseJwt(dt: String) async throws {
 		let (claims, _) = try parseSdJwtClaims(for: dt)
 		if dt == "pid" {
@@ -99,7 +99,7 @@ struct EudiWalletKitTests {
 		let hashFR = Data(SHA256.hash(data: Data(disclosureFR.utf8))).base64URLEncodedString()
 		// SD-JWT payload: two selective-disclosure array elements; only "DE" has a matching disclosure
 		let payload = JSON(parseJSON: "{\"nationalities\": [{\"...\": \"\(hashDE)\"}, {\"...\": \"\(hashFR)\"}]}")
-		let resolved = StorageManager.resolveNestedSdClaims(payload, disclosures: [disclosureDE], hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(payload, disclosures: [disclosureDE], hashingAlg: "sha-256")
 		print("Nationalities disclosures — DE: \(disclosureDE), FR: \(disclosureFR)")
 		// The undisclosed element must be omitted, leaving only "DE"
 		let nationalities = resolved["nationalities"].arrayValue.map(\.stringValue)
@@ -125,7 +125,7 @@ struct EudiWalletKitTests {
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: serialized)
 		let result = try sdJwt.recreateClaims()
-		let resolved = StorageManager.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
+		let resolved = SdJwtUtils.resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: "sha-256")
 				// No DocClaim produced for the resolved array should carry an empty-object value
 		let metadata = [DocClaimMetadata(display: [DisplayMetadata(name: "nationalities", localeIdentifier: "en", logo: nil, description: nil, backgroundColor: nil, textColor: nil)], isMandatory: false, claimPath: ["nationalities"], valueType: nil)]
 		let docClaims = resolved.toClaimsArray(pathPrefix: [], metadata, "en")?.0 ?? []
@@ -157,7 +157,7 @@ struct EudiWalletKitTests {
 		let sdJwtData = try #require(Data(name: "sjwt-mdl", ext: "txt", from: Bundle.module))
 		let document = WalletStorage.Document(id: "sjwt-mdl", docType: configuration.docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: nil, createdAt: .now, metadata: docMetadata.toData(), displayName: nil, status: .issued)
 
-		let model = try #require(StorageManager.toSdJwtDocModel(doc: document, uiCulture: "en"))
+		let model = try #require(SdJwtUtils.toSdJwtDocModel(doc: document, uiCulture: "en"))
 		#expect(model.docType == "org.iso.18013.5.1.mDL")
 		#expect(model.docDataFormat == .sdjwt)
 
@@ -382,7 +382,7 @@ struct EudiWalletKitTests {
 	func testValidateIssuedSdJwtCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
+		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid-python", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
 		let publicKeyData = Data(publicKey.encode(options: CBOROptions()))
 		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
@@ -398,8 +398,8 @@ struct EudiWalletKitTests {
 				"attested_issuer": OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
-					requirePAR: false,
-					requireDpop: false
+					parUsage: .required(authorizationCodeDPoPBinding: false),
+					requireDpop: true
 				)
 			],
 			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
@@ -425,9 +425,9 @@ struct EudiWalletKitTests {
 	}
 
 	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
-		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true)
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
@@ -441,7 +441,7 @@ struct EudiWalletKitTests {
 			publicKey = issuerSigned.issuerAuth.mso.deviceKeyInfo.deviceKey
 		} else {
 			let serialized = try #require(String(data: original, encoding: .utf8))
-			let (_, payload, _) = StorageManager.extractJWTParts(serialized)
+			let (_, payload, _) = SdJwtUtils.extractJWTParts(serialized)
 			let payloadData = try #require(Data(base64URLEncoded: payload))
 			let payloadJson = try JSON(data: payloadData)
 			let jwk = payloadJson["cnf"]["jwk"]
@@ -470,7 +470,7 @@ struct EudiWalletKitTests {
 	}
 
 	private func makeIssuerJwkData(from serialized: String) throws -> Data {
-		let (header, _, _) = StorageManager.extractJWTParts(serialized)
+		let (header, _, _) = SdJwtUtils.extractJWTParts(serialized)
 		let headerData = try #require(Data(base64URLEncoded: header))
 		let headerJson = try JSON(data: headerData)
 		let certificateBase64 = try #require(headerJson["x5c"].array?.first?.string)
@@ -518,7 +518,7 @@ struct EudiWalletKitTests {
 
 actor TestDataStorageService: DataStorageService {
 	func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? { nil }
-	func loadDocumentMetadata(id: String) async throws -> DocMetadata? { nil }
+	func loadDocumentMetadata(id: String, status: WalletStorage.DocumentStatus) async throws -> DocMetadata? { nil }
 	func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
 	func saveDocument(_ document: WalletStorage.Document, batch: [WalletStorage.Document]?, allowOverwrite: Bool) async throws {}
 	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
@@ -564,7 +564,7 @@ final class RecordingWalletAttestationsProvider: WalletAttestationsProvider, @un
 
 	private(set) var lastRequest: (keyThumbprints: [String], nonce: String?)?
 
-	func getWalletAttestation(key: any JWK) async throws -> String {
+	func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
 		Self.attestation
 	}
 

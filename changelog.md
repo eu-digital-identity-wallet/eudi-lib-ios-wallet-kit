@@ -1,3 +1,166 @@
+## v0.33.1
+
+### What's Changed
+
+- Wire up credential issuer notification endpoint support (OpenID4VCI §11).
+- Fix DPoP signing to recreate the key when an existing key is incompatible.
+- Add tests for issuance notification endpoint wiring.
+- Update `eudi-lib-ios-openid4vci-swift` dependency to version `0.40.0`.
+
+## v0.33.0
+
+### DCQL Multiple Credential Selection
+
+DCQL query resolution now supports the `multiple` flag on credential queries and produces multiple selectable credential combinations when more than one credential matches a query.
+
+- `resolveDcql` returns `CredentialSelectionSetOptions` (an `OrderedDictionary<String, CredentialSelectionSet>`) instead of `[String: [ClaimsQuery]]`. Each entry represents a selectable combination of credentials that satisfies the query.
+- `credential_sets` with multiple options and optional sets are fully supported, including Cartesian product expansion across required and optional sets.
+
+### Breaking Changes
+
+- **`PresentationService.receiveRequest()` return type changed**: Returns `[UserRequestInfo]` instead of `UserRequestInfo`. Each element corresponds to a credential selection option.
+- **`PresentationSession.disclosedDocuments` renamed to `disclosedDocumentSets`**: The type changed from `[DocElements]` to `[[DocElements]]` to support multiple credential selection options.
+- **`PresentationSession.receiveRequest()` return type changed**: Returns `[UserRequestInfo]?` instead of `UserRequestInfo?`.
+- **`OpenId4VciConfiguration.requirePAR` renamed to `parUsage`**: The type changed from `Bool` to `ParUsage`. The default value is `.required(authorizationCodeDPoPBinding: true)`.
+
+### Dependency Updates
+
+- Updated `eudi-lib-ios-siop-openid4vp-swift` to version 0.34.1.
+- Updated `eudi-lib-ios-openid4vci-swift` to version 0.40.1.
+- Updated `eudi-lib-ios-iso18013-data-transfer` to version 0.21.3.
+
+## v0.32.1
+
+### What's Changed
+
+- Refactor batch size handling in `OpenId4VciService` to correctly accommodate issuer-specified limited-time reuse policy.
+
+## v0.32.0
+
+### Credential Reuse Policy Enforcement
+
+Issuer-defined credential reuse policies (ETSI TS 119 472-3 / ARF Annex II) now take precedence over caller-supplied `[CredentialOptions](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-iso18013-data-model/documentation/mdocdatamodel18013/credentialoptions)`.
+The wallet currently supports 3 ARF Annex II reuse methods: `.limitedTime`, `.onceOnly`, and `.rotatingBatch`.
+
+When the issuer metadata contains a `credentialReusePolicy`, the resolved `credentialPolicy`, `batchSize`, `reissueTriggerUnused`, and `reissueTriggerLifetimeLeft` fields are always derived from that policy and override the caller's values.
+
+This enforcement applies to all issuance entry points: `issueDocuments`, `issueDocumentsByOfferUrl`, `reissueDocument`, `requestDeferredIssuance`, and `resumePendingIssuance`.
+
+- When ETSI TS 119 472-3 Once-Only reuse method is applied, the oneTimeUse credential policy is used.
+- When ETSI TS 119 472-3 Limited-time reuse method is applied, the rotateUse credential policy is used and the batch size is set to 1.
+- When ETSI TS 119 472-3 Rotating-Batch reuse method is applied, the rotateUse credential policy is used.
+
+### API Additions
+
+- Added `EudiWallet.getDocumentCredentialOptions(documentId:)` to retrieve persisted `CredentialOptions` from stored document metadata.
+
+### Bug Fixes
+
+- **`OpenId4VpService.receiveRequest()` now respects custom networking**: The `Fetcher<String>()` used to fetch the authorization request object was created without the configured `networking` session, causing errors when a custom networking implementation was set on `EudiWallet`. The fetcher is now initialized with the same `networking` instance as the rest of the VP flow.
+
+### Breaking Changes
+
+- **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
+  - **Before**: `func getWalletAttestation(key: any JWK) async throws -> String`
+  - **After**: `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String`
+  - The parameter is now a `SigningKeyProxy` (from the OpenID4VCI library) instead of a plain `JWK`. Use `signingKey.getPublicJWK()` to obtain the public JWK:
+
+```swift
+func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+    let key = try signingKey.getPublicJWK()
+    return try await attestationService.getWalletAttestation(for: key)
+}
+```
+
+## v0.31.3
+
+### What's Changed
+
+- 393 dcql resolution fails fix.
+
+## v0.31.2
+
+### What's Changed
+
+- Refactor binding key creation to include proof subject.
+
+## v0.31.1
+
+### What's Changed
+
+- Append `client_id` to redirect URL in authorization code flow.
+
+## v0.31.0
+
+### What's Changed
+
+- Preserve `WalletError.code` in `receiveRequest` error handling.
+- Refactor wallet attestation handling and update dependencies.
+
+### Breaking Changes
+
+- **`WalletAttestationsProvider` protocol change**: The `getWalletAttestation` method signature changed:
+  - **Before**: `func getWalletAttestation(key: any JWK) async throws -> String`
+  - **After**: `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String`
+  - The parameter is now a `SigningKeyProxy` (from the OpenID4VCI library) instead of a plain `JWK`. Use `signingKey.getPublicJWK()` to obtain the public JWK:
+
+```swift
+func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+    let key = try signingKey.getPublicJWK()
+    return try await attestationService.getWalletAttestation(for: key)
+}
+```
+
+## v0.30.7
+
+### What's Changed
+
+- Update dependencies for `eudi-lib-ios-sdjwt-swift` and `eudi-lib-ios-openid4vci-swift`.
+
+## v0.30.6
+
+### What's Changed
+
+- Update `eudi-lib-ios-iso18013-data-transfer` dependency version to `0.20.3`.
+
+## v0.30.5
+
+### What's Changed
+
+- Refactor QR engagement method and update dependency.
+- Fix BLE presentation to not require Face ID / Touch ID.
+
+## v0.30.4
+
+### What's Changed
+
+- Update default `clientId` in `OpenId4VciConfiguration`.
+- Refactor credential configuration and update dependencies.
+- Fix issuing EHIC document with Kotlin issuer (configuration identifier: `urn:eudi:ehic:1:dc+sd-jwt-jws-json`).
+- Set key user-presence policy by default. To avoid biometric authentication during issuing, set empty `accessControl`:
+
+```swift
+let keyOptions = KeyOptions(curve: .P256, secureAreaName: "Software", accessControl: [])
+```
+
+## v0.30.3
+
+### What's Changed
+
+- Fix SD-JWT array resolution to omit undisclosed elements.
+
+## v0.30.2
+
+### What's Changed
+
+- Enhance deferred issuance handling.
+
+## v0.30.1
+
+### What's Changed
+
+- Update `wallet-storage` dependency version to `0.20.0`.
+
 ## v0.30.0
 
 ### Usage Counter Refresh
@@ -13,6 +176,13 @@ When a counter value changes, the corresponding document model publishes the cha
     Task { try? await wallet.refreshUsageCounters() }
 }
 ```
+
+## v0.29.5
+
+### What's Changed
+
+- Expose `ConfigurationCredentialMetadata` on `OfferedDocModel`.
+- Update `eudi-lib-sdjwt-swift` dependency versions (`0.14.2`, then `0.14.3`).
 
 ## v0.29.4
 ### Credential Display Images Downloaded at Issuance Time
@@ -393,7 +563,7 @@ public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: UR
     - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
   
   - **New protocol**: `WalletAttestationsProvider` with two required methods:
-    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet instance attestation JWT for a given public key
+    - `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String` - Obtain wallet instance attestation JWT for a given signing key (use `signingKey.getPublicJWK()` to get the public key)
     - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain unit attestation JWT for multiple keys 
 
 - **OpenId4VciConfiguration changes**:
@@ -427,7 +597,7 @@ let config = OpenId4VciConfiguration(
     - Property `popKeyDuration: TimeInterval?` - Optional duration for PoP JWT validity (default: 300 seconds)
   
   - **New protocol**: `WalletAttestationsProvider` with two required methods:
-    - `func getWalletAttestation(key: any JWK) async throws -> String` - Obtain wallet attestation JWT for a given public key
+    - `func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String` - Obtain wallet attestation JWT for a given signing key (use `signingKey.getPublicJWK()` to get the public key)
     - `func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String` - Obtain key attestation JWT for multiple keys with optional nonce
 
 - **OpenId4VciConfiguration changes**:

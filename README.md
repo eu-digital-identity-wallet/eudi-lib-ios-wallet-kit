@@ -123,7 +123,8 @@ let config = EudiWalletConfiguration(
     deviceAuthMethod: .deviceSignature,
     uiCulture: "en",
     logFileName: "wallet.log",
-    bleTransferMode: .server  // .server (default), .client, or .both
+    bleTransferMode: .server,  // .server (default), .client, or .both
+    crlRevocationPolicy: .hardFail // default
 )
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
@@ -136,6 +137,8 @@ let wallet = try! EudiWallet(
 ```
 
 Set `allowPresentingPartialClaims` to `true` when you want OpenID4VP DCQL resolution to skip claims that are missing from an otherwise matching credential. The default value is `false`, which keeps all requested claims mandatory.
+
+Set `crlRevocationPolicy` in `EudiWalletConfiguration` to control how CRL revocation checks are enforced when validating reader certificates during presentation. The default value is `.hardFail`.
 
 ### OpenID4VCI Configuration
 
@@ -184,9 +187,10 @@ To use attestation-based authentication, implement the `WalletAttestationsProvid
 ```swift
 // Implement the WalletAttestationsProvider protocol
 struct MyAttestationProvider: WalletAttestationsProvider {
-    func getWalletAttestation(key: any JWK) async throws -> String {
+    func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
         // Obtain wallet attestation JWT from your attestation service
-        // The attestation should be bound to the provided public key
+        // Use getPublicJWK() to get the public key bound to the attestation
+        let key = try signingKey.getPublicJWK()
         return try await attestationService.getWalletAttestation(for: key)
     }
     
@@ -579,13 +583,16 @@ On view appearance the attestations are presented with the receiveRequest method
 	 _ = await presentationSession.receiveRequest()
 }
 ```
-After the request is received the ``presentationSession.disclosedDocuments`` contains the requested attested items. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
+After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
 
 ```swift
+// Use the first credential selection option (or let the user choose)
+let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
+
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
  await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: presentationSession.disclosedDocuments.items, onCancel: { dismiss() }, onSuccess: {
+  itemsToSend: selectedOption.items, onCancel: { dismiss() }, onSuccess: {
 			if let url = $0 { 
         // handle URL
        }

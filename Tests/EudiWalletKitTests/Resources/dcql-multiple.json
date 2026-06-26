@@ -1,0 +1,16 @@
+{
+  "credentials": [
+    {
+      "id": "pid_cred",
+      "format": "vc+sd-jwt",
+      "meta": {
+        "vct_values": ["https://credentials.example.com/identity_credential"]
+      },
+      "multiple": true,
+      "claims": [
+        {"path": ["given_name"]},
+        {"path": ["family_name"]}
+      ]
+    }
+  ]
+}

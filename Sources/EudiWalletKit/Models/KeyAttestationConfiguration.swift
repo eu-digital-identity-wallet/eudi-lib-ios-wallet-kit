@@ -15,10 +15,7 @@ limitations under the License.
 */
 
 import Foundation
-import OpenID4VCI
-import Security
 import MdocDataModel18013
-import JOSESwift
 import Copyable
 
 @Copyable
@@ -31,9 +28,4 @@ public struct KeyAttestationConfiguration: Sendable {
 	public let walletAttestationsProvider: (any WalletAttestationsProvider)
 	public let popKeyOptions: KeyOptions?
 	public let popKeyDuration: TimeInterval?
-}
-
-public protocol WalletAttestationsProvider: Sendable {
-	func getWalletAttestation(key: any JWK) async throws -> String
-	func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String
 }

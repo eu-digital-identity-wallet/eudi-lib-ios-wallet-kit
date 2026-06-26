@@ -24,19 +24,23 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	let id: String
 	let index: Int
 	let secureArea: SecureArea
+	let curve: CoseEcCurve
+	public let publicKey: any JOSESwift.JWK
 	let ecAlgorithm: MdocDataModel18013.SigningAlgorithm
 	let algorithm: JOSESwift.SignatureAlgorithm
 	let signature: Data?
 	let unlockData: Data?
 
-	init(secureArea: SecureArea, id: String, index: Int, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
+	init(secureArea: SecureArea, id: String, index: Int, publicKey: any JOSESwift.JWK, curve: CoseEcCurve, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
 		self.id = id
 		self.index = index
 		self.secureArea = secureArea
+		self.curve = curve
 		self.ecAlgorithm = ecAlgorithm
 		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
 		signature = nil
 		self.unlockData = unlockData
+		self.publicKey = publicKey
 	}
 
 	static func getSignatureAlgorithm(_ sa: MdocDataModel18013.SigningAlgorithm) throws -> JOSESwift.SignatureAlgorithm {
