@@ -117,7 +117,7 @@ extension OpenId4VciService {
 			)
 		}
 
-		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, nonce: nonce)
+		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, nonce: nonce, dpopKeyOptions: keyOptions.map { KeyOptions(curve: $0.curve, secureAreaName: $0.secureAreaName) })
 		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
 		let authorizationCodeURL = try AuthorizationCodeURL(urlString: pendingDoc.authorizePresentationUrl ?? "")
 		let request = AuthorizationRequested(
@@ -250,7 +250,7 @@ extension OpenId4VciService {
 			grants: nil,
 			authorizationServerMetadata: authorizationServerMetadata
 		)
-		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, dpopKeyId: storedDpopKeyId)
+		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, dpopKeyId: storedDpopKeyId, dpopKeyOptions: keyOptions.map { KeyOptions(curve: $0.curve, secureAreaName: $0.secureAreaName) })
 
 		// Refresh the access token ONCE for the whole batch. The refresh_token grant keeps the original
 		// authorization scope, so the re-minted token can request every configuration in the offer.
@@ -327,14 +327,14 @@ extension OpenId4VciService {
 		return (documents, refreshed)
 	}
 
-	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil, useDpop: Bool? = nil) async throws -> Issuer {
+	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil, useDpop: Bool? = nil, dpopKeyOptions: KeyOptions? = nil) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
 		if useDpop ?? config.requireDpop {
 			dpopConstructor = try await config.makePoPConstructor(
 				popUsage: .dpop,
 				privateKeyId: dpopKeyId ?? issueReq.dpopKeyId,
 				algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported,
-				keyOptions: config.dpopKeyOptions
+				keyOptions: dpopKeyOptions ?? config.dpopKeyOptions
 			)
 		}
 		let vciConfig = try await config.toOpenId4VCIConfigWithPrivateKey(
