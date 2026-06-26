@@ -31,16 +31,16 @@ struct IssuanceNotificationTests {
 		storageService: any DataStorageService = TestDataStorageService(),
 		issuerURL: String = "https://dev.issuer.eudiw.dev"
 	) throws -> OpenId4VciService {
-		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
 	private func makeIssuedDocument() throws -> (data: Data, publicKey: Data) {
-		let raw = Data(name: "sjwt-pid", ext: "txt", from: Bundle.module)!
+		let raw = Data(name: "sjwt-pid-python", ext: "txt", from: Bundle.module)!
 		guard let serialized = String(data: raw, encoding: .utf8) else {
-			throw NSError(domain: "TestFixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot decode sjwt-pid.txt"])
+			throw NSError(domain: "TestFixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot decode sjwt-pid-python.txt"])
 		}
 		let (_, payload, _) = SdJwtUtils.extractJWTParts(serialized)
 		guard let payloadData = Data(base64URLEncoded: payload),
@@ -273,11 +273,11 @@ actor FailingStorageService: DataStorageService {
 	init(saveError: Error = NSError(domain: "TestStorage", code: 1, userInfo: [NSLocalizedDescriptionKey: "disk full"])) {
 		self.saveError = saveError
 	}
-	func loadDocument(id: String, status: DocumentStatus) async throws -> WalletStorage.Document? { nil }
-	func loadDocumentMetadata(id: String) async throws -> DocMetadata? { nil }
-	func loadDocuments(status: DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
+	func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? { nil }
+	func loadDocumentMetadata(id: String, status: WalletStorage.DocumentStatus) async throws -> DocMetadata? { nil }
+	func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
 	func saveDocument(_ document: WalletStorage.Document, batch: [WalletStorage.Document]?, allowOverwrite: Bool) async throws { throw saveError }
-	func deleteDocument(id: String, status: DocumentStatus) async throws {}
-	func deleteDocuments(status: DocumentStatus) async throws {}
+	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
+	func deleteDocuments(status: WalletStorage.DocumentStatus) async throws {}
 	func deleteDocumentCredential(id: String, index: Int) async throws {}
 }

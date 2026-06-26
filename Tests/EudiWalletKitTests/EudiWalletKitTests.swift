@@ -382,7 +382,7 @@ struct EudiWalletKitTests {
 	func testValidateIssuedSdJwtCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
+		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid-python", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
 		let publicKeyData = Data(publicKey.encode(options: CBOROptions()))
 		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
@@ -425,7 +425,7 @@ struct EudiWalletKitTests {
 	}
 
 	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
-		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
@@ -518,7 +518,7 @@ struct EudiWalletKitTests {
 
 actor TestDataStorageService: DataStorageService {
 	func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? { nil }
-	func loadDocumentMetadata(id: String) async throws -> DocMetadata? { nil }
+	func loadDocumentMetadata(id: String, status: WalletStorage.DocumentStatus) async throws -> DocMetadata? { nil }
 	func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
 	func saveDocument(_ document: WalletStorage.Document, batch: [WalletStorage.Document]?, allowOverwrite: Bool) async throws {}
 	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
