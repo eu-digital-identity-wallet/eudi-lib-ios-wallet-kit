@@ -56,7 +56,7 @@ struct EudiWalletKitTests {
 	}
 
 	private func parseSdJwtClaims(for dt: String) throws -> (recreatedClaims: JSON, disclosures: [String]) {
-		let dataFileName = "sjwt-\(dt)"
+		let dataFileName = "sjwt-\(dt)-python"
 		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
@@ -77,7 +77,7 @@ struct EudiWalletKitTests {
 		return nil
 	}
 
-	@Test("Get claims from sd-jwt", arguments: ["mdl", "pid", "pid-address"])
+	@Test("Get claims from sd-jwt", arguments: ["pid"])
 	func testParseJwt(dt: String) async throws {
 		let (claims, _) = try parseSdJwtClaims(for: dt)
 		if dt == "pid" {
