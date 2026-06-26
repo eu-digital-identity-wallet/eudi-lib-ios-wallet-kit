@@ -23,36 +23,10 @@ extension OpenId4VciService {
 			promptMessage: promptMessage
 		)
 
-		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
-		guard let authorizationServer = metadata.authorizationServers?.first else {
-			throw PresentationSession.makeError(str: "Invalid authorization server - no authorization server found")
+		let (credentialConfigurations, offer) = try await buildCredentialOffer(for: [docTypeIdentifier])
+		guard let configuration = credentialConfigurations.first else {
+			throw PresentationSession.makeError(str: "Invalid credential configuration for \(docTypeIdentifier.docType ?? docTypeIdentifier.vct ?? "")")
 		}
-
-		let authServerMetadata = await AuthorizationServerMetadataResolver(
-			oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking),
-			oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)
-		).resolve(url: authorizationServer)
-		let authorizationServerMetadata = try authServerMetadata.get()
-
-		let configuration = try getCredentialConfiguration(
-			credentialIssuerIdentifier: credentialIssuerIdentifier.url.absoluteString,
-			issuerDisplay: metadata.display,
-			credentialsSupported: metadata.credentialsSupported,
-			identifier: docTypeIdentifier.configurationIdentifier,
-			docType: docTypeIdentifier.docType,
-			vct: docTypeIdentifier.vct,
-			batchCredentialIssuance: metadata.batchCredentialIssuance,
-			dpopSigningAlgValuesSupported: authorizationServerMetadata.dpopSigningAlgValuesSupported?.map(\.name),
-			clientAttestationPopSigningAlgValuesSupported: authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported?.map(\.name)
-		)
-
-		let offer = try CredentialOffer(
-			credentialIssuerIdentifier: credentialIssuerIdentifier,
-			credentialIssuerMetadata: metadata,
-			credentialConfigurationIdentifiers: [configuration.configurationIdentifier],
-			grants: nil,
-			authorizationServerMetadata: authorizationServerMetadata
-		)
 
 		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer)
 		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer)
@@ -97,7 +71,7 @@ extension OpenId4VciService {
 			throw WalletError(description: "Pending issuance cannot be completed")
 		}
 
-		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
+		let (credentialIssuerIdentifier, metadata) = try await resolveIssuerMetadata()
 		guard let authorizationServer = metadata.authorizationServers?.first else {
 			throw PresentationSession.makeError(str: "Invalid authorization server - no authorization server found")
 		}
@@ -233,7 +207,7 @@ extension OpenId4VciService {
 		guard docTypeIdentifiers.count == docIds.count else {
 			throw WalletError(description: "Refresh token: docTypeIdentifiers (\(docTypeIdentifiers.count)) and docIds (\(docIds.count)) count mismatch")
 		}
-		let storedDpopKeyId = try await storageService.loadDocumentMetadata(id: docIds[0])?.dpopKeyId
+		let storedDpopKeyId = try await storageService.loadDocumentMetadata(id: docIds[0], status: .issued)?.dpopKeyId
 
 		let anchorCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifiers[0], credentialOptions: credentialOptions)
 		try await prepareIssuing(
@@ -246,7 +220,7 @@ extension OpenId4VciService {
 			promptMessage: promptMessage
 		)
 
-		let (credentialIssuerIdentifier, metadata) = try await getIssuerMetadata()
+		let (credentialIssuerIdentifier, metadata) = try await resolveIssuerMetadata()
 		guard let authorizationServer = metadata.authorizationServers?.first else {
 			throw WalletError(description: "Invalid issuer metadata")
 		}

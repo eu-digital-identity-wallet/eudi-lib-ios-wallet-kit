@@ -33,7 +33,9 @@ extension EudiWallet {
 	}
 
 	public func storedAuthorizedRequestParams(docId: WalletStorage.Document.ID) async throws -> AuthorizedRequestParams? {
-		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: docId) else {
+		let status: DocumentStatus =  if storage.docModels.contains(where: { $0.id == docId }) { .issued } else if storage.deferredDocuments.contains(where: { $0.id == docId }) { .deferred } else if storage.pendingDocuments.contains(where: { $0.id == docId }) { .pending } else { .issued }
+
+		guard let docMetadata = try await storage.storageService.loadDocumentMetadata(id: docId, status: status) else {
 			throw WalletError(description: "Issued document metadata not found for id: \(docId)")
 		}
 		guard let data = docMetadata.authorizedRequestData,
