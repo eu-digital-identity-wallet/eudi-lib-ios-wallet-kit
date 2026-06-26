@@ -22,6 +22,7 @@ import Logging
 import eudi_lib_sdjwt_swift
 import SwiftyJSON
 import OpenID4VCI
+import JOSESwift
 
 public final class SdJwtUtils {
 
@@ -144,5 +145,49 @@ public final class SdJwtUtils {
 	static func extractJWTParts(_ jwt: String) -> (String, String, String) {
 		let parts = jwt.components(separatedBy: ".")
 		return (parts.count > 0 ? parts[0] : "", parts.count > 1 ? parts[1] : "" , parts.count > 2 ? parts[2] : "")
+	}
+
+	static func parseCnfBindingKeys(fromDocumentData documentData: Data) throws -> [ECPublicKey] {
+		guard let serialized = String(data: documentData, encoding: .utf8) else {
+			throw PresentationSession.makeError(str: "Failed to decode SD-JWT credential data")
+		}
+		return try parseCnfBindingKeys(fromSerializedCredential: serialized)
+	}
+
+	static func parseCnfBindingKeys(fromSerializedCredential serialized: String) throws -> [ECPublicKey] {
+		let (_, payload, _) = extractJWTParts(serialized)
+		guard let payloadData = Data(base64URLEncoded: payload) else {
+			throw PresentationSession.makeError(str: "Failed to decode SD-JWT payload")
+		}
+		let payloadJson = try JSON(data: payloadData)
+		guard payloadJson["cnf"].exists(), payloadJson["cnf"].type == .dictionary else {
+			throw PresentationSession.makeError(str: "Issued SD-JWT is missing a valid cnf claim")
+		}
+		return try parseCnfBindingKeys(payloadJson["cnf"])
+	}
+
+	static func parseCnfBindingKeys(_ cnf: JSON) throws -> [ECPublicKey] {
+		var jwks: [JSON] = []
+		if cnf["jwk"].type == .dictionary {
+			jwks.append(cnf["jwk"])
+		} else if cnf["jwk"].type == .array {
+			jwks.append(contentsOf: cnf["jwk"].arrayValue)
+		}
+		if cnf["jwks"]["keys"].type == .array {
+			jwks.append(contentsOf: cnf["jwks"]["keys"].arrayValue)
+		}
+		guard !jwks.isEmpty else {
+			throw PresentationSession.makeError(str: "Issued SD-JWT cnf claim does not contain JWK binding keys")
+		}
+		return try jwks.map { jwk in
+			guard let kty = jwk["kty"].string, kty == "EC",
+					let curveName = jwk["crv"].string,
+					let curve = ECCurveType(rawValue: curveName),
+					let x = jwk["x"].string,
+					let y = jwk["y"].string else {
+				throw PresentationSession.makeError(str: "Issued SD-JWT cnf JWK is missing required key material")
+			}
+			return ECPublicKey(crv: curve, x: x, y: y)
+		}
 	}
 }
