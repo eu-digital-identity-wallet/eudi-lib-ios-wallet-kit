@@ -30,15 +30,7 @@ extension OpenId4VciConfiguration {
 		} else {
 			nil
 		}
-		return OpenId4VCIConfig(
-			client: client,
-			authFlowRedirectionURI: authFlowRedirectionURI,
-			authorizeIssuanceConfig: authorizeIssuanceConfig,
-			requirePAR: requirePAR,
-			clientAttestationPoPBuilder: clientAttestationPoPBuilder,
-			issuerMetadataPolicy: issuerMetadataPolicy,
-			requireDpop: requireDpop
-		)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
 	}
 
 	private func makeAttestationClientWithPrivateKey(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {

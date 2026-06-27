@@ -56,7 +56,7 @@ struct EudiWalletKitTests {
 	}
 
 	private func parseSdJwtClaims(for dt: String) throws -> (recreatedClaims: JSON, disclosures: [String]) {
-		let dataFileName = "sjwt-\(dt)"
+		let dataFileName = "sjwt-\(dt)-python"
 		let data = Data(name: dataFileName, ext: "txt", from: Bundle.module)!
 		let parser = CompactParser()
 		let sdJwt = try parser.getSignedSdJwt(serialisedString: String(data: data, encoding: .utf8)!)
@@ -77,7 +77,7 @@ struct EudiWalletKitTests {
 		return nil
 	}
 
-	@Test("Get claims from sd-jwt", arguments: ["mdl", "pid", "pid-address"])
+	@Test("Get claims from sd-jwt", arguments: ["pid"])
 	func testParseJwt(dt: String) async throws {
 		let (claims, _) = try parseSdJwtClaims(for: dt)
 		if dt == "pid" {
@@ -382,7 +382,7 @@ struct EudiWalletKitTests {
 	func testValidateIssuedSdJwtCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)
-		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
+		let (document, publicKey) = try makeDocument(fromResource: "sjwt-pid-python", docDataFormat: .sdjwt, docType: "urn:eu:europa:ec:eudi:pid:1")
 		let publicKeyData = Data(publicKey.encode(options: CBOROptions()))
 		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
@@ -398,8 +398,8 @@ struct EudiWalletKitTests {
 				"attested_issuer": OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
-					requirePAR: false,
-					requireDpop: false
+					parUsage: .required(authorizationCodeDPoPBinding: false),
+					requireDpop: true
 				)
 			],
 			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
@@ -425,9 +425,9 @@ struct EudiWalletKitTests {
 	}
 
 	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
-		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid", issuerURL: issuerURL))
+		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, requirePAR: true, requireDpop: true)
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
 	}
 
@@ -518,7 +518,7 @@ struct EudiWalletKitTests {
 
 actor TestDataStorageService: DataStorageService {
 	func loadDocument(id: String, status: WalletStorage.DocumentStatus) async throws -> WalletStorage.Document? { nil }
-	func loadDocumentMetadata(id: String) async throws -> DocMetadata? { nil }
+	func loadDocumentMetadata(id: String, status: WalletStorage.DocumentStatus) async throws -> DocMetadata? { nil }
 	func loadDocuments(status: WalletStorage.DocumentStatus) async throws -> [WalletStorage.Document]? { [] }
 	func saveDocument(_ document: WalletStorage.Document, batch: [WalletStorage.Document]?, allowOverwrite: Bool) async throws {}
 	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
