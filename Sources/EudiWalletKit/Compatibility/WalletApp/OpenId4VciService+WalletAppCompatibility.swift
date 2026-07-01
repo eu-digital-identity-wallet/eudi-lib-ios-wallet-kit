@@ -194,6 +194,7 @@ extension OpenId4VciService {
 			for try await document in group {
 				documents.append(document)
 			}
+			try? await storage.removePendingOrDeferredDoc(id: pendingDoc.id)
 			return documents
 		}
 	}
