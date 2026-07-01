@@ -36,10 +36,13 @@ ShareView(presentationSession: session)
 
 For OpenID4VP flows, partial DCQL claim presentation can be enabled through ``OpenId4VpConfiguration``. When ``OpenId4VpConfiguration/allowPresentingPartialClaims`` is `true`, claims that are not present in an otherwise matching credential are omitted instead of causing the presentation request to fail.
 
+The wallet can also override the response mode requested by the verifier using ``OpenId4VpConfiguration/preferredResponseMode``. Set it to ``PreferredResponseMode/directPost`` to send the authorization response as a plain POST, or ``PreferredResponseMode/directPostJWT`` to send it as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode from the verifier's request.
+
 ```swift
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
-    allowPresentingPartialClaims: true
+    allowPresentingPartialClaims: true,
+    preferredResponseMode: .directPostJWT
 )
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,

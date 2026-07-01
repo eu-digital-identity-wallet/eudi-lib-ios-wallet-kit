@@ -305,8 +305,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			// Group by DCQL query id -> array of VPs
 			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { $0.map { $0.2 } } ))
 		} else { .negative(message: "Rejected") }
-		// Generate a direct post authorisation response
-		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		// Generate a direct post authorisation response, applying wallet-preferred response mode if configured
+		let response = try buildAuthorizationResponse(resolved: resolved, consent: consent)
 		let result: DispatchOutcome = try await openId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
@@ -386,6 +386,50 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			session: networking,
 			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
 		return res
+	}
+
+	/// Builds an `AuthorizationResponse` applying the wallet's preferred response mode if configured.
+	/// When `preferredResponseMode` is set, overrides the verifier's requested mode while keeping the response URI from the request.
+	/// When not set, delegates to the standard `AuthorizationResponse` init (current behavior).
+	func buildAuthorizationResponse(resolved: ResolvedRequestData, consent: ClientConsent) throws -> AuthorizationResponse {
+		guard let preferred = openID4VpConfig.preferredResponseMode else {
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		}
+		let request = resolved.request
+		// Extract the response URI from the request's response mode
+		let responseURI: URL? = switch request.responseMode {
+		case .directPost(let uri): uri
+		case .directPostJWT(let uri): uri
+		case .query(let uri): uri
+		case .fragment(let uri): uri
+		case .some(.none), nil: nil
+		}
+		guard let uri = responseURI else {
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		}
+		let payload: AuthorizationResponsePayload
+		switch consent {
+		case .vpToken(let vpContent):
+			payload = .openId4VPAuthorizationResponse(
+				vpContent: vpContent,
+				state: request.state ?? "",
+				nonce: request.nonce,
+				clientId: resolved.client.id,
+				encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode)
+			)
+		case .negative(let error):
+			guard let state = request.state else { throw PresentationSession.makeError(str: "Missing state in request") }
+			payload = .noConsensusResponseData(state: state, error: error)
+		}
+		switch preferred {
+		case .directPost:
+			return .directPost(url: uri, data: payload)
+		case .directPostJWT:
+			guard let spec = request.responseEncryptionSpecification else {
+				throw PresentationSession.makeError(str: "directPostJWT requires response encryption specification from verifier")
+			}
+			return .directPostJwt(url: uri, data: payload, responseEncryptionSpecification: spec)
+		}
 	}
 
 }
