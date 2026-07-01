@@ -20,6 +20,7 @@ import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
 import enum OpenID4VP.ResponseEncryptionConfiguration
+import enum OpenID4VP.ResponseMode
 
 /// Client identifier scheme for verifier authentication
 ///
@@ -59,6 +60,17 @@ public enum ClientIdScheme: Sendable {
     case redirectUri
 }
 
+/// The response mode the wallet prefers for the authorization response.
+///
+/// When set, the library uses this mode instead of the mode from the Verifier's request.
+/// The response URI is always taken from the request regardless of this setting.
+public enum PreferredResponseMode: Sendable {
+	/// Send the authorization response as a direct POST.
+	case directPost
+	/// Send the authorization response as an encrypted direct POST JWT.
+	case directPostJWT
+}
+
 /// Configuration for OpenID4VP (OpenID for Verifiable Presentations) protocol.
 ///
 /// This structure contains the necessary configuration parameters for implementing
@@ -81,6 +93,12 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// When enabled, claims that are not present are skipped instead of failing the DCQL resolution.
 	/// By default, all requested claims remain mandatory.
 	public let allowPresentingPartialClaims: Bool
+	/// The response mode the wallet wants the library to use for the authorization response.
+	///
+	/// When set, the library uses this mode (e.g. `.directPostJWT`) instead of the mode
+	/// from the Verifier's request. The response URI is always taken from the request.
+	/// When `nil`, the library uses the mode from the request (default behavior).
+	public let preferredResponseMode: PreferredResponseMode?
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -88,12 +106,14 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.clientIdSchemes = Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = nil
 		self.allowPresentingPartialClaims = false
+		self.preferredResponseMode = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.allowPresentingPartialClaims = allowPresentingPartialClaims
+		self.preferredResponseMode = preferredResponseMode
 	}
 }
 
