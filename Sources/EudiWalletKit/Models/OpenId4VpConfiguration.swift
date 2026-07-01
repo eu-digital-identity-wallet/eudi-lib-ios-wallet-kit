@@ -94,16 +94,16 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// When enabled, claims that are not present are skipped instead of failing the DCQL resolution.
 	/// By default, all requested claims remain mandatory.
 	public let allowPresentingPartialClaims: Bool
-	/// Configuration for supported transaction data types
-	///
-	/// When provided all request with transaction data will be validated against the list
-	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
 	/// The response mode the wallet wants the library to use for the authorization response.
 	///
 	/// When set, the library uses this mode (e.g. `.directPostJWT`) instead of the mode
 	/// from the Verifier's request. The response URI is always taken from the request.
 	/// When `nil`, the library uses the mode from the request (default behavior).
 	public let preferredResponseMode: PreferredResponseMode?
+	/// Configuration for supported transaction data types
+	///
+	/// When provided all request with transaction data will be validated against the list
+	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -112,9 +112,10 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.responseEncryptionConfiguration = nil
 		self.allowPresentingPartialClaims = false
 		self.supportedTransactionDataTypes = []
+		self.preferredResponseMode = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [])) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.allowPresentingPartialClaims = allowPresentingPartialClaims
