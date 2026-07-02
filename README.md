@@ -586,7 +586,7 @@ On view appearance the attestations are presented with the receiveRequest method
 	 _ = await presentationSession.receiveRequest()
 }
 ```
-After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code: 
+After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code. The optional `deviceNameSpacesToSend` parameter can be used to include device-signed namespaces in the response:
 
 ```swift
 // Use the first credential selection option (or let the user choose)

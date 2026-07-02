@@ -79,6 +79,8 @@ After the request is received, ``PresentationSession/disclosedDocumentSets`` con
 
 When partial-claim presentation is enabled, each option includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding.
 
+The `deviceNameSpacesToSend` parameter allows including device-signed namespaces in the response. Pass a ``RequestDeviceNameSpaces`` value when device namespaces are needed, or omit it to send only issuer-signed data.
+
 ```swift
 // Example: use the first credential selection option
 let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
