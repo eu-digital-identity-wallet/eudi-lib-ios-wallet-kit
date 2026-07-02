@@ -80,7 +80,7 @@ class OpenId4VpUtils {
 		}
 		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
 	}
-
+	
 	static func makeCredentialMap(idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [Document.ID: (DocType, DocDataFormat)] {
 		var credentialMap = [Document.ID: (DocType, DocDataFormat)]()
 		for (docId, docType) in idsToDocTypes {
@@ -89,6 +89,82 @@ class OpenId4VpUtils {
 			}
 		}
 		return credentialMap
+	}
+	
+	static func getRequestItems(_ credentialSetOptions: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [(String, RequestItems)] {
+		var requestItemsArray = [(String, RequestItems)]()
+		for (requestName, credentialSet) in credentialSetOptions {
+			var requestItems = RequestItems()
+			for credentialSelectionSet in credentialSet {
+				let id = credentialSelectionSet.credentialId
+				guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
+				var nsItems: [String: [RequestItem]] = [:]
+				for claim in credentialSelectionSet.claimQueries {
+					guard let pair = Self.parseClaim(claim, formatRequested) else { continue }
+					if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
+				}
+				requestItems[id] = nsItems
+			}
+			requestItemsArray.append((requestName, requestItems))
+		}
+		return requestItemsArray
+	}
+
+
+	static func getTransactionDataRequested(_ credentialSetOptions: CredentialSelectionSetOptions, transactionDataList: [TransactionData]) throws -> [(String, RequestTransactionData)] {
+		var result = [(String, RequestTransactionData)]()
+		for (requestName, credentialSet) in credentialSetOptions {
+			var requestTransactionData: RequestTransactionData = [:]
+			for transactionData in transactionDataList {
+				let type = try transactionData.type()
+				let credentialIds = try transactionData.credentialIds()
+				let parameters = try transactionData.decode()
+				for credentialId in credentialIds {
+					if let document = credentialSet.first(
+						where: { value in value.queryId.value == credentialId.value
+						}) {
+						if (requestTransactionData[document.credentialId] == nil) {
+							requestTransactionData[document.credentialId] = [:]
+						}
+						requestTransactionData[document.credentialId]![type.value] = parameters
+						break
+					} else {
+						throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)")
+					}
+				}
+			}
+			result.append((requestName, requestTransactionData))
+		}
+		return result
+	}
+	
+	static func getVerifierInfoRequested(_ credentialSetOptions: CredentialSelectionSetOptions, verifierInfoList: [VerifierInfo]) -> [(String, RequestVerifierInfo)] {
+		var result = [(String, RequestVerifierInfo)]()
+		for (requestName, credentialSet) in credentialSetOptions {
+			var requestVerifierInfo: RequestVerifierInfo = [:]
+			for verifierInfo in verifierInfoList {
+				var documentIds = [Document.ID]()
+				if (verifierInfo.credentialIds == nil) {
+					documentIds = credentialSet.map({ $0.credentialId })
+				} else {
+					for credentialId in verifierInfo.credentialIds! {
+						if let document = credentialSet.first(
+							where: { value in value.queryId.value == credentialId.value
+						 }) {
+							documentIds.append(document.credentialId)
+						}
+					}
+				}
+				for documentId in documentIds {
+					if (requestVerifierInfo[documentId] == nil) {
+						requestVerifierInfo[documentId] = [:]
+					}
+					requestVerifierInfo[documentId]![verifierInfo.format] = verifierInfo.data
+				}
+			}
+			result.append((requestName, requestVerifierInfo))
+		}
+		return result
 	}
 
 	static func makeCborClaimData(
@@ -135,25 +211,6 @@ class OpenId4VpUtils {
 			claimPaths[docId] = paths
 			claimValues[docId] = values
 		}
-	}
-
-	static func getRequestItems(_ credentialSetOptions: CredentialSelectionSetOptions, idsToDocTypes: [Document.ID: DocType], formatsRequested: [DocType: DocDataFormat]) -> [(String, RequestItems)] {
-		var requestItemsArray = [(String, RequestItems)]()
-		for (requestName, credentialSet) in credentialSetOptions {
-			var requestItems = RequestItems()
-			for credentialSelectionSet in credentialSet {
-				let id = credentialSelectionSet.credentialId
-				guard let docType = idsToDocTypes[id], let formatRequested = formatsRequested[docType] else { continue }
-				var nsItems: [String: [RequestItem]] = [:]
-				for claim in credentialSelectionSet.claimQueries {
-					guard let pair = Self.parseClaim(claim, formatRequested) else { continue }
-					if !nsItems[pair.0, default: []].contains(pair.1) { nsItems[pair.0, default: []].append(pair.1) }
-				}
-				requestItems[id] = nsItems
-			}
-			requestItemsArray.append((requestName, requestItems))
-		}
-		return requestItemsArray
 	}
 
 	/// parse claim-query and return (namespace, itemIdentifier) pair

@@ -202,11 +202,18 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
+	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
+	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }
-			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend, onSuccess: onSuccess) }
+			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(
+				userAccepted: userAccepted,
+				itemsToSend: itemsToSend,
+				deviceNameSpacesToSend: deviceNameSpacesToSend,
+				onSuccess: onSuccess)
+			}
 			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
 			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys), zkpDocumentIds: presentationService.zkpDocumentIds)
 			await MainActor.run { status = .responseSent; storageManager?.objectWillChange.send() }

@@ -20,6 +20,7 @@ import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
 import enum OpenID4VP.ResponseEncryptionConfiguration
+import struct OpenID4VP.SupportedTransactionDataType
 import enum OpenID4VP.ResponseMode
 
 /// Client identifier scheme for verifier authentication
@@ -99,6 +100,10 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// from the Verifier's request. The response URI is always taken from the request.
 	/// When `nil`, the library uses the mode from the request (default behavior).
 	public let preferredResponseMode: PreferredResponseMode?
+	/// Configuration for supported transaction data types
+	///
+	/// When provided all request with transaction data will be validated against the list
+	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -106,14 +111,16 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.clientIdSchemes = Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = nil
 		self.allowPresentingPartialClaims = false
+		self.supportedTransactionDataTypes = []
 		self.preferredResponseMode = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.allowPresentingPartialClaims = allowPresentingPartialClaims
 		self.preferredResponseMode = preferredResponseMode
+		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 	}
 }
 

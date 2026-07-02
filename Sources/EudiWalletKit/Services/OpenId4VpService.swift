@@ -28,6 +28,7 @@ import eudi_lib_sdjwt_swift
 import JOSESwift
 import Logging
 import X509
+import SwiftyJSON
 import struct OpenID4VP.ClaimPath
 import enum OpenID4VP.ClaimPathElement
 import struct WalletStorage.Document
@@ -66,6 +67,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 	var networking: Networking
 	var unlockData: [String: Data]!
+	var verifierInfo: [VerifierInfo]?
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
@@ -144,6 +146,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		vpNonce = vp.nonce; vpClientId = resolvedClientId
 		mdocGeneratedNonce = OpenId4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
 		sessionTranscript = SessionTranscript(handOver: OpenId4VpUtils.generateOpenId4VpHandover(clientId: resolvedClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint?.byteArray))
+		transactionData = vp.transactionData
+		verifierInfo = vp.verifierInfo
 
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		// Only DCQL supported now
@@ -156,13 +160,29 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
-			self.transactionData = vp.transactionData
+			let transactionDataRequestedArray = transactionData != nil
+				? try OpenId4VpUtils.getTransactionDataRequested(
+					credentialSelectionSets,
+					transactionDataList: transactionData!)
+				: nil
+			let verifierInfoRequestedArray = verifierInfo != nil
+				? OpenId4VpUtils.getVerifierInfoRequested(credentialSelectionSets, verifierInfoList: verifierInfo!)
+				: nil
 			let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
 			let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 			var results = [UserRequestInfo]()
 			for (requestName, requestItems) in requestItemsArray {
+				let transactionDataRequested = transactionDataRequestedArray?.first(where: { $0.0 == requestName })
+				let verifierInfoRequested = verifierInfoRequestedArray?.first(where: { $0.0 == requestName })
 				//guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-				var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes, requestName: requestName)
+				var result = UserRequestInfo(
+					docDataFormats: formatsRequested,
+					itemsRequested: requestItems,
+					deviceRequestBytes: deviceRequestBytes,
+					transactionDataRequested: transactionDataRequested?.1,
+					verifierInfo: verifierInfoRequested?.1,
+					requestName: requestName
+				)
 				logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 				result.readerAuthResults = ["": rar]
 				TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
@@ -176,11 +196,23 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		docsCbor = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .cbor)} .mapValues { try? IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
 	}
 
-	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
+	func generateCborVpToken(itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
 		let docMetadata = transferInfo.docMetadata
 		let privateKeyObjects = transferInfo.privateKeyObjects
 		let zkSystemRepository = transferInfo.zkSystemRepository
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: zkSystemRepository)
+		let resp = try await MdocHelpers.getDeviceResponseToSend(
+			deviceRequest: nil,
+			issuerSigned: docsCbor,
+			docMetadata: docMetadata,
+			selectedItems: itemsToSend,
+			eReaderKey: eReaderPub,
+			privateKeyObjects: privateKeyObjects,
+			sessionTranscript: sessionTranscript,
+			dauthMethod: .deviceSignature,
+			unlockData: unlockData,
+			zkSpecsRequested: zkSpecsRequested,
+			zkSystemRepository: zkSystemRepository,
+			deviceNameSpacesRequested: deviceNameSpacesToSend)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -209,7 +241,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws {
+	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
+	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: ((URL?) -> Void)?) async throws {
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
@@ -229,7 +263,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			if transferInfo.dataFormats[docId] == .cbor {
 				if docsCbor == nil { makeCborDocs() }
 				let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
-				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
+				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1, deviceNameSpacesToSend: deviceNameSpacesToSend)
 				zkpDocumentIds!.append(contentsOf: vpToken.3)
 				inputToPresentations.append((inputDescrId, docId, vpToken.0))
 			} else if transferInfo.dataFormats[docId] == .sdjwt {
@@ -341,7 +375,18 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				case .preregistered(let clients): .preregistered(clients: Dictionary(uniqueKeysWithValues: clients.map { ($0.clientId, $0) }))
 			}
 		}
-		let res = OpenId4VPConfiguration(privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdPrefixes, vpFormatsSupported: [], jarConfiguration: .encryptionOption, vpConfiguration: .default(), errorDispatchPolicy: .allClients, session: networking, responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
+		let res = OpenId4VPConfiguration(
+			privateKey: privateKey,
+			publicWebKeySet: keySet,
+			supportedClientIdSchemes: supportedClientIdPrefixes,
+			vpFormatsSupported: [],
+			jarConfiguration: .encryptionOption,
+			vpConfiguration: try! .init(
+				vpFormatsSupported: .default(),
+				supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
+			errorDispatchPolicy: .allClients,
+			session: networking,
+			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
 		return res
 	}
 
