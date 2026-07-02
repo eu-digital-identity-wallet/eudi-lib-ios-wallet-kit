@@ -269,7 +269,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: (@Sendable (URL?) -> Void)?, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil) async throws  {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		handleSelected = nil
 		TransactionLogUtils.setCborTransactionLogResponseInfo(self, transactionLog: &transactionLog)

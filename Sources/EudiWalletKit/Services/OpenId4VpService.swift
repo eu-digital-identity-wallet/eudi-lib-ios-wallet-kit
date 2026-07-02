@@ -241,7 +241,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: ((URL?) -> Void)?) async throws {
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
