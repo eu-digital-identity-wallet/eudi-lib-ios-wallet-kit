@@ -202,7 +202,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
+	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
+	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }

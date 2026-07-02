@@ -269,6 +269,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
+	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
+	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		handleSelected = nil
