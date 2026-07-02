@@ -28,6 +28,7 @@ import eudi_lib_sdjwt_swift
 import JOSESwift
 import Logging
 import X509
+import SwiftyJSON
 import struct OpenID4VP.ClaimPath
 import enum OpenID4VP.ClaimPathElement
 import struct WalletStorage.Document
@@ -66,6 +67,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 	var networking: Networking
 	var unlockData: [String: Data]!
+	var verifierInfo: [VerifierInfo]?
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
@@ -144,6 +146,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		vpNonce = vp.nonce; vpClientId = resolvedClientId
 		mdocGeneratedNonce = OpenId4VpUtils.generateMdocGeneratedNonce()	// Not longer required for SessionTranscript, use the verifier (client) nonce i.e vpNonce
 		sessionTranscript = SessionTranscript(handOver: OpenId4VpUtils.generateOpenId4VpHandover(clientId: resolvedClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint?.byteArray))
+		transactionData = vp.transactionData
+		verifierInfo = vp.verifierInfo
 
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		// Only DCQL supported now
@@ -156,13 +160,29 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
-			self.transactionData = vp.transactionData
+			let transactionDataRequestedArray = transactionData != nil
+				? try OpenId4VpUtils.getTransactionDataRequested(
+					credentialSelectionSets,
+					transactionDataList: transactionData!)
+				: nil
+			let verifierInfoRequestedArray = verifierInfo != nil
+				? OpenId4VpUtils.getVerifierInfoRequested(credentialSelectionSets, verifierInfoList: verifierInfo!)
+				: nil
 			let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
 			let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 			var results = [UserRequestInfo]()
 			for (requestName, requestItems) in requestItemsArray {
+				let transactionDataRequested = transactionDataRequestedArray?.first(where: { $0.0 == requestName })
+				let verifierInfoRequested = verifierInfoRequestedArray?.first(where: { $0.0 == requestName })
 				//guard let requestItems, let formatsRequested else { throw PresentationSession.makeError(str: "Invalid request query") }
-				var result = UserRequestInfo(docDataFormats: formatsRequested, itemsRequested: requestItems, deviceRequestBytes: deviceRequestBytes, requestName: requestName)
+				var result = UserRequestInfo(
+					docDataFormats: formatsRequested,
+					itemsRequested: requestItems,
+					deviceRequestBytes: deviceRequestBytes,
+					transactionDataRequested: transactionDataRequested?.1,
+					verifierInfo: verifierInfoRequested?.1,
+					requestName: requestName
+				)
 				logger.info("Verifier requested items: \(requestItems.mapValues { $0.mapValues { ar in ar.map(\.elementIdentifier) } })")
 				result.readerAuthResults = ["": rar]
 				TransactionLogUtils.setCborTransactionLogRequestInfo(result, transactionLog: &transactionLog)
@@ -176,11 +196,23 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		docsCbor = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .cbor)} .mapValues { try? IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
 	}
 
-	func generateCborVpToken(itemsToSend: RequestItems) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
+	func generateCborVpToken(itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
 		let docMetadata = transferInfo.docMetadata
 		let privateKeyObjects = transferInfo.privateKeyObjects
 		let zkSystemRepository = transferInfo.zkSystemRepository
-		let resp = try await MdocHelpers.getDeviceResponseToSend(deviceRequest: nil, issuerSigned: docsCbor, docMetadata: docMetadata, selectedItems: itemsToSend, eReaderKey: eReaderPub, privateKeyObjects: privateKeyObjects, sessionTranscript: sessionTranscript, dauthMethod: .deviceSignature, unlockData: unlockData, zkSpecsRequested: zkSpecsRequested, zkSystemRepository: zkSystemRepository)
+		let resp = try await MdocHelpers.getDeviceResponseToSend(
+			deviceRequest: nil,
+			issuerSigned: docsCbor,
+			docMetadata: docMetadata,
+			selectedItems: itemsToSend,
+			eReaderKey: eReaderPub,
+			privateKeyObjects: privateKeyObjects,
+			sessionTranscript: sessionTranscript,
+			dauthMethod: .deviceSignature,
+			unlockData: unlockData,
+			zkSpecsRequested: zkSpecsRequested,
+			zkSystemRepository: zkSystemRepository,
+			deviceNameSpacesRequested: deviceNameSpacesToSend)
 		guard let resp else { throw PresentationSession.makeError(str: "DOCUMENT_ERROR") }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -209,7 +241,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, onSuccess: ((URL?) -> Void)?) async throws {
+	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
+	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: ((URL?) -> Void)?) async throws {
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw PresentationSession.makeError(str: "Unexpected error")
 		}
@@ -229,7 +263,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			if transferInfo.dataFormats[docId] == .cbor {
 				if docsCbor == nil { makeCborDocs() }
 				let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
-				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1)
+				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1, deviceNameSpacesToSend: deviceNameSpacesToSend)
 				zkpDocumentIds!.append(contentsOf: vpToken.3)
 				inputToPresentations.append((inputDescrId, docId, vpToken.0))
 			} else if transferInfo.dataFormats[docId] == .sdjwt {
@@ -273,8 +307,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			// Group by DCQL query id -> array of VPs
 			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { $0.map { $0.2 } } ))
 		} else { .negative(message: "Rejected") }
-		// Generate a direct post authorisation response
-		let response = try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		// Generate a direct post authorisation response, applying wallet-preferred response mode if configured
+		let response = try buildAuthorizationResponse(resolved: resolved, consent: consent)
 		let result: DispatchOutcome = try await openId4Vp.dispatch(response: response)
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
@@ -341,8 +375,63 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				case .preregistered(let clients): .preregistered(clients: Dictionary(uniqueKeysWithValues: clients.map { ($0.clientId, $0) }))
 			}
 		}
-		let res = OpenId4VPConfiguration(privateKey: privateKey, publicWebKeySet: keySet, supportedClientIdSchemes: supportedClientIdPrefixes, vpFormatsSupported: [], jarConfiguration: .encryptionOption, vpConfiguration: .default(), errorDispatchPolicy: .allClients, session: networking, responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
+		let res = OpenId4VPConfiguration(
+			privateKey: privateKey,
+			publicWebKeySet: keySet,
+			supportedClientIdSchemes: supportedClientIdPrefixes,
+			vpFormatsSupported: [],
+			jarConfiguration: .encryptionOption,
+			vpConfiguration: try! .init(
+				vpFormatsSupported: .default(),
+				supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
+			errorDispatchPolicy: .allClients,
+			session: networking,
+			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
 		return res
+	}
+
+	/// Builds an `AuthorizationResponse` applying the wallet's preferred response mode if configured.
+	/// When `preferredResponseMode` is set, overrides the verifier's requested mode while keeping the response URI from the request.
+	/// When not set, delegates to the standard `AuthorizationResponse` init (current behavior).
+	func buildAuthorizationResponse(resolved: ResolvedRequestData, consent: ClientConsent) throws -> AuthorizationResponse {
+		guard let preferred = openID4VpConfig.preferredResponseMode else {
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		}
+		let request = resolved.request
+		// Extract the response URI from the request's response mode
+		let responseURI: URL? = switch request.responseMode {
+		case .directPost(let uri): uri
+		case .directPostJWT(let uri): uri
+		case .query(let uri): uri
+		case .fragment(let uri): uri
+		case .some(.none), nil: nil
+		}
+		guard let uri = responseURI else {
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+		}
+		let payload: AuthorizationResponsePayload
+		switch consent {
+		case .vpToken(let vpContent):
+			payload = .openId4VPAuthorizationResponse(
+				vpContent: vpContent,
+				state: request.state ?? "",
+				nonce: request.nonce,
+				clientId: resolved.client.id,
+				encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode)
+			)
+		case .negative(let error):
+			guard let state = request.state else { throw PresentationSession.makeError(str: "Missing state in request") }
+			payload = .noConsensusResponseData(state: state, error: error)
+		}
+		switch preferred {
+		case .directPost:
+			return .directPost(url: uri, data: payload)
+		case .directPostJWT:
+			guard let spec = request.responseEncryptionSpecification else {
+				throw PresentationSession.makeError(str: "directPostJWT requires response encryption specification from verifier")
+			}
+			return .directPostJwt(url: uri, data: payload, responseEncryptionSpecification: spec)
+		}
 	}
 
 }

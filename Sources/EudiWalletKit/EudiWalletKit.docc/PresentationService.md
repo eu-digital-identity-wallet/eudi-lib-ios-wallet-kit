@@ -36,10 +36,13 @@ ShareView(presentationSession: session)
 
 For OpenID4VP flows, partial DCQL claim presentation can be enabled through ``OpenId4VpConfiguration``. When ``OpenId4VpConfiguration/allowPresentingPartialClaims`` is `true`, claims that are not present in an otherwise matching credential are omitted instead of causing the presentation request to fail.
 
+The wallet can also override the response mode requested by the verifier using ``OpenId4VpConfiguration/preferredResponseMode``. Set it to ``PreferredResponseMode/directPost`` to send the authorization response as a plain POST, or ``PreferredResponseMode/directPostJWT`` to send it as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode from the verifier's request.
+
 ```swift
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
-    allowPresentingPartialClaims: true
+    allowPresentingPartialClaims: true,
+    preferredResponseMode: .directPostJWT
 )
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,
@@ -75,6 +78,8 @@ On view appearance the attestations are presented with the ``PresentationService
 After the request is received, ``PresentationSession/disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` array representing one valid combination of credentials that satisfies the verifier's DCQL query. When credential sets or the `multiple` flag produce multiple satisfiable combinations, the UI should allow the user to pick which option to present.
 
 When partial-claim presentation is enabled, each option includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding.
+
+The `deviceNameSpacesToSend` parameter allows including device-signed namespaces in the response. Pass a ``RequestDeviceNameSpaces`` value when device namespaces are needed, or omit it to send only issuer-signed data.
 
 ```swift
 // Example: use the first credential selection option
