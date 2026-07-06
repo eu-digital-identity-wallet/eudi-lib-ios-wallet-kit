@@ -626,12 +626,17 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				let bleSvc = try await BlePresentationService(parameters: parameters)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
+				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in
+					guard let displayName = docIdToPresentInfo[doc.id]?.displayName else { return nil }
+					return (doc.docType, displayName)
+				}, uniquingKeysWith: { first, _ in first })
 				let openIdSvc = try await OpenId4VpService(
 					parameters: parameters,
 					qrCode: qrCode,
 					openID4VpConfig: self.openID4VpConfig,
 					networking: networkingVp,
-					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy
+					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy,
+					docTypeDisplayNames: docTypeDisplayNames
 				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			default:

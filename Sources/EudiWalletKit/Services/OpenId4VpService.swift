@@ -68,6 +68,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var networking: Networking
 	var unlockData: [String: Data]!
 	var verifierInfo: [VerifierInfo]?
+	var docTypeDisplayNames: [DocType: String]
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
@@ -78,7 +79,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		qrCode: Data,
 		openID4VpConfig: OpenId4VpConfiguration,
 		networking: Networking,
-		crlRevocationPolicy: RevocationPolicy
+		crlRevocationPolicy: RevocationPolicy,
+		docTypeDisplayNames: [DocType: String] = [:]
 	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = try await parameters.toInitializeTransferInfo()
@@ -90,6 +92,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
 		self.crlRevocationPolicy = crlRevocationPolicy
+		self.docTypeDisplayNames = docTypeDisplayNames
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
 
@@ -158,7 +161,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
 			decodeDocuments()
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
-				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims)
+				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims, docTypeDisplayNames: docTypeDisplayNames)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
 			let transactionDataRequestedArray = transactionData != nil
 				? try OpenId4VpUtils.getTransactionDataRequested(
