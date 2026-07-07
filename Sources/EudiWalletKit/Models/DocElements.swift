@@ -150,16 +150,43 @@ extension SignedSDJWT {
 		let allPaths = OrderedSet(allPathsDict.keys).union(docClaims.flatMap(\.claimPaths))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.value.map(\.claimName)) }
-		var sdJwtArray = [SdJwtElement]()
-		let tmp = itemsReq.map { reqItem in reqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(reqItem), bRootOnly: true) }
-		for d in tmp { if !sdJwtArray.contains(d) { sdJwtArray.append(d) } }
-		for nestedReqItem in itemsReq.filter({ $0.elementPath.count > 1 }) {
-			let parentSd = sdJwtArray.first(where: { $0.elementPath == [nestedReqItem.rootIdentifier] })!
-			let nestedSd = nestedReqItem.extractSdJwtElement(allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory(nestedReqItem), bRootOnly: false)
-			if parentSd.nestedElements == nil { parentSd.nestedElements = [] }
-			parentSd.nestedElements!.append(nestedSd)
-		}
+		let sdJwtArray = Self.buildSdJwtElementTree(itemsReq: itemsReq, allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory, parentPath: [])
 		return SdJwtElements(docId: docId, vct: vct, displayName: displayName, sdJwtElements: sdJwtArray)
+	}
+
+	static func buildSdJwtElementTree(itemsReq: [RequestItem], allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: (RequestItem) -> Bool, parentPath: [String]) -> [SdJwtElement] {
+		let depth = parentPath.count + 1
+		// Group request items by the element at current depth
+		var groupedByCurrentLevel = OrderedDictionary<String, [RequestItem]>()
+		for reqItem in itemsReq {
+			guard reqItem.elementPath.count >= depth else { continue }
+			let key = reqItem.elementPath[depth - 1]
+			if groupedByCurrentLevel[key] == nil { groupedByCurrentLevel[key] = [] }
+			groupedByCurrentLevel[key]!.append(reqItem)
+		}
+		var sdJwtArray = [SdJwtElement]()
+		for (key, groupItems) in groupedByCurrentLevel {
+			let currentPath = parentPath + [key]
+			// Find the request item that matches exactly this level (for element metadata)
+			let exactItem = groupItems.first { $0.elementPath.count == depth } ?? groupItems.first!
+			// Recursively build nested elements from deeper request items
+			let deeperItems = groupItems.filter { $0.elementPath.count > depth }
+			let docClaim = exactItem.findDocClaimByPath(docClaims: docClaims, requestPath: currentPath)
+			var nestedElements: [SdJwtElement]?
+			var filteredDocClaim = docClaim
+			if !deeperItems.isEmpty {
+				let nestedDocClaims = docClaim?.children ?? docClaims
+				nestedElements = Self.buildSdJwtElementTree(itemsReq: deeperItems, allPaths: allPaths, docClaims: nestedDocClaims, isMandatory: isMandatory, parentPath: currentPath)
+				// Filter docClaim children to only include those matching nested elements
+				if let children = docClaim?.children, let nested = nestedElements {
+					let nestedNames = Set(nested.map { $0.elementPath.last! })
+					filteredDocClaim?.children = children.filter { nestedNames.contains($0.name) }
+				}
+			}
+			let element = exactItem.extractSdJwtElement(allPaths: allPaths, docClaim: filteredDocClaim, isMandatory: isMandatory(exactItem), overridePath: currentPath, nestedElements: nestedElements)
+			if !sdJwtArray.contains(element) { sdJwtArray.append(element) }
+		}
+		return sdJwtArray
 	}
 }
 
@@ -183,14 +210,18 @@ extension RequestItem {
 	}
 
 	public func extractSdJwtElement(allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: Bool, bRootOnly: Bool) -> SdJwtElement {
+		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
+		let docClaim: DocClaim? = findDocClaimByPath(docClaims: docClaims, requestPath: requestPath)
+		return extractSdJwtElement(allPaths: allPaths, docClaim: docClaim, isMandatory: isMandatory, overridePath: requestPath, nestedElements: nil)
+	}
+
+	public func extractSdJwtElement(allPaths: OrderedSet<ClaimPath>, docClaim: DocClaim?, isMandatory: Bool, overridePath: [String], nestedElements: [SdJwtElement]?) -> SdJwtElement {
 		// find path that the request item contains it
 		let requestClaimPath = claimPath
 		let query = allPaths.first { path in path == requestClaimPath } ?? allPaths.first { path in requestClaimPath.contains2(path) }
 		let isValid = query != nil
-		let requestPath = bRootOnly ? [rootIdentifier] : elementPath
-		let docClaim: DocClaim? = findDocClaimByPath(docClaims: docClaims, requestPath: requestPath)
 		let stringValue: String? = docClaim?.stringValue
-		return SdJwtElement(elementPath: requestPath, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nil)
+		return SdJwtElement(elementPath: overridePath, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: isValid, nestedElements: nestedElements)
 	}
 
 	public func findDocClaimByPath(docClaims: [DocClaim], requestPath: [String]) -> DocClaim? {

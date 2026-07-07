@@ -340,7 +340,7 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
-	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false) throws -> CredentialSelectionSetOptions {
+	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, allowPresentingPartialClaims: Bool = false, docTypeDisplayNames: [DocType: String] = [:]) throws -> CredentialSelectionSetOptions {
 		var resultDict: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?
 		var credentialQueryResults: OrderedDictionary<QueryId, [CredentialSelection]> = [:]
@@ -351,7 +351,8 @@ extension OpenId4VpUtils {
 			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
 			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
-			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential with docType \(docType) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
+			let docTypeDisplayName = docTypeDisplayNames[docType] ?? docType
+			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential of type \(docTypeDisplayName) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
 			// Try to find credentials that satisfy the claim requirements
 			for (credIndex, credId) in matchingCredIds.enumerated() {
 				do {
