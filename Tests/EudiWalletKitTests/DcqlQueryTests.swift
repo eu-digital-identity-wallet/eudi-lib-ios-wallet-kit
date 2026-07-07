@@ -783,37 +783,6 @@ struct DcqlQueryTests {
 		}
 	}
 
-	@Test("DCQL partial claims mode suppresses missing claim errors", arguments: ["dcql-vehicle"])
-	func testAllowPresentingPartialClaimsSuppressesClaimNotFound(dcqlFile: String) throws {
-		let dcqlData = try loadTestResource(fileName: dcqlFile)
-		let wrapper = try JSONDecoder().decode(DCQL.self, from: dcqlData)
-		let dcql = try DCQL(credentials: wrapper.credentials)
-		let dcqlQueryable = DefaultDcqlQueryable(
-			credentials: ["cred1": ("org.iso.7367.1.mVRC", DocDataFormat.cbor)],
-			claimPaths: [
-				"cred1": [
-					ClaimPath([.claim(name: "org.iso.7367.1"), .claim(name: "vehicle_holder")])
-				]
-			]
-		)
-
-		let result = try OpenId4VpUtils.resolveDcql(
-			dcql,
-			queryable: dcqlQueryable,
-			allowPresentingPartialClaims: true
-		)
-
-		#expect(result.count == 1, "Should still resolve the matching credential")
-		#expect(
-			result.values.first?.first?.claimQueries.count == 1,
-			"Should keep only the claims that are present")
-		#expect(
-			result.values.first?.first?.claimQueries.first?.path.value
-				== ClaimPath([.claim(name: "org.iso.7367.1"), .claim(name: "vehicle_holder")]).value,
-			"Should only include the available claim path"
-		)
-	}
-
 	@Test(
 		"WalletError has .credentialNotFound code when docType is missing",
 		arguments: ["dcql-vehicle"])

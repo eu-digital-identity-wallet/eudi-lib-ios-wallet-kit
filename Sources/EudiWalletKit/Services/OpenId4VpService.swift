@@ -161,7 +161,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
 			decodeDocuments()
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
-				dcql, queryable: dcqlQueryable, allowPresentingPartialClaims: openID4VpConfig.allowPresentingPartialClaims, docTypeDisplayNames: docTypeDisplayNames)
+				dcql, queryable: dcqlQueryable, docTypeDisplayNames: docTypeDisplayNames)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
 			let transactionDataRequestedArray = transactionData != nil
 				? try OpenId4VpUtils.getTransactionDataRequested(
