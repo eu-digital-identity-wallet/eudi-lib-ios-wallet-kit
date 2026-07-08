@@ -74,7 +74,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var flow: FlowType
 	public let crlRevocationPolicy: RevocationPolicy
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
-	public let trustConfiguration: TrustConfiguration
+	public let trustConfig: TrustConfiguration
 
 	public init(
 		parameters: InitializeTransferData,
@@ -82,7 +82,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		openID4VpConfig: OpenId4VpConfiguration,
 		networking: Networking,
 		crlRevocationPolicy: RevocationPolicy,
-		trustConfiguration: TrustConfiguration,
+		trustConfig: TrustConfiguration,
 		docTypeDisplayNames: [DocType: String] = [:]
 	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
@@ -95,7 +95,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
 		self.crlRevocationPolicy = crlRevocationPolicy
-		self.trustConfiguration = trustConfiguration
+		self.trustConfig = trustConfig
 		self.docTypeDisplayNames = docTypeDisplayNames
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
@@ -355,7 +355,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.last!)) else { return false }
 		self.readerCertificateIssuer = x509.subject.description
 		// Validate the reader access certificate chain against the configured trust anchors (WRPAC context).
-		let (isValid, failureReason) = await self.trustConfiguration.accessTrustManager.validateCertTrustPath(chain: certsData)
+		let (isValid, failureReason) = await self.trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = failureReason ?? (isValid ? nil : "The reader certificate chain is not trusted")
 		self.certificateChain = certsData

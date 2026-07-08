@@ -16,19 +16,22 @@
 
 import Foundation
 import MdocDataModel18013
+import MdocSecurity18013
+import EudiEtsi1196x2
 import StatiumSwift
+import JSONWebSignature
+import SwiftCBOR
 
 public actor DocumentStatusService {
 	let statusIdentifier: StatusIdentifier
-	let verifier: VerifyStatusListTokenSignature?
+	/// Trust configuration used to validate the reader/relying-party access certificate chain.
+	public let trustConfig: TrustConfiguration
 	let date: Date?
-	let clockSkew: TimeInterval
 
-	public init(statusIdentifier: StatusIdentifier, date: Date = .now, clockSkew: TimeInterval = 60, verifier: VerifyStatusListTokenSignature? = nil) {
+	public init(statusIdentifier: StatusIdentifier, date: Date = .now, trustConfig: TrustConfiguration) {
 		self.statusIdentifier = statusIdentifier
-		self.verifier = verifier
+		self.trustConfig = trustConfig
 		self.date = date
-		self.clockSkew = clockSkew
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
@@ -36,14 +39,34 @@ public actor DocumentStatusService {
 			throw WalletError(description: "Invalid status identifier")
 		}
 		let getStatus = GetStatus()
-		let tokenFetcher = StatusListTokenFetcher(verifier: verifier ?? VerifyStatusListTokenSignatureIgnore())
-		let result = try await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: clockSkew).get()
+		let tokenFetcher = StatusListTokenFetcher(
+			verifier: VerifyStatusListTokenSignatureWithTrustManager(trustConfig: trustConfig)
+		)
+		let result = try await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew).get()
 		return result
 	}
 }
 
-struct VerifyStatusListTokenSignatureIgnore: VerifyStatusListTokenSignature {
-	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) {
-		// No verification logic, ignore the signature
+struct VerifyStatusListTokenSignatureWithTrustManager: VerifyStatusListTokenSignature {
+	public let trustConfig: TrustConfiguration
+	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
+		let certsData: [Data]
+		switch format {
+		case .jwt:
+			guard let jwtString = String(data: statusListToken, encoding: .utf8) else { throw JWS.JWSError.invalidString }
+			try x5cVerifyJwtSignature.verify(jwt: jwtString)
+			let jws = try JWS(jwsString: jwtString)
+			guard let b64certs = jws.protectedHeader.x509CertificateChain else { throw JWS.JWSError.somethingWentWrong }
+			certsData = b64certs.compactMap { Data(base64Encoded: $0) }
+			guard certsData.count == b64certs.count else { throw JWS.JWSError.somethingWentWrong }
+		case .cwt:
+			let readerAuth = try ReaderAuth(data: [UInt8](statusListToken))
+			certsData = readerAuth.x5chain.map { Data($0) }
+		}
+		guard certsData.count > 0 else { throw JWS.JWSError.somethingWentWrong }
+		let (isValid, reason) = await trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
+		guard isValid else { throw WalletError(description: "\(format) status token trust error: \(reason ?? "")", code: .trustError) }
 	}
 }
+
+

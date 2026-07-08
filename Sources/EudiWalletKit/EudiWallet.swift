@@ -642,7 +642,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 					openID4VpConfig: self.openID4VpConfig,
 					networking: networkingVp,
 					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy,
-					trustConfiguration: trustConfig,
+					trustConfig: trustConfig,
 					docTypeDisplayNames: docTypeDisplayNames
 				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
@@ -697,7 +697,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Get document status
 	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
+		let actor = DocumentStatusService(statusIdentifier: statusIdentifier, trustConfig: trustConfig)
 		let status = try await actor.getStatus()
 		return status
 	}

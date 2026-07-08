@@ -28,6 +28,8 @@ public struct TrustConfiguration: Sendable {
     public let docTypePolicies: [String: TrustPolicy]
 	/// Require signed metadata
 	public let requireSignedMetadata: Bool
+	/// Clock skew for the status token verifier
+	public let clockSkew: TimeInterval
 	
     /// Trust manager for issuer (document-signer) certificates. Falls back to the `default`
     /// doc-type mappings only when the trust source does not already define its own.
@@ -40,15 +42,17 @@ public struct TrustConfiguration: Sendable {
         trustSource: TrustSource,
         defaultPolicy: TrustPolicy = .enforce,
         docTypePolicies: [String: TrustPolicy] = [:],
-		requireSignedMetadata: Bool = true
+		requireSignedMetadata: Bool = true,
+		clockSkew: TimeInterval = 60
     ) {
         self.trustSource = trustSource
         self.defaultPolicy = defaultPolicy
         self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
+		self.clockSkew = clockSkew
         let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
-        self.issuerTrustManager = EtsiTrustManager(source: issuerSource)
-        self.accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
+        issuerTrustManager = EtsiTrustManager(source: issuerSource)
+        accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
     }
 
     /// The trust policy effective for the given doc type, falling back to `defaultPolicy`.
