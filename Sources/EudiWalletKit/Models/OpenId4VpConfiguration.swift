@@ -89,11 +89,6 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// When provided, the wallet will encrypt the presentation response using the specified
 	/// encryption parameters before sending it to the verifier.
 	public let responseEncryptionConfiguration: ResponseEncryptionConfiguration?
-	/// Allows presentation to continue when a requested claim is missing from an otherwise matching credential.
-	///
-	/// When enabled, claims that are not present are skipped instead of failing the DCQL resolution.
-	/// By default, all requested claims remain mandatory.
-	public let allowPresentingPartialClaims: Bool
 	/// The response mode the wallet wants the library to use for the authorization response.
 	///
 	/// When set, the library uses this mode (e.g. `.directPostJWT`) instead of the mode
@@ -110,15 +105,13 @@ public struct OpenId4VpConfiguration: Sendable {
 	public init() {
 		self.clientIdSchemes = Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = nil
-		self.allowPresentingPartialClaims = false
 		self.supportedTransactionDataTypes = []
 		self.preferredResponseMode = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, allowPresentingPartialClaims: Bool = false, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
-		self.allowPresentingPartialClaims = allowPresentingPartialClaims
 		self.preferredResponseMode = preferredResponseMode
 		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 	}
