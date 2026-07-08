@@ -124,7 +124,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
 			if let details { logger.error("Details: \(details)") }
-			throw PresentationSession.makeError(str: "Invalid DCQL query: \(error.errorDescription ?? error.localizedDescription)")
+			throw PresentationSession.makeError(str: "Invalid DCQL query: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)")
 		case let .jwt(request: rrd):
 			return try handleRequestData(rrd)
 		}
@@ -357,7 +357,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		// Validate the reader access certificate chain against the configured trust anchors (WRPAC context).
 		let (isValid, failureReason) = await self.trustConfiguration.accessTrustManager.validateCertTrustPath(chain: certsData)
 		self.readerAuthValidated = isValid
-		self.readerCertificateValidationMessage = failureReason ?? (isValid ? "" : "The reader certificate chain is not trusted")
+		self.readerCertificateValidationMessage = failureReason ?? (isValid ? nil : "The reader certificate chain is not trusted")
 		self.certificateChain = certsData
 		return isValid
 	}
