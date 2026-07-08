@@ -50,10 +50,12 @@ public actor OpenId4VciService {
 	var storage: StorageManager
 	var storageService: any DataStorageService
 	var transactionLogger: (any TransactionLogger)?
+	/// Trust configuration used to validate issuer (document-signer) certificate chains of issued documents.
+	var trustConfig: TrustConfiguration
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
-	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService, transactionLogger: (any TransactionLogger)? = nil) throws {
+	init(uiCulture: String?, config: OpenId4VciConfiguration, networking: Networking, storage: StorageManager, storageService: any DataStorageService, trustConfig: TrustConfiguration, transactionLogger: (any TransactionLogger)? = nil) throws {
 		logger = Logger(label: "OpenId4VCI")
 		guard config.credentialIssuerURL != nil else { throw PresentationSession.makeError(str: "credentialIssuerURL must be set in OpenId4VciConfiguration") }
 		self.uiCulture = uiCulture
@@ -61,6 +63,7 @@ public actor OpenId4VciService {
 		self.storage = storage
 		self.storageService = storageService
 		self.config = config
+		self.trustConfig = trustConfig
 		self.transactionLogger = transactionLogger
 	}
 
@@ -391,7 +394,8 @@ public actor OpenId4VciService {
 			Self.issuerMetadataCache[config.credentialIssuerURL!] = result
 			return result
 		case .failure(let error):
-			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(error.localizedDescription)")
+			let errorDescription = error.localizedDescription
+			throw PresentationSession.makeError(str: "Failed to resolve issuer metadata: \(errorDescription)")
 		}
 	}
 
@@ -467,7 +471,7 @@ public actor OpenId4VciService {
 		var openId4VCIServices = [OpenId4VciService]()
 		for (i, docTypeModel) in docTypes.enumerated() {
 			guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
-			let svc = try OpenId4VciService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService)
+			let svc = try OpenId4VciService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService, trustConfig: trustConfig)
 			if let documentId { logger.info("Resolve offer to update document with id \(documentId)") }
 			let id = UUID().uuidString //(i == 0 ? documentId : nil) ?? UUID().uuidString
 			try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: docTypeModel.credentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage, offer: offer)
@@ -1000,7 +1004,8 @@ public actor OpenId4VciService {
 		for doc in (batch ?? [issued]) {
 			if doc.docDataFormat == .cbor {
 				let iss = try IssuerSigned(data: [UInt8](doc.data))
-				try iss.validate(docType: doc.docType, publicCoseKeys: &pkCoseKeys)
+				trustConfig.issuerTrustManager.docType = doc.docType
+				try await iss.validate(docType: doc.docType, trustValidator: trustConfig.issuerTrustManager, trustPolicy: trustConfig.policy(for: doc.docType), publicCoseKeys: &pkCoseKeys)
 			} else if doc.docDataFormat == .sdjwt {
 				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
@@ -1020,6 +1025,7 @@ public actor OpenId4VciService {
 		// Determine the issuer public key: prefer x5c certificate chain, fall back to metadata
 		let issuerKey: any KeyExpressible
 		if let x5cChain = signedSdJwt.jwt.protectedHeader.x509CertificateChain, !x5cChain.isEmpty {
+			try await validateSdJwtIssuerTrust(x5cChain: x5cChain, docType: document.docType)
 			issuerKey = try getIssuerKey(from: x5cChain)
 		} else {
 			let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
@@ -1105,6 +1111,22 @@ public actor OpenId4VciService {
 			throw PresentationSession.makeError(str: "Unable to extract public key from SD-JWT x5c leaf certificate")
 		}
 		return secKey
+	}
+
+	/// Validates the issued SD-JWT's x5c certificate chain against the configured issuer trust manager.
+	/// Honors the doc-type trust policy: `.enforce` throws on an untrusted chain, `.warning` only logs.
+	private func validateSdJwtIssuerTrust(x5cChain: [String], docType: String) async throws {
+		let chainData = x5cChain.compactMap { Data(base64Encoded: $0) }
+		guard chainData.count == x5cChain.count else {
+			throw PresentationSession.makeError(str: "Invalid base64 encoding in SD-JWT x5c certificate chain")
+		}
+		trustConfig.issuerTrustManager.docType = docType
+		let (trusted, _) = await trustConfig.issuerTrustManager.validateCertTrustPath(chain: chainData)
+		guard trusted else {
+			let message = "Issued SD-JWT issuer certificate chain is not trusted." // failure reason already logged
+			if trustConfig.policy(for: docType) == .enforce { throw PresentationSession.makeError(str: message) }
+			return
+		}
 	}
 
 	private func normalized(url: URL) -> String {
