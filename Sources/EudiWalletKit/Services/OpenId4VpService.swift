@@ -72,7 +72,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
-	public let crlRevocationPolicy: RevocationPolicy
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
 
@@ -81,7 +80,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		qrCode: Data,
 		openID4VpConfig: OpenId4VpConfiguration,
 		networking: Networking,
-		crlRevocationPolicy: RevocationPolicy,
 		trustConfig: TrustConfiguration,
 		docTypeDisplayNames: [DocType: String] = [:]
 	) async throws {
@@ -94,7 +92,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openid4VPlink = openid4VPlink
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
-		self.crlRevocationPolicy = crlRevocationPolicy
 		self.trustConfig = trustConfig
 		self.docTypeDisplayNames = docTypeDisplayNames
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)

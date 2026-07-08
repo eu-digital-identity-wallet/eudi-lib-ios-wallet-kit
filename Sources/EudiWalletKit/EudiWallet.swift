@@ -609,10 +609,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.docType) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(eudiWalletConfig.uiCulture)) })
 		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, SdJwtUtils.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
-		let iaca = eudiWalletConfig.trustedReaderRootCertificates ?? []
 		let dataFormats = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt))
 		let deviceAuthMethod = eudiWalletConfig.deviceAuthMethod.rawValue
-		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, bleTransferMode: bleTransferMode, crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy, zkSystemRepository: zkSystemRepository)
+		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, trustValidator: trustConfig.accessTrustManager, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, bleTransferMode: bleTransferMode, zkSystemRepository: zkSystemRepository)
 		return (parameters, docs)
 	}
 
@@ -641,7 +640,6 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 					qrCode: qrCode,
 					openID4VpConfig: self.openID4VpConfig,
 					networking: networkingVp,
-					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy,
 					trustConfig: trustConfig,
 					docTypeDisplayNames: docTypeDisplayNames
 				)

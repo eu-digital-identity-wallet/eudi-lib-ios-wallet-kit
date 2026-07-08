@@ -123,8 +123,7 @@ let config = EudiWalletConfiguration(
     deviceAuthMethod: .deviceSignature,
     uiCulture: "en",
     logFileName: "wallet.log",
-    bleTransferMode: .server,  // .server (default), .client, or .both
-    crlRevocationPolicy: .hardFail // default
+    bleTransferMode: .server  // .server (default), .client, or .both
 )
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns, .x509Hash, .redirectUri],
@@ -137,8 +136,6 @@ let wallet = try! EudiWallet(
 ```
 
 Set `preferredResponseMode` to override the response mode requested by the verifier. When set to `.directPost`, the authorization response is sent as a plain POST. When set to `.directPostJWT`, the response is sent as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode specified by the verifier.
-
-Set `crlRevocationPolicy` in `EudiWalletConfiguration` to control how CRL revocation checks are enforced when validating reader certificates during presentation. The default value is `.hardFail`.
 
 ### OpenID4VCI Configuration
 

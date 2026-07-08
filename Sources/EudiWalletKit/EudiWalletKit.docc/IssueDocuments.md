@@ -134,14 +134,6 @@ The `txCodeValue` parameter is not used in the case of the authorization code fl
 The following example shows how to issue documents by offer URL:
 
 ```swift
-// Configure issuer with signed metadata policy and certificate chain trust
-let trust: CertificateChainTrust = TrustedChainValidator(
-  iacaRoots: [eudic],
-  crlRevocationPolicy: .hardFail
-)
-let issuerMetadataPolicy: IssuerMetadataPolicy = .requireSigned(
-  issuerTrust: .byCertificateChain(certificateChainTrust: trust)
-)
 
 let config = OpenId4VciConfiguration(
   credentialIssuerURL: "https://issuer.example.com",
