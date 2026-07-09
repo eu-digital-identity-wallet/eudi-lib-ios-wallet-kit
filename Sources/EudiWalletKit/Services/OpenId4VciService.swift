@@ -106,6 +106,11 @@ public actor OpenId4VciService {
 		var funcKeyAttestationJWT: FuncKeyAttestationJWT? = nil
 		if config.keyAttestationsConfig != nil, configuration.supportsAttestationProofType {
 			funcKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
+			// Send a single `attestation` proof for the whole batch. The key
+			// attestation JWT already attests every key, so per-key jwt proofs are
+			// redundant and some issuers cross-multiply them (N keys -> N*N creds).
+			let bindingKeys: [BindingKey] = [.attestation(keyAttestationJWT: funcKeyAttestationJWT!)]
+			return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
 		} else if config.keyAttestationsConfig != nil, configuration.supportsJwtProofTypeWithAttestation {
 			throw PresentationSession.makeError(str: "JWT proof with attestation is not yet supported in wallet")
 		}
