@@ -43,7 +43,7 @@ public actor DocumentStatusService {
 }
 
 struct VerifyStatusListTokenSignatureIgnore: VerifyStatusListTokenSignature {
-	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) {
+	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
 		// No verification logic, ignore the signature
 	}
 }
