@@ -29,7 +29,7 @@ public struct TrustedChainValidator: CertificateChainTrust {
 		self.crlRevocationPolicy = crlRevocationPolicy
     }
 
-	public func isValid(chain: [String]) -> Bool {
+	public func isValid(chain: [String]) async -> Bool {
         var isValid: Bool = false
         let b64certs = chain
         let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
