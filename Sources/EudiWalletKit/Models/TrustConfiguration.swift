@@ -20,8 +20,6 @@ import OpenID4VCI
 
 /// Configuration that describes where trust anchors come from and how trust failures are handled.
 public struct TrustConfiguration: Sendable {
-    /// The source the trust anchors are built from.
-    public let trustSource: TrustSource
     /// The policy applied to doc types without a specific entry in `docTypePolicies`.
     public let defaultPolicy: TrustPolicy
     /// Per doc-type overrides of `defaultPolicy`, keyed by doc type.
@@ -33,6 +31,8 @@ public struct TrustConfiguration: Sendable {
 	
     /// Trust manager for issuer (document-signer) certificates. Falls back to the `default`
     /// doc-type mappings only when the trust source does not already define its own.
+    /// When a `fallbackTrustSource` is supplied it is consulted for doc types this manager
+    /// has no validation context for.
     public var issuerTrustManager: EtsiTrustManager
 
     /// Trust manager for reader/relying-party access certificates. Uses the WRPAC verification context.
@@ -40,18 +40,25 @@ public struct TrustConfiguration: Sendable {
 
     public init(
         trustSource: TrustSource,
+		fallbackTrustSource: TrustSource?,
         defaultPolicy: TrustPolicy = .enforce,
         docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		clockSkew: TimeInterval = 60
     ) {
-        self.trustSource = trustSource
         self.defaultPolicy = defaultPolicy
         self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.clockSkew = clockSkew
         let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
-        issuerTrustManager = EtsiTrustManager(source: issuerSource)
+        let fallbackTrustManager: EtsiTrustManager?
+		if let fallbackTrustSource {
+			let fallbackTrustSource1 = fallbackTrustSource.contextTypeMappings == nil ? fallbackTrustSource.withContextTypeMappings(.default) : fallbackTrustSource
+			fallbackTrustManager = EtsiTrustManager(source: fallbackTrustSource1)
+		} else {
+			fallbackTrustManager = nil
+		}
+        issuerTrustManager = EtsiTrustManager(source: issuerSource, fallback: fallbackTrustManager)
         accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
     }
 
@@ -68,18 +75,6 @@ public struct TrustConfiguration: Sendable {
         guard requireSignedMetadata else { return .ignoreSigned }
         let chainTrust = IssuerMetadataChainTrust(trustManager: accessTrustManager)
         return .requireSigned(issuerTrust: .byCertificateChain(certificateChainTrust: chainTrust))
-    }
-}
-
-/// Bridges the asynchronous `EtsiTrustManager` certificate-chain validation to the synchronous
-/// `CertificateChainTrust` protocol required by OpenID4VCI's `IssuerMetadataPolicy`.
-struct IssuerMetadataChainTrust: CertificateChainTrust {
-    let trustManager: EtsiTrustManager
-
-    func isValid(chain: [String]) async -> Bool {
-        let chainData = chain.compactMap { Data(base64Encoded: $0) }
-        guard !chainData.isEmpty, chainData.count == chain.count else { return false }
-		return await trustManager.validateCertTrustPath(chain: chainData).0
     }
 }
 
