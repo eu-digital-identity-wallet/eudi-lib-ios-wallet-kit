@@ -41,6 +41,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public private(set) var storage: StorageManager!
 	/// Wallet configuration
 	public var eudiWalletConfig: EudiWalletConfiguration { didSet { try? initializeLogging() } }
+	/// Trust configuration describing where trust anchors come from and how trust failures are handled.
+	public var trustConfig: TrustConfiguration
 	/// OpenID4VP configuration
 	public var openID4VpConfig: OpenId4VpConfiguration
 	/// transaction logger
@@ -61,6 +63,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Initialize a wallet instance using a configuration object.
 	/// - Parameters:
 	///   - eudiWalletConfig: Wallet configuration containing user preferences and settings.
+	///   - trustConfig: Trust configuration describing trust anchors and trust failure handling.
 	///   - storageService: The storage service to use for documents. Defaults to KeyChainStorageService.
 	///   - openID4VpConfig: OpenID4VP configuration. Optional.
 	///   - openID4VciConfigurations: A dictionary of OpenId4VciConfiguration objects keyed by an arbitrary issuer name. Optional.
@@ -69,6 +72,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - transactionLogger: Transaction logger for logging wallet operations. Optional.
 	///   - modelFactory: The factory for creating Mdoc models. Optional.
 	///   - zkSystemRepository: Repository for zk system parameters. Optional.
+	///   - trustConfig: Trust configuration describing trust anchors and trust failure handling. Optional.
 	///
 	/// - Throws: An error if initialization fails.
 	///
@@ -78,6 +82,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// ```
 	public init(
 		eudiWalletConfig: EudiWalletConfiguration,
+		trustConfig: TrustConfiguration,
 		storageService: (any DataStorageService)? = nil,
 		openID4VpConfig: OpenId4VpConfiguration? = nil,
 		openID4VciConfigurations: [String: OpenId4VciConfiguration]? = nil,
@@ -89,6 +94,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	) throws {
 		try Self.validateServiceParams(serviceName: eudiWalletConfig.serviceName)
 		self.eudiWalletConfig = eudiWalletConfig
+		self.trustConfig = trustConfig
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
 		self.transactionLogger = transactionLogger
 		self.openID4VciConfigurations = openID4VciConfigurations
@@ -197,7 +203,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Register an OpenId4VCI service with a given name and configuration.
 	@discardableResult func registerOpenId4VciService(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VciService {
 		let uiCulture = eudiWalletConfig.uiCulture
-		let vciService = try OpenId4VciService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService, transactionLogger: transactionLogger)
+		let vciService = try OpenId4VciService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService, trustConfig: trustConfig, transactionLogger: transactionLogger)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
 		return vciService
 	}
@@ -603,10 +609,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.docType) })
 		let docDisplayNames = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.getClaimDisplayNames(eudiWalletConfig.uiCulture)) })
 		let jwtHashingAlgs = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, SdJwtUtils.getHashingAlgorithm(doc: $0))}).compactMapValues { $0 }
-		let iaca = eudiWalletConfig.trustedReaderRootCertificates ?? []
 		let dataFormats = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.fmt))
 		let deviceAuthMethod = eudiWalletConfig.deviceAuthMethod.rawValue
-		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, iaca: iaca, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, bleTransferMode: bleTransferMode, crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy, zkSystemRepository: zkSystemRepository)
+		parameters = InitializeTransferData(dataFormats: dataFormats, documentData: docData, documentKeyIndexes: documentKeyIndexes, docMetadata: docMetadata, docDisplayNames: docDisplayNames, docKeyInfos: docKeyInfos, trustValidator: trustConfig.accessTrustManager, deviceAuthMethod: deviceAuthMethod, idsToDocTypes: idsToDocTypes, hashingAlgs: jwtHashingAlgs, bleTransferMode: bleTransferMode, zkSystemRepository: zkSystemRepository)
 		return (parameters, docs)
 	}
 
@@ -635,7 +640,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 					qrCode: qrCode,
 					openID4VpConfig: self.openID4VpConfig,
 					networking: networkingVp,
-					crlRevocationPolicy: eudiWalletConfig.crlRevocationPolicy,
+					trustConfig: trustConfig,
 					docTypeDisplayNames: docTypeDisplayNames
 				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
@@ -690,7 +695,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Get document status
 	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusIdentifier: statusIdentifier)
+		let actor = DocumentStatusService(statusIdentifier: statusIdentifier, trustConfig: trustConfig)
 		let status = try await actor.getStatus()
 		return status
 	}

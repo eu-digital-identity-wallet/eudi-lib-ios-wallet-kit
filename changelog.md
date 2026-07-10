@@ -1,3 +1,27 @@
+## v0.35.0
+
+### ETSI Trusted Lists (LOTL/LOTL) Integration
+
+Trust validation now uses ETSI Trusted Lists via `EtsiTrustManager` instead of manual root certificate arrays and `SecTrust`-based validation. A new `TrustConfiguration` struct centralises all trust-related settings and is required when initialising `EudiWallet`.
+
+- **Issuer certificate validation** during OpenID4VCI issuance uses the configured issuer trust manager (with optional fallback trust source).
+- **Reader/relying-party certificate validation** during OpenID4VP and BLE presentations uses the access trust manager (WRPAC verification context).
+- **Status token signature validation** now verifies the x5c certificate chain against the trust configuration instead of ignoring signatures.
+- **Signed issuer metadata** is validated against the trust anchors when `requireSignedMetadata` is enabled (default).
+- Per doc-type trust policy overrides are supported via `TrustConfiguration.docTypePolicies`.
+
+### Breaking Changes
+
+- **`EudiWallet.init` requires a new `trustConfig` parameter**: A `TrustConfiguration` instance must be supplied when creating the wallet.
+- **`EudiWalletConfiguration.trustedReaderRootCertificates` removed**: Reader trust anchors are now supplied via `TrustConfiguration.accessTrustManager`.
+- **`EudiWalletConfiguration.crlRevocationPolicy` removed**: Revocation handling is managed internally by the `TrustConfiguration`.
+
+### New Types & Properties
+
+- `TrustConfiguration` — describes trust sources, policies, clock skew, and signed metadata requirements.
+- `IssuerMetadataChainTrust` — bridges `EtsiTrustManager` into the OpenID4VCI issuer metadata signature verification flow.
+- `EudiWallet.trustConfig` — public property exposing the active trust configuration.
+
 ## v0.33.1
 
 ### What's Changed

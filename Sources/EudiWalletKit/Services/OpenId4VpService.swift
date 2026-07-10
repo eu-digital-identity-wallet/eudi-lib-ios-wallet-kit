@@ -72,14 +72,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
-	public let crlRevocationPolicy: RevocationPolicy
+	/// Trust configuration used to validate the reader/relying-party access certificate chain.
+	public let trustConfig: TrustConfiguration
 
 	public init(
 		parameters: InitializeTransferData,
 		qrCode: Data,
 		openID4VpConfig: OpenId4VpConfiguration,
 		networking: Networking,
-		crlRevocationPolicy: RevocationPolicy,
+		trustConfig: TrustConfiguration,
 		docTypeDisplayNames: [DocType: String] = [:]
 	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
@@ -91,7 +92,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openid4VPlink = openid4VPlink
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
-		self.crlRevocationPolicy = crlRevocationPolicy
+		self.trustConfig = trustConfig
 		self.docTypeDisplayNames = docTypeDisplayNames
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
@@ -120,7 +121,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
 			if let details { logger.error("Details: \(details)") }
-			throw PresentationSession.makeError(str: "Invalid DCQL query: \(error.errorDescription ?? error.localizedDescription)")
+			throw PresentationSession.makeError(str: "Invalid DCQL query: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)")
 		case let .jwt(request: rrd):
 			return try handleRequestData(rrd)
 		}
@@ -346,20 +347,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates async -> Bool in
 		guard let self else { return false }
-		var isValid: Bool = false; var validationMessages: [String] = []
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
-		let certsDer = certsData.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
-		guard certsDer.count > 0, certsDer.count == b64certs.count else { return false }
-		guard let x509leaf = try? X509.Certificate(derEncoded: [UInt8](certsData.first!)) else { return false }
+		guard certsData.count > 0, certsData.count == b64certs.count else { return false }
 		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.last!)) else { return false }
-		let policy = SecPolicyCreateBasicX509(); var trust: SecTrust?; var result: OSStatus
-		result = SecTrustCreateWithCertificates(certsDer as CFArray, policy, &trust)
-		guard result == errSecSuccess, let trust else { logger.error("Chain verification error: \(result.message)"); return false }
 		self.readerCertificateIssuer = x509.subject.description
-		(isValid, validationMessages, _) = SecurityHelpers
-			.isMdocX5cValid(secCerts: certsDer, usage: .mdocReaderAuth, revocationPolicy: crlRevocationPolicy, rootIaca: transferInfo.iaca)
+		// Validate the reader access certificate chain against the configured trust anchors (WRPAC context).
+		let (isValid, failureReason) = await self.trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
 		self.readerAuthValidated = isValid
-		self.readerCertificateValidationMessage = validationMessages.joined(separator: "\n")
+		self.readerCertificateValidationMessage = failureReason ?? (isValid ? nil : "The reader certificate chain is not trusted")
 		self.certificateChain = certsData
 		return isValid
 	}

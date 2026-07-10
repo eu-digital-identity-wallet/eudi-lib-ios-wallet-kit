@@ -28,7 +28,6 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var bleTranport: any MdocBleTransport
 	var bleServer: MdocGattServer?
 	let bleTransferMode: BleTransferMode
-	let crlRevocationPolicy: RevocationPolicy
 	public var status: TransferStatus = .initialized
 	var isPeripheralManagerPoweredOn = false
 	var isCentralManagerPoweredOn = false
@@ -47,7 +46,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
 	public var docMetadata: [String: Data?]!
-	public var iaca: [x5chain]!
+	public var trustValidator: any CertificateTrustValidator
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var zkSystemRepository: ZkSystemRepository?
@@ -62,11 +61,10 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
 		self.privateKeyObjects = objs.privateKeyObjects
-		self.iaca = objs.iaca
+		self.trustValidator = objs.trustValidator
 		self.dauthMethod = objs.deviceAuthMethod
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
-		crlRevocationPolicy = parameters.crlRevocationPolicy
 		bleTranport = bleTransferMode == .server ? MdocGattServer() : MdocGattCentral()
 		if bleTransferMode == .both { bleServer = MdocGattServer() }
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
@@ -141,7 +139,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
 			let compactDocMetadata = docMetadata.compactMapValues { $0 }
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, crlRevocationPolicy: crlRevocationPolicy, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
