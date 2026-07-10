@@ -40,7 +40,7 @@ public struct TrustConfiguration: Sendable {
 
     public init(
         trustSource: TrustSource,
-		fallbackTrustSource: TrustSource?,
+		fallbackTrustSource: TrustSource? = nil,
         defaultPolicy: TrustPolicy = .enforce,
         docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
@@ -52,12 +52,10 @@ public struct TrustConfiguration: Sendable {
 		self.clockSkew = clockSkew
         let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
         let fallbackTrustManager: EtsiTrustManager?
-		if let fallbackTrustSource {
-			let fallbackTrustSource1 = fallbackTrustSource.contextTypeMappings == nil ? fallbackTrustSource.withContextTypeMappings(.default) : fallbackTrustSource
+		if let fts = fallbackTrustSource {
+			let fallbackTrustSource1 = fts.contextTypeMappings == nil ? fts.withContextTypeMappings(.default) : fts
 			fallbackTrustManager = EtsiTrustManager(source: fallbackTrustSource1)
-		} else {
-			fallbackTrustManager = nil
-		}
+		} else { fallbackTrustManager = nil }
         issuerTrustManager = EtsiTrustManager(source: issuerSource, fallback: fallbackTrustManager)
         accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
     }

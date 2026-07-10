@@ -108,18 +108,17 @@ The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-walle
 The wallet developer can customize cryptographic key operations by passing `SecureArea` instances to the wallet, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas. The wallet developer can specify key create options per doc-type such as curve type, secure area name, and key unlock policy.
 
 ```swift
-// Basic initialization with EudiWalletConfiguration
-let config = EudiWalletConfiguration(
-    serviceName: "my_wallet_app",
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
+// Basic initialization with EudiWalletConfiguration and TrustConfiguration
+let config = EudiWalletConfiguration(serviceName: "my_wallet_app")
+let trustConfig = TrustConfiguration(
+    trustSource: .etsi(.eudiRef),
 )
-let wallet = try! EudiWallet(eudiWalletConfig: config)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 
 // With additional configuration options
 let config = EudiWalletConfiguration(
     serviceName: "my_wallet_app",
     userAuthenticationRequired: true,
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
     deviceAuthMethod: .deviceSignature,
     uiCulture: "en",
     logFileName: "wallet.log",
@@ -131,11 +130,46 @@ let openId4VpConfig = OpenId4VpConfiguration(
 )
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,
+    trustConfig: trustConfig,
     openID4VpConfig: openId4VpConfig
 )
 ```
 
 Set `preferredResponseMode` to override the response mode requested by the verifier. When set to `.directPost`, the authorization response is sent as a plain POST. When set to `.directPostJWT`, the response is sent as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode specified by the verifier.
+
+### Trust configuration
+
+`EudiWallet` requires a `TrustConfiguration` that describes where trust anchors come from and how trust failures are handled. A single `TrustConfiguration` drives certificate-chain validation across the wallet:
+
+- **Issuer (document-signer) certificates** validated during OpenID4VCI issuance.
+- **Reader / relying-party access certificates** validated during proximity (BLE) and remote (OpenID4VP) presentation.
+- **Status list token signatures** validated when checking document revocation status.
+- **Issuer metadata signatures** (see [Configuring Issuer Metadata Policy](#configuring-issuer-metadata-policy-with-certificate-chain-trust)).
+
+A `TrustConfiguration` is built from one or more `TrustSource` values. A trust source is either ETSI LoTE (List of Trusted Entities) infrastructure, whose anchors are downloaded from LoTEs, or a static, bundled list of anchor certificates that needs no network access:
+
+```swift
+// ETSI LoTE trust source using a ready-made environment preset
+let trustSource: TrustSource = .etsi(.eudiRef)   // or .etsi(.digiTrust)
+
+// Static, bundled anchors (no LoTE download, no network)
+let staticSource: TrustSource = .staticList(
+    StaticListTrustSource(rootCertificates: [Data(name: "pidissuerca02_ut", ext: "der")!])
+)
+
+let trustConfig = TrustConfiguration(
+    trustSource: trustSource,
+    fallbackTrustSource: staticSource,   // consulted when the primary source has no context for a doc type
+    defaultPolicy: .enforce,             // .enforce (reject on failure) or .warning (log only)
+    docTypePolicies: [:],                // optional per-doc-type overrides of defaultPolicy
+    requireSignedMetadata: true,         // require signed OpenID4VCI issuer metadata
+    clockSkew: 60                        // allowed clock skew (seconds) for status token verification
+)
+```
+
+The `fallbackTrustSource` is optional (pass `nil` to disable it). When the primary trust source cannot evaluate a chain — for example, it has no verification context configured for the requested doc type — validation is delegated to the fallback source.
+
+Use `defaultPolicy` to control the behaviour on a trust failure: `.enforce` rejects the certificate chain, while `.warning` logs the failure but allows the operation to continue. Provide `docTypePolicies` to override the policy for specific doc types.
 
 ### OpenID4VCI Configuration
 
@@ -159,11 +193,11 @@ let issuerConfigurations: [String: OpenId4VciConfiguration] = [
     )
 ]
 
-let config = EudiWalletConfiguration(
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
-)
+let config = EudiWalletConfiguration()
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,
+    trustConfig: trustConfig,
     openID4VciConfigurations: issuerConfigurations
 )
 
@@ -216,11 +250,11 @@ let config = OpenId4VciConfiguration(
     issuerMetadataPolicy: .requireSigned
 )
 
-let walletConfig = EudiWalletConfiguration(
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
-)
+let walletConfig = EudiWalletConfiguration()
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(
     eudiWalletConfig: walletConfig,
+    trustConfig: trustConfig,
     openID4VciConfigurations: ["attested_issuer": config]
 )
 ```
@@ -455,40 +489,37 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
 
 #### Configuring Issuer Metadata Policy with Certificate Chain Trust
 
-When you need strict validation of issuer metadata signatures using certificate chains (such as IACA root certificates), you can configure the issuer's `OpenId4VciConfiguration` with a signed metadata policy and certificate chain trust validator:
+The `TrustConfiguration` derives an `IssuerMetadataPolicy` for you from its `requireSignedMetadata` flag, validating the issuer metadata signing chain against the configured trust anchors. When `requireSignedMetadata` is `true`, `trustConfig.issuerMetadataPolicy` yields a `.requireSigned` policy backed by the trust configuration; when it is `false`, it yields `.ignoreSigned`.
 
 ```swift
-// Create a certificate chain trust validator with IACA root certificates
-let trust: CertificateChainTrust = TrustedChainValidator(iacaRoots: [eudic])
-
-// Create an issuer metadata policy that requires signed metadata
-let issuerMetadataPolicy: IssuerMetadataPolicy = .requireSigned(
-  issuerTrust: .byCertificateChain(certificateChainTrust: trust)
+// Require signed issuer metadata, validated against the trust configuration's anchors
+let trustConfig = TrustConfiguration(
+  trustSource: .etsi(.eudiRef),
+  fallbackTrustSource: nil,
+  requireSignedMetadata: true
 )
 
-// Configure the issuer with the strict signed metadata policy
+// Apply the derived policy to a specific issuer
 let config = OpenId4VciConfiguration(
   credentialIssuerURL: "https://issuer.example.com",
   clientId: "my-wallet",
-  issuerMetadataPolicy: issuerMetadataPolicy
+  issuerMetadataPolicy: trustConfig.issuerMetadataPolicy
 )
 
-// Use this configuration when initializing the wallet
-let walletConfig = EudiWalletConfiguration(
-  trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!]
-)
+let walletConfig = EudiWalletConfiguration()
 let wallet = try EudiWallet(
   eudiWalletConfig: walletConfig,
+  trustConfig: trustConfig,
   openID4VciConfigurations: ["trusted_issuer": config]
 )
 ```
 
 The `IssuerMetadataPolicy` enum provides three validation strategies:
-- `.ignoreSigned`: Accept issuer metadata regardless of signature status (default)
+- `.ignoreSigned`: Accept issuer metadata regardless of signature status
 - `.preferSigned(issuerTrust:)`: Prefer signed metadata if available, fall back to unsigned
 - `.requireSigned(issuerTrust:)`: Strictly require signed metadata, reject unsigned metadata
 
-When using `.requireSigned`, the issuer's metadata signature must be valid against one of the IACA root certificates provided to the trust validator.
+When using `.requireSigned`, the issuer's metadata signature must validate against the trust anchors configured in the `TrustConfiguration`. You can also supply any of these strategies directly on a per-issuer `OpenId4VciConfiguration.issuerMetadataPolicy` to override the derived default.
 
 ### Authorization code flow
 
@@ -559,10 +590,10 @@ Set it in `EudiWalletConfiguration` at initialization time, or update it on the 
 ```swift
 // Configure BLE transfer mode
 let config = EudiWalletConfiguration(
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
     bleTransferMode: .server  // default
 )
-let wallet = try! EudiWallet(eudiWalletConfig: config)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .client
 ```
 
