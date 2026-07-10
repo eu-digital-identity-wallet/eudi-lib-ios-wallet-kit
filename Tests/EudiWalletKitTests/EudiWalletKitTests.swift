@@ -40,8 +40,8 @@ struct EudiWalletKitTests {
         let firstConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-1-\(UUID().uuidString)")
         let secondConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-2-\(UUID().uuidString)")
 
-        let firstWallet = try EudiWallet(eudiWalletConfig: firstConfig)
-        let secondWallet = try EudiWallet(eudiWalletConfig: secondConfig)
+        let firstWallet = try EudiWallet(eudiWalletConfig: firstConfig, trustConfig: .init(trustSource: .etsi(.eudiRef)))
+        let secondWallet = try EudiWallet(eudiWalletConfig: secondConfig, trustConfig: .init(trustSource: .etsi(.eudiRef)))
 
         #expect(firstWallet.eudiWalletConfig.serviceName != secondWallet.eudiWalletConfig.serviceName)
     }
@@ -392,7 +392,7 @@ struct EudiWalletKitTests {
 		let storageService = TestDataStorageService()
 		let provider = RecordingWalletAttestationsProvider()
 		let wallet = try EudiWallet(
-			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"),
+			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"), trustConfig: .init(trustSource: .etsi(.eudiRef)),
 			storageService: storageService,
 			openID4VciConfigurations: [
 				"attested_issuer": OpenId4VciConfiguration(
@@ -428,7 +428,14 @@ struct EudiWalletKitTests {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
-		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
+		return try OpenId4VciService(
+			uiCulture: nil,
+			config: config,
+			networking: networking,
+			storage: storage,
+			storageService: storageService,
+			trustConfig: .init(trustSource: .etsi(.eudiRef))
+		)
 	}
 
 	private func makeDocument(fromResource resourceName: String, docDataFormat: DocDataFormat, docType: String) throws -> (doc: WalletStorage.Document, publicKey: CoseKey) {

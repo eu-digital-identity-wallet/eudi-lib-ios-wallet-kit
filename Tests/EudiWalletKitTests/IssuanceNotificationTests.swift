@@ -38,7 +38,14 @@ struct IssuanceNotificationTests {
 			parUsage: .required(authorizationCodeDPoPBinding: true),
 			requireDpop: true
 		)
-		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
+		return try OpenId4VciService(
+			uiCulture: nil,
+			config: config,
+			networking: networking,
+			storage: storage,
+			storageService: storageService,
+			trustConfig: .init(trustSource: .etsi(.eudiRef))
+		)
 	}
 
 	private func makeIssuedDocument() throws -> (data: Data, publicKey: Data) {
