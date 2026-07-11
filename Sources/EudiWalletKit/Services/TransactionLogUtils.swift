@@ -19,15 +19,15 @@ class TransactionLogUtils {
 		transactionLog = transactionLog.copy(timestamp: getTimestamp(), rawRequest: requestInfo.deviceRequestBytes, relyingParty: TransactionLogUtils.getRelyingParty(requestInfo), dataFormat: .cbor)
 	}
 
-	static func setCborTransactionLogResponseInfo(_ bleService: BlePresentationService, transactionLog: inout TransactionLog) {
+	static func setCborTransactionLogResponseInfo(_ bleService: BlePresentationService, documentId: String?, docType: String?, displayName: String?, transactionLog: inout TransactionLog) {
 		let sessionTranscript: Data? = if let stb = bleService.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
 		let rawResponse = bleService.deviceResponseBytes
 		let responseMetadata = bleService.responseMetadata
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: rawResponse, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: responseMetadata)
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: rawResponse, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: responseMetadata, documentId: documentId, docType: docType, displayName: displayName)
 	}
 
-	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, transactionLog: inout TransactionLog) {
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: deviceResponseBytes, dataFormat: dataFormat, sessionTranscript: sessionTranscript, docMetadata: responseMetadata)
+	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, documentId: String?, docType: String?, displayName: String?, transactionLog: inout TransactionLog) {
+		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: deviceResponseBytes, dataFormat: dataFormat, sessionTranscript: sessionTranscript, docMetadata: responseMetadata, documentId: documentId, docType: docType, displayName: displayName)
 	}
 
 	static func setErrorTransactionLog(type: TransactionLog.LogType, error: Error, transactionLog: inout TransactionLog) {
