@@ -345,7 +345,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let firstDocType = firstDocId.flatMap { transferInfo.idsToDocTypes[$0] }
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
 		} else if case let .negative(message) = consent {
-			transactionLog = transactionLog.copy(status: .failed, errorMessage: message)
+			let firstDocId = vpTokens?.first(where: { $0.1 != nil })?.1
+			let firstDocType = firstDocId.flatMap { transferInfo.idsToDocTypes[$0] }
+			transactionLog = transactionLog.copy(status: .failed, errorMessage: message, documentId: firstDocId, docType: firstDocType, displayName: nil)
 		}
 	}
 
