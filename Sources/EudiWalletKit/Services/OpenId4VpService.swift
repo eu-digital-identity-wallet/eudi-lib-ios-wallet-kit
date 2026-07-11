@@ -339,9 +339,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				}
 			}
 			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues, data_formats: data_formats, transaction_data: transactionData)
-			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, transactionLog: &transactionLog)
+			// Resolve document identity from the first presented document.
+			// vpTokens is non-optional here (unwrapped by the enclosing if let).
+			// docType comes from transferInfo.idsToDocTypes; displayName is not held on this service.
+let firstDocId = vpTokens.compactMap { $0.1 }.sorted().first
+let firstDocType = firstDocId.flatMap { transferInfo.idsToDocTypes[$0] }
+			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
 		} else if case let .negative(message) = consent {
-			transactionLog = transactionLog.copy(status: .failed, errorMessage: message)
+			let firstDocId = vpTokens?.first(where: { $0.1 != nil })?.1
+			let firstDocType = firstDocId.flatMap { transferInfo.idsToDocTypes[$0] }
+			transactionLog = transactionLog.copy(status: .failed, errorMessage: message, documentId: firstDocId, docType: firstDocType, displayName: nil)
 		}
 	}
 
