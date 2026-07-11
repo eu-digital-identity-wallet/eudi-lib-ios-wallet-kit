@@ -78,7 +78,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter requests: Request information
 	func decodeRequest(_ requests: [UserRequestInfo]) throws {
-		guard docIdToPresentInfo.count > 0 else { throw Self.makeError(str: "No documents added to session ")}
+		guard docIdToPresentInfo.count > 0 else { throw WalletError(description: "No documents added to session ", code: .noDocumentsAvailable)}
 		// show the items as checkboxes
 		disclosedDocumentSets = [[DocElements]]()
 		for request in requests {
@@ -110,23 +110,13 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 			readerLegalName = request.defaultReaderAuthResult?.legalName
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-			if disclosedDocuments.count == 0 { throw Self.makeError(str: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
+			if disclosedDocuments.count == 0 { throw WalletError(description: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 			disclosedDocumentSets.append(disclosedDocuments)
 		}
 		status = .requestReceived
 	}
 
 	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
-
-	public static func makeError(str: String, localizationKey: String? = nil, code: WalletError.Code? = nil, context: [String: String] = [:]) -> WalletError {
-		logger.error(Logger.Message(unicodeScalarLiteral: str))
-		return WalletError(description: str, localizationKey: localizationKey, code: code, context: context)
-	}
-
-	public static func makeError(err: LocalizedError) -> WalletError {
-		logger.error(Logger.Message(unicodeScalarLiteral: err.errorDescription ?? err.localizedDescription))
-		return WalletError(description: err.errorDescription ?? err.localizedDescription)
-	}
 
 	/// Start QR engagement to be presented to verifier
 	///
@@ -142,8 +132,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 				status = .qrEngagementReady
 			}
 		} catch {
-			let walletCode = Self.mapTransferError(error)
-			await setError(error.localizedDescription, code: walletCode)
+			let walletCode = Self.mapTransferError(error) ?? .internalError
+			await setError(error.localizedDescription, code: walletCode, innerError: error)
 		}
 	}
 
@@ -159,9 +149,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	}
 
 	@MainActor
-	func setError(_ description: String, localizationKey: String? = nil, code: WalletError.Code? = nil) {
+	func setError(_ description: String, localizationKey: String? = nil, code: WalletError.Code, innerError: Error? = nil) {
 		status = .error
-		uiError = WalletError(description: description, localizationKey: localizationKey, code: code)
+		uiError = WalletError(description: description, localizationKey: localizationKey, code: code, innerError: innerError)
 	}
 
 	/// Receive request from verifer
@@ -177,7 +167,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			return request
 		} catch {
 			let walletError = error as? WalletError
-			await setError(error.localizedDescription, localizationKey: walletError?.localizationKey, code: walletError?.code)
+			await setError(error.localizedDescription, localizationKey: walletError?.localizationKey, code: walletError?.code ?? .internalError, innerError: error)
 			return nil
 		}
 	}
@@ -219,7 +209,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			await MainActor.run { status = .responseSent; storageManager?.objectWillChange.send() }
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
 		} catch {
-			await setError(error.localizedDescription)
+			let walletError = error as? WalletError
+			await setError(error.localizedDescription, code: walletError?.code ?? .internalError, innerError: error)
 			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
 			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
 			throw error
@@ -239,7 +230,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			try await presentationService.waitForDisconnect()
 			await MainActor.run { status = .disconnected }
 		} catch {
-			await setError(error.localizedDescription)
+			await setError(error.localizedDescription, code: .internalError, innerError: error)
 		}
 
 	}

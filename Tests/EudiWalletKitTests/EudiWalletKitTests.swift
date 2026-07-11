@@ -578,7 +578,7 @@ final class RecordingWalletAttestationsProvider: WalletAttestationsProvider, @un
 	func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
 		lastRequest = (try keys.map {
 			guard let publicKey = $0 as? ECPublicKey else {
-				throw WalletError(description: "Expected ECPublicKey for attestation")
+				throw WalletError(description: "Expected ECPublicKey for attestation", code: .unsupportedAlgorithm)
 			}
 			return try publicKey.thumbprint(algorithm: .SHA256)
 		}, nonce)

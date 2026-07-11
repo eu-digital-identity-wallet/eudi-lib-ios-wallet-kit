@@ -129,7 +129,7 @@ class OpenId4VpUtils {
 						requestTransactionData[document.credentialId]![type.value] = parameters
 						break
 					} else {
-						throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)")
+						throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)", code: .credentialNotFound)
 					}
 				}
 			}
@@ -228,7 +228,7 @@ class OpenId4VpUtils {
 	}
 
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
-		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found") }
+		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found", code: .internalError) }
 		let allPaths = Array(allPathsDict.keys)
 		let query = Set(allPaths.filter { path in requestItems.contains(where: { r in r.claimPath == path }) })
 		for q in query { print(q.value.map(\.description) ) }
@@ -346,7 +346,7 @@ extension OpenId4VpUtils {
 		var credentialQueryResults: OrderedDictionary<QueryId, [CredentialSelection]> = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
-			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type") }
+			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type", code: .invalidQueryResolution) }
 			let format = credQuery.dataFormat
 			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
