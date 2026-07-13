@@ -55,7 +55,7 @@ func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeS
 	let jwtProofTypeKeyAttestationRequirement = jwtProofType?.keyAttestationRequirement
 	let attestProofTypeKeyAttestationRequirement = attestProofType?.keyAttestationRequirement
 	let supportsAttestationProofType = attestProofType != nil && attestProofTypeKeyAttestationRequirement != .notRequired
-	let supportsJwtProofTypeWithAttestation = jwtProofType != nil
+	let supportsJwtProofTypeWithAttestation = jwtProofType != nil && jwtProofTypeKeyAttestationRequirement != nil && jwtProofTypeKeyAttestationRequirement != .notRequired
 	return (
 		jwtProofType,
 		jwtProofTypeKeyAttestationRequirement,
@@ -104,13 +104,13 @@ extension FileManager {
 }
 
 extension Encodable {
-    /// Converting object to postable JSON
-    func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
-        guard let data = try? encoder.encode(self),
-              let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
-              let json = object as? [String: Any] else { return [:] }
-        return json
-    }
+	/// Converting object to postable JSON
+	func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
+		guard let data = try? encoder.encode(self),
+			  let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
+			  let json = object as? [String: Any] else { return [:] }
+		return json
+	}
 }
 
 extension WalletStorage.Document {
@@ -150,7 +150,7 @@ extension WalletStorage.Document {
 }
 
 extension MdocDataModel18013.CoseKey {
- 	static func x963Representation(x: Data, y: Data) -> Data {
+	static func x963Representation(x: Data, y: Data) -> Data {
 		var data = Data([0x04])
 		data.append(x)
 		data.append(y)
@@ -408,10 +408,7 @@ extension JSON {
 
 
 extension SecureAreaSigner: eudi_lib_sdjwt_swift.AsyncSignerProtocol {
-    func signAsync(_ data: Data) async throws -> Data {
-        return try await sign(data)
-    }
-
+	func signAsync(_ data: Data) async throws -> Data { try await sign(data) }
 }
 
 extension JSON {

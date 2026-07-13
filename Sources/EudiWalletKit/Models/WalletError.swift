@@ -67,6 +67,8 @@ public struct WalletError: LocalizedError {
 		case storageError
 		/// Missing VCI configuration
 		case missingVciConfiguration
+		/// Unsupportted credential configuration
+		case unsupportedCredentialConfiguration
 		// no client attestation algorithm found
 		case noClientAttestationAlgorithmFound
 		/// Internal / unexpected error that does not fit another category

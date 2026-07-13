@@ -102,6 +102,7 @@ extension OpenId4VciConfiguration {
 		let jwsAlgorithm: JWSAlgorithm
 		let jwk: any JWK
 		let keyId = privateKeyId ?? UUID().uuidString
+		logger.info("Constructing POP for keyId: \(keyId), usage: \(popUsage)")
 		if let keyOptions {
 			// If keyOptions is specified, use it to determine key generation parameters
 			let secureArea = SecureAreaRegistry.shared.get(name: keyOptions.secureAreaName)
