@@ -128,9 +128,7 @@ public actor OpenId4VciService {
 	private static func makePublicJwks(from publicCoseKeys: [CoseKey], algorithm: JWSAlgorithm.AlgorithmType? = nil) throws -> [ECPublicKey] {
 		try publicCoseKeys.map {
 			var additionalParameters: [String: String] = ["use": "sig", "kid": UUID().uuidString]
-			if let algorithm {
-				additionalParameters["alg"] = JWSAlgorithm(algorithm).name
-			}
+			if let algorithm { additionalParameters["alg"] = JWSAlgorithm(algorithm).name }
 			return try ECPublicKey(publicKey: try $0.toSecKey(), additionalParameters: additionalParameters)
 		}
 	}
@@ -783,13 +781,16 @@ public actor OpenId4VciService {
 	private func deferredCredentialUseCase(issuer: Issuer, dpopConstructor: DPoPConstructor?, authorized: AuthorizedRequest, transactionId: TransactionId, publicKeys: [Data], derKeyData: Data?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
 		var deferredResponseEncryptionSpec: IssuanceResponseEncryptionSpec? = nil
-		if let derKeyData {
-			deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption,  privateKeyData: derKeyData)
+		var encyptionSpec: EncryptionSpec? = nil
+		let isResponseEncryptionSupported = if case .notSupported = await issuer.issuerMetadata.credentialResponseEncryption { false } else { true }
+		if let derKeyData, isResponseEncryptionSupported {
+			encyptionSpec = makeRequestEncryptionSpec(derKeyData: derKeyData, algorithm: JWSAlgorithm.AlgorithmType.ES256) 
+			deferredResponseEncryptionSpec = await Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData)
 			await issuer.setDeferredResponseEncryptionSpec(deferredResponseEncryptionSpec)
 		}
 		let deferredIssuanceRequester = await IssuanceRequester(issuerMetadata: issuer.issuerMetadata, poster: Poster(session: networking), dpopConstructor: dpopConstructor)
 		let deferredRequestResponse = try await deferredIssuanceRequester.placeDeferredCredentialRequest(
-			accessToken: authorized.accessToken, transactionId: transactionId, dPopNonce: nil, maxRetries: Constants.MAX_RETRIES, issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec, encryptionSpec: nil)
+			accessToken: authorized.accessToken, transactionId: transactionId, dPopNonce: nil, maxRetries: Constants.MAX_RETRIES, issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec, encryptionSpec: encyptionSpec)
 		switch deferredRequestResponse {
 		case .issued(let credential):
 			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, configuration: configuration, authorized: authorized, notificationId: nil, logger: logger)
@@ -804,6 +805,15 @@ public actor OpenId4VciService {
 		case .errored(_, let errorDescription):
 			throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")", code: .issuanceRequestFailed)
 		}
+	}
+	
+	func makeRequestEncryptionSpec(derKeyData: Data, algorithm: JWSAlgorithm.AlgorithmType?) -> EncryptionSpec? {
+		var additionalParameters: [String: String] = ["use": "sig", "kid": UUID().uuidString]
+		if let algorithm { additionalParameters["alg"] = JWSAlgorithm(algorithm).name }
+		guard let privateKey = try? KeyController.generateECPrivateKey(with: derKeyData) else { return nil }
+		guard let publicKey = try? KeyController.generateECDHPublicKey(from: privateKey) else { return nil }
+		guard let ecPublicKey = try? ECPublicKey(publicKey: publicKey, additionalParameters: additionalParameters) else { return nil }
+		return try! .init(recipientKey: ecPublicKey, encryptionMethod: .init(.A128GCM))
 	}
 
 	@MainActor
