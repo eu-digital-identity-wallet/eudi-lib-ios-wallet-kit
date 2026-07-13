@@ -232,11 +232,11 @@ struct AuthorizedRequestData: Codable {
 }
 
 extension CredentialConfiguration {
-	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil, dpopKeyId: String? = nil) -> DocMetadata {
+	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
 		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
 		let resolvedDocType = docType ?? vct ?? ""
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: resolvedDocType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: resolvedDocType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
 	}
 }
 
@@ -257,7 +257,7 @@ extension DocMetadata {
 			for await dm in group { result.append(dm) }
 			return result
 		}
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, docType: docType, display: downloadedDisplay, issuerDisplay: issuerDisplay, claims: claims, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, docType: docType, display: downloadedDisplay, issuerDisplay: issuerDisplay, claims: claims, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
 	}
 }
 
@@ -292,10 +292,6 @@ extension DisplayMetadata {
 
 extension DocKeyInfo {
 	static var `default`: Self { DocKeyInfo(secureAreaName: SoftwareSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse) }
-}
-
-extension IssueRequest {
-	var dpopKeyId: String { id + "_dpop" }
 }
 
 extension URL {

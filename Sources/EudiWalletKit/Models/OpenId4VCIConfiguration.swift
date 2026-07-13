@@ -95,14 +95,14 @@ extension OpenId4VciConfiguration {
 	}
 
 	/// Creates a PoP constructor based on the provided parameters and configuration.
-	func makePoPConstructor(popUsage: PopUsage, privateKeyId: String?, algorithms: [JWSAlgorithm]?, keyOptions: KeyOptions?) async throws -> DPoPConstructor? {
+	func makePoPConstructor(popUsage: PopUsage, privateKeyId: String, algorithms: [JWSAlgorithm]?, keyOptions: KeyOptions?) async throws -> DPoPConstructor? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		let signingKeyProxy: SigningKeyProxy
 		let publicKey: SecKey
 		let jwsAlgorithm: JWSAlgorithm
 		let jwk: any JWK
-		let keyId = privateKeyId ?? UUID().uuidString
-		logger.info("Constructing POP for keyId: \(keyId), usage: \(popUsage)")
+		// let keyId = privateKeyId ?? UUID().uuidString
+		logger.info("Constructing POP for keyId: \(privateKeyId), usage: \(popUsage)")
 		if let keyOptions {
 			// If keyOptions is specified, use it to determine key generation parameters
 			let secureArea = SecureAreaRegistry.shared.get(name: keyOptions.secureAreaName)
@@ -112,17 +112,17 @@ extension OpenId4VciConfiguration {
 				throw WalletError(description: "Specified algorithm \(ecCurve.SECGName) not supported by server supported algorithms \(algorithms.map(\.name))", code: .unsupportedAlgorithm)
 			}
 			jwsAlgorithm = jwsAlg
-			let existingKeyInfo: KeyBatchInfo? = if let privateKeyId { try? await secureArea.getKeyBatchInfo(id: privateKeyId) } else { nil }
+			let existingKeyInfo: KeyBatchInfo? = try? await secureArea.getKeyBatchInfo(id: privateKeyId)
 			let hasCompatibleExistingKey = existingKeyInfo != nil && keyOptions.secureAreaName == existingKeyInfo?.secureAreaName && keyOptions.curve == ecCurve && existingKeyInfo?.usedCounts.count == 1
-			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey, let privateKeyId { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
-			if hasCompatibleExistingKey, let privateKeyId, existingPublicKey == nil { try await secureArea.deleteKeyInfo(id: privateKeyId) }
+			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
+			if hasCompatibleExistingKey, existingPublicKey == nil { try await secureArea.deleteKeyInfo(id: privateKeyId) }
 			let publicCoseKey: CoseKey =
 				if let existingPublicKey { existingPublicKey } else {
-					(try await secureArea.createKeyBatch(id: keyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first!
+					(try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first!
 				}
 			let publicKeyJwk = try publicCoseKey.jwk
-			let unlockData = try await secureArea.unlockKey(id: keyId)
-			let signer = try SecureAreaSigner(secureArea: secureArea, id: keyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
+			let unlockData = try await secureArea.unlockKey(id: privateKeyId)
+			let signer = try SecureAreaSigner(secureArea: secureArea, id: privateKeyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
 			signingKeyProxy = .custom(signer)
 			publicKey = try publicCoseKey.toSecKey()
 		} else {
@@ -148,14 +148,14 @@ extension OpenId4VciConfiguration {
 				case JWSAlgorithm(.RS256).name: .rsa
 				default: .ellipticCurve
 				}
-			let privateKey: SecKey = if let privateKeyId, let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
+			let privateKey: SecKey = if let pk = SecKey.getExistingKey(type: type, keyId: privateKeyId) { pk } else { try SecKey.createRandomKey(type: type, bits: bits, keyId: privateKeyId) }
 			signingKeyProxy = .secKey(privateKey)
 			publicKey = try KeyController.generateECDHPublicKey(from: privateKey)
 		}
 		if jwsAlgorithm.name.starts(with: "RS") {
-			jwk = try RSAPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": keyId])
+			jwk = try RSAPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": privateKeyId])
 		} else {
-			jwk = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": keyId])
+			jwk = try ECPublicKey(publicKey: publicKey, additionalParameters: ["alg": jwsAlgorithm.name, "use": "sig", "kid": privateKeyId])
 		}
 		return DPoPConstructor(algorithm: jwsAlgorithm, jwk: jwk, privateKey: signingKeyProxy)
 	}
@@ -169,7 +169,7 @@ extension OpenId4VciConfiguration {
 	}
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
-		let keyId = generatePopKeyId(credentialIssuerId: credentialIssuerId)
+		let keyId = Self.generatePopKeyId(credentialIssuerId: credentialIssuerId)
 		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else {
 			throw WalletError(description: "Failed to create DPoP constructor for client attestation", code: .internalError)
 		}
@@ -197,7 +197,7 @@ extension OpenId4VciConfiguration {
 	///
 	/// - Parameter credentialIssuerId: The credential issuer identifier to hash
 	/// - Returns: A deterministic, stable key alias for the given issuer
-	private func generatePopKeyId(credentialIssuerId: String) -> String {
+	static func generatePopKeyId(credentialIssuerId: String) -> String {
 		// Create a hash of the issuer ID to get a stable, URL-safe identifier
 		let data = Data(credentialIssuerId.utf8)
 		let hash = SHA256.hash(data: data)
