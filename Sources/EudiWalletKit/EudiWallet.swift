@@ -355,7 +355,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				config = config.copy(authFlowRedirectionURI: authFlowRedirectionURI)
 			}
 		} else {
-			config = OpenId4VciConfiguration(credentialIssuerURL: urlString)
+			throw WalletError(description: "VCI configuration not provided for url \(urlString)", code: .missingVciConfiguration)
 		}
 		let vciService = try registerOpenId4VciService(name: urlString, config: config)
 		return vciService

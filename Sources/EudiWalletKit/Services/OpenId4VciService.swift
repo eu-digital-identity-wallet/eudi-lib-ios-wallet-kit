@@ -104,14 +104,14 @@ public actor OpenId4VciService {
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys, algorithm: algType)
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
 		var funcKeyAttestationJWT: FuncKeyAttestationJWT? = nil
-		if config.keyAttestationsConfig != nil, configuration.supportsAttestationProofType {
+		if configuration.supportsAttestationProofType {
 			funcKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
 			// Send a single `attestation` proof for the whole batch. The key
 			// attestation JWT already attests every key, so per-key jwt proofs are
 			// redundant and some issuers cross-multiply them (N keys -> N*N creds).
 			let bindingKeys: [BindingKey] = [.attestation(keyAttestationJWT: funcKeyAttestationJWT!)]
 			return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
-		} else if config.keyAttestationsConfig != nil, configuration.supportsJwtProofTypeWithAttestation {
+		} else if configuration.supportsJwtProofTypeWithAttestation {
 			throw WalletError(description: "JWT proof with attestation is not yet supported in wallet", code: .internalError)
 		}
 		let bindingKeys = try publicKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: funcKeyAttestationJWT, proofSubject: proofSubject) }
@@ -119,9 +119,7 @@ public actor OpenId4VciService {
 	}
 
 	func createKeyBatchWithAttestation(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, nonce: String?) async throws -> BatchCreateKeyResult {
-		guard let attestationProvider = config.keyAttestationsConfig?.walletAttestationsProvider else {
-			throw WalletError(description: "Key attestations are not configured for issuer \(config.credentialIssuerURL ?? "unknown")", code: .internalError)
-		}
+		let attestationProvider = config.keyAttestationsConfig.walletAttestationsProvider
 		let request = try IssueRequest(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		let publicCoseKeys = try await request.createKeyBatch()
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys)
@@ -140,7 +138,7 @@ public actor OpenId4VciService {
 	}
 
 	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], nonce: String?) async throws -> KeyAttestationJWT {
-		let jwt = try await self.config.keyAttestationsConfig!.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce!)
+		let jwt = try await self.config.keyAttestationsConfig.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce!)
 		let keyAttestationJwt: KeyAttestationJWT = try .init(jws: .init(compactSerialization: jwt))
 		return keyAttestationJwt
 	}
@@ -153,11 +151,11 @@ public actor OpenId4VciService {
 		let algType = Self.mapToJWSAlgorithmType(secureAreaSigningAlg)!
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, index: index, publicKey: publicKeyJWK, curve: publicKeyJWK.crv.coseEcCurve, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData)
 		let bindingKey: BindingKey
-		if funcKeyAttestationJWT == nil {
-			bindingKey = .jwt(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: proofSubject)
-		} else {
+		//if funcKeyAttestationJWT == nil {
+		//	bindingKey = .jwt(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: proofSubject)
+		//} else {
 			bindingKey = try! .jwtKeyAttestation(algorithm: JWSAlgorithm(algType), keyAttestationJWT: funcKeyAttestationJWT!, keyIndex: UInt(index), privateKey: .custom(signer), issuer: proofSubject)
-		}
+		//}
 		return bindingKey
 	}
 
@@ -300,7 +298,8 @@ public actor OpenId4VciService {
 		if config.requireDpop {
 			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: dpopKeyId ?? issueReq.dpopKeyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions)
 		}
-		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
+		guard let algs = offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: algs)
 		return try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: vciConfig, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: dpopConstructor)
 	}
 
@@ -310,7 +309,8 @@ public actor OpenId4VciService {
 	}
 
 	func getIssuerForDeferred(data: DeferredIssuanceModel, configuration: CredentialConfiguration, dpopKeyId: String? = nil) async throws -> (Issuer,DPoPConstructor?) {
-		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: configuration.credentialIssuerIdentifier, clientAttestationPopSigningAlgValuesSupported: configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) })
+		guard let algs = configuration.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: configuration.credentialIssuerIdentifier, clientAttestationPopSigningAlgValuesSupported: algs.map { JWSAlgorithm(name: $0) })
 		var dpopConstructor: DPoPConstructor? = nil
 		let dpopSigningAlgValuesSupported = configuration.dpopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
 		if config.requireDpop {
@@ -354,7 +354,8 @@ public actor OpenId4VciService {
 			}
 		}
 		if let preAuthorizedCode, let authCode = try? IssuanceAuthorization(preAuthorizationCode: preAuthorizedCode, txCode: txCodeSpec) {
-			let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
+			guard let algs = offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
+			let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString, clientAttestationPopSigningAlgValuesSupported: algs)
 			let authorized = try await issuer.authorizeWithPreAuthorizationCode(credentialOffer: offer, authorizationCode: authCode, client: vciConfig.client, transactionCode: txCodeValue)
 			authorizedOutcome = .authorized(authorized)
 		} else if !backgroundOnly {
@@ -713,9 +714,10 @@ public actor OpenId4VciService {
 		   authorized.isRefreshTokenExpired(clock: Date.now.timeIntervalSinceReferenceDate) {
 			logger.info("Issuance refresh token expired at \(Date(timeIntervalSinceReferenceDate: authorized.timeStamp + refreshTokenExpiresIn)).")
 		}
+		guard let algs = configuration.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
 		let vciConfig = try await config.toOpenId4VCIConfig(
 			credentialIssuerId: configuration.credentialIssuerIdentifier,
-			clientAttestationPopSigningAlgValuesSupported: configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
+			clientAttestationPopSigningAlgValuesSupported: algs.map { JWSAlgorithm(name: $0) }
 		)
 		let refreshedAuthorized = try await issuer.refresh(client: vciConfig.client, authorizedRequest: authorized, dPopNonce: nil)
 		logger.info("Refreshed authorized request for issuance")
