@@ -103,19 +103,17 @@ public actor OpenId4VciService {
 		let publicCoseKeys = try await issueReq.createKeyBatch()
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys, algorithm: algType)
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
-		var funcKeyAttestationJWT: FuncKeyAttestationJWT
+		let funcKeyAttestationJWT: FuncKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
+		let bindingKey: BindingKey
 		if configuration.supportsAttestationProofType {
-			funcKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
-			// Send a single `attestation` proof for the whole batch. The key attestation JWT already attests every key, so per-key jwt proofs are redundant and some issuers cross-multiply them (N keys -> N*N creds).
-			let bindingKeys: [BindingKey] = [.attestation(keyAttestationJWT: funcKeyAttestationJWT)]
-			return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
+			// Send a single `attestation` proof for the whole batch. The key attestation JWT already attests every key
+			bindingKey = .attestation(keyAttestationJWT: funcKeyAttestationJWT)
 		} else if configuration.supportsJwtProofTypeWithAttestation {
-			funcKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
+			bindingKey = try createBindingKey(publicKeys.first!, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: 0, funcKeyAttestationJWT: funcKeyAttestationJWT, issuer: issuer)
 		} else {
 			throw WalletError(description: "Unsupported credential configuration", code: .unsupportedCredentialConfiguration)
 		}
-		let bindingKeys = try publicKeys.enumerated().map { try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: funcKeyAttestationJWT, issuer: issuer) }
-		return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
+		return ([bindingKey], publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
 	}
 
 	func createKeyBatchWithAttestation(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, nonce: String?) async throws -> BatchCreateKeyResult {
