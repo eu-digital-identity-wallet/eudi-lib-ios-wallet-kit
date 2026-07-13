@@ -48,7 +48,6 @@ func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeS
 	jwtProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
 	attestProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
 	supportsAttestationProofType: Bool,
-	supportsJwtProofTypeWithoutAttestation: Bool,
 	supportsJwtProofTypeWithAttestation: Bool
 ) {
 	let jwtProofType = proofTypesSupported["jwt"]
@@ -56,14 +55,12 @@ func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeS
 	let jwtProofTypeKeyAttestationRequirement = jwtProofType?.keyAttestationRequirement
 	let attestProofTypeKeyAttestationRequirement = attestProofType?.keyAttestationRequirement
 	let supportsAttestationProofType = attestProofType != nil && attestProofTypeKeyAttestationRequirement != .notRequired
-	let supportsJwtProofTypeWithoutAttestation = jwtProofType != nil && (jwtProofTypeKeyAttestationRequirement == nil || jwtProofTypeKeyAttestationRequirement == .notRequired)
-	let supportsJwtProofTypeWithAttestation = jwtProofType != nil && !supportsJwtProofTypeWithoutAttestation
+	let supportsJwtProofTypeWithAttestation = jwtProofType != nil
 	return (
 		jwtProofType,
 		jwtProofTypeKeyAttestationRequirement,
 		attestProofTypeKeyAttestationRequirement,
 		supportsAttestationProofType,
-		supportsJwtProofTypeWithoutAttestation,
 		supportsJwtProofTypeWithAttestation
 	)
 }
