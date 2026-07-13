@@ -28,7 +28,7 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 	public var transactionLog: TransactionLog
 
 	public init(msg: String) {
-		self.error = PresentationSession.makeError(str: msg)
+		self.error = WalletError(description: msg, code: .internalError)
 		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, errorMessage: msg, type: .presentation, dataFormat: .cbor)
 		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
 	}

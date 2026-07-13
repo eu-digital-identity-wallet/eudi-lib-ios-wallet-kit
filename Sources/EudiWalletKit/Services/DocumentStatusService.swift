@@ -36,7 +36,7 @@ public actor DocumentStatusService {
 
 	public func getStatus() async throws -> CredentialStatus {
 		guard let statusReference: StatusReference = .init(idx: statusIdentifier.idx, uriString: statusIdentifier.uriString) else {
-			throw WalletError(description: "Invalid status identifier")
+			throw WalletError(description: "Invalid status identifier", code: .invalidStatusToken)
 		}
 		let getStatus = GetStatus()
 		let tokenFetcher = StatusListTokenFetcher(

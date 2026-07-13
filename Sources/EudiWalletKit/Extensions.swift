@@ -100,7 +100,7 @@ extension FileManager {
 	public static func getCachesDirectory() throws -> URL {
 			let paths = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
 			guard paths.count > 0 else {
-				throw WalletError(description: "No downloads directory found")
+			throw WalletError(description: "No downloads directory found", code: .fileAccessError)
 			}
 			return paths[0]
 	}
@@ -544,7 +544,7 @@ extension MdocDataModel18013.CoseKey {
 	var jwk: JSONWebKey.JWK {
 		get throws {
 			guard let curve = JSONWebKey.JWK.CryptographicCurve(rawValue: crv.jwkName) else {
-				throw WalletError(description: "Unsupported CoseKey curve for JWK conversion: \(crv.jwkName)")
+			throw WalletError(description: "Unsupported CoseKey curve for JWK conversion: \(crv.jwkName)", code: .unsupportedAlgorithm)
 			}
 			return JSONWebKey.JWK(keyType: .ellipticCurve, curve: curve, x: Data(x), y: Data(y))
 		}
@@ -580,7 +580,7 @@ extension JSONWebKey.JWK {
 		return switch keyType {
 		case .ellipticCurve: try ECPublicKey(data: data)
 		case .rsa: try RSAPublicKey(data: data)
-		default: throw WalletError(description: "Unsupported JWK key type for JOSESwift conversion: \(keyType)")
+		default: throw WalletError(description: "Unsupported JWK key type for JOSESwift conversion: \(keyType)", code: .unsupportedAlgorithm)
 		}
 	}
 }

@@ -958,8 +958,8 @@ struct DcqlQueryTests {
 
 	@Test("WalletError backward compatibility — code and context default to nil and empty")
 	func testWalletErrorBackwardCompatibility() throws {
-		let error = WalletError(description: "Some legacy error")
-		#expect(error.code == nil, "Code should default to nil")
+		let error = WalletError(description: "Some legacy error", code: .internalError)
+		#expect(error.code == .internalError, "Code should default to internalError")
 		#expect(error.context.isEmpty, "Context should default to empty")
 		#expect(error.errorDescription == "Some legacy error", "Description should still work")
 	}

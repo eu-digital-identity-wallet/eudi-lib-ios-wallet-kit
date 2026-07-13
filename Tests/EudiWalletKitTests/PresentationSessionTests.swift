@@ -31,20 +31,20 @@ struct PresentationSessionTests {
     // MARK: - WalletError init backward compatibility
     // MARK: - WalletError backward compatibility
 
-    @Test("WalletError init without optional params preserves backward compatibility")
+    @Test("WalletError init with all params")
     func testWalletErrorInitBackwardCompat() {
-        let error = WalletError(description: "test error")
+        let error = WalletError(description: "test error", code: .internalError)
         #expect(error.description == "test error")
         #expect(error.localizationKey == nil)
-        #expect(error.code == nil)
+        #expect(error.code == .internalError)
         #expect(error.context.isEmpty)
     }
 
-    @Test("WalletError init with localizationKey only")
+    @Test("WalletError init with localizationKey")
     func testWalletErrorInitWithLocalizationKey() {
-        let error = WalletError(description: "test", localizationKey: "some_key")
+        let error = WalletError(description: "test", localizationKey: "some_key", code: .internalError)
         #expect(error.localizationKey == "some_key")
-        #expect(error.code == nil)
+        #expect(error.code == .internalError)
     }
 
     @Test("WalletError init with code only")
@@ -78,7 +78,7 @@ struct PresentationSessionTests {
 
     @Test("WalletError init without context defaults to empty")
     func testWalletErrorInitContextDefault() {
-        let error = WalletError(description: "test")
+        let error = WalletError(description: "test", code: .internalError)
         #expect(error.context.isEmpty)
     }
 
@@ -112,27 +112,45 @@ struct PresentationSessionTests {
         #expect(result == nil)
     }
 
-    // MARK: - makeError
+    // MARK: - WalletError init with code
 
-    @Test("makeError produces WalletError with code")
+    @Test("WalletError with code")
     func testMakeErrorWithCode() {
-        let error = PresentationSession.makeError(str: "BLE error", code: .bleNotAuthorized)
+        let error = WalletError(description: "BLE error", code: .bleNotAuthorized)
         #expect(error.code == .bleNotAuthorized)
         #expect(error.description == "BLE error")
     }
 
-    @Test("makeError without code preserves backward compatibility")
+    @Test("WalletError with internalError code")
     func testMakeErrorWithoutCode() {
-        let error = PresentationSession.makeError(str: "generic error")
-        #expect(error.code == nil)
+        let error = WalletError(description: "generic error", code: .internalError)
+        #expect(error.code == .internalError)
         #expect(error.localizationKey == nil)
     }
 
-    @Test("makeError with localizationKey and code")
+    @Test("WalletError with localizationKey and code")
     func testMakeErrorWithLocalizationKeyAndCode() {
-        let error = PresentationSession.makeError(str: "no docs", localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
+        let error = WalletError(description: "no docs", localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
         #expect(error.code == .noDocumentsAvailable)
         #expect(error.localizationKey == "request_data_no_document")
+    }
+
+    // MARK: - WalletError innerError
+
+    @Test("WalletError preserves innerError")
+    func testWalletErrorInnerError() {
+        let underlying = NSError(domain: "TestDomain", code: 42, userInfo: nil)
+        let error = WalletError(description: "wrapper", code: .authorizationFailed, innerError: underlying)
+        #expect(error.code == .authorizationFailed)
+        let inner = error.innerError as? NSError
+        #expect(inner?.code == 42)
+        #expect(inner?.domain == "TestDomain")
+    }
+
+    @Test("WalletError innerError defaults to nil")
+    func testWalletErrorInnerErrorDefault() {
+        let error = WalletError(description: "no inner", code: .internalError)
+        #expect(error.innerError == nil)
     }
 
     // MARK: - IssuingParty
