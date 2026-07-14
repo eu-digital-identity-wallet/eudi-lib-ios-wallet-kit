@@ -21,12 +21,14 @@ import EudiEtsi1196x2
 import StatiumSwift
 import JSONWebSignature
 import SwiftCBOR
+import Logging
 
 public actor DocumentStatusService {
 	let statusIdentifier: StatusIdentifier
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
 	let date: Date?
+	private static let logger = Logger(label: "DocumentStatusService")
 
 	public init(statusIdentifier: StatusIdentifier, date: Date = .now, trustConfig: TrustConfiguration) {
 		self.statusIdentifier = statusIdentifier
@@ -49,6 +51,8 @@ public actor DocumentStatusService {
 
 struct VerifyStatusListTokenSignatureWithTrustManager: VerifyStatusListTokenSignature {
 	public let trustConfig: TrustConfiguration
+	private static let logger = Logger(label: "VerifyStatusListTokenSignatureWithTrustManager")
+
 	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
 		let certsData: [Data]
 		switch format {
@@ -65,7 +69,16 @@ struct VerifyStatusListTokenSignatureWithTrustManager: VerifyStatusListTokenSign
 		}
 		guard certsData.count > 0 else { throw JWS.JWSError.somethingWentWrong }
 		let (isValid, reason) = await trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
-		guard isValid else { throw WalletError(description: "\(format) status token trust error: \(reason ?? "")", code: .trustError) }
+		guard isValid else {
+			let message = "\(format) status token trust error: \(reason ?? "")"
+			switch trustConfig.statusTrustPolicy {
+			case .warning:
+				Self.logger.warning("\(message)")
+				return
+			case .enforce:
+				throw WalletError(description: message, code: .trustError)
+			}
+		}
 	}
 }
 
