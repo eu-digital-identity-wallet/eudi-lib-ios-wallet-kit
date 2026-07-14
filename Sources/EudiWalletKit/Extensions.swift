@@ -48,7 +48,6 @@ func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeS
 	jwtProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
 	attestProofTypeKeyAttestationRequirement: KeyAttestationRequirement?,
 	supportsAttestationProofType: Bool,
-	supportsJwtProofTypeWithoutAttestation: Bool,
 	supportsJwtProofTypeWithAttestation: Bool
 ) {
 	let jwtProofType = proofTypesSupported["jwt"]
@@ -56,14 +55,12 @@ func resolveProofTypeAttestationSupport(proofTypesSupported: [String: ProofTypeS
 	let jwtProofTypeKeyAttestationRequirement = jwtProofType?.keyAttestationRequirement
 	let attestProofTypeKeyAttestationRequirement = attestProofType?.keyAttestationRequirement
 	let supportsAttestationProofType = attestProofType != nil && attestProofTypeKeyAttestationRequirement != .notRequired
-	let supportsJwtProofTypeWithoutAttestation = jwtProofType != nil && (jwtProofTypeKeyAttestationRequirement == nil || jwtProofTypeKeyAttestationRequirement == .notRequired)
-	let supportsJwtProofTypeWithAttestation = jwtProofType != nil && !supportsJwtProofTypeWithoutAttestation
+	let supportsJwtProofTypeWithAttestation = jwtProofType != nil && jwtProofTypeKeyAttestationRequirement != nil && jwtProofTypeKeyAttestationRequirement != .notRequired
 	return (
 		jwtProofType,
 		jwtProofTypeKeyAttestationRequirement,
 		attestProofTypeKeyAttestationRequirement,
 		supportsAttestationProofType,
-		supportsJwtProofTypeWithoutAttestation,
 		supportsJwtProofTypeWithAttestation
 	)
 }
@@ -107,13 +104,13 @@ extension FileManager {
 }
 
 extension Encodable {
-    /// Converting object to postable JSON
-    func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
-        guard let data = try? encoder.encode(self),
-              let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
-              let json = object as? [String: Any] else { return [:] }
-        return json
-    }
+	/// Converting object to postable JSON
+	func toJSON(_ encoder: JSONEncoder = JSONEncoder()) -> [String: Any] {
+		guard let data = try? encoder.encode(self),
+			  let object = try? JSONSerialization.jsonObject(with: data, options: .allowFragments),
+			  let json = object as? [String: Any] else { return [:] }
+		return json
+	}
 }
 
 extension WalletStorage.Document {
@@ -153,7 +150,7 @@ extension WalletStorage.Document {
 }
 
 extension MdocDataModel18013.CoseKey {
- 	static func x963Representation(x: Data, y: Data) -> Data {
+	static func x963Representation(x: Data, y: Data) -> Data {
 		var data = Data([0x04])
 		data.append(x)
 		data.append(y)
@@ -235,11 +232,11 @@ struct AuthorizedRequestData: Codable {
 }
 
 extension CredentialConfiguration {
-	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil, dpopKeyId: String? = nil) -> DocMetadata {
+	func convertToDocMetadata(authorized: AuthorizedRequest? = nil, keyOptions: KeyOptions? = nil, credentialOptions: CredentialOptions? = nil) -> DocMetadata {
 		let claimMetadata = claims.map(\.metadata)
 		let authorizedRequestData: Data? = if let authorized { try? JSONEncoder().encode(AuthorizedRequestData(from: authorized)) } else { nil }
 		let resolvedDocType = docType ?? vct ?? ""
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: resolvedDocType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier.value, docType: resolvedDocType, display: display, issuerDisplay: issuerDisplay, claims: claimMetadata, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
 	}
 }
 
@@ -260,7 +257,7 @@ extension DocMetadata {
 			for await dm in group { result.append(dm) }
 			return result
 		}
-		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, docType: docType, display: downloadedDisplay, issuerDisplay: issuerDisplay, claims: claims, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions, dpopKeyId: dpopKeyId)
+		return DocMetadata(credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, docType: docType, display: downloadedDisplay, issuerDisplay: issuerDisplay, claims: claims, authorizedRequestData: authorizedRequestData, keyOptions: keyOptions, credentialOptions: credentialOptions)
 	}
 }
 
@@ -295,10 +292,6 @@ extension DisplayMetadata {
 
 extension DocKeyInfo {
 	static var `default`: Self { DocKeyInfo(secureAreaName: SoftwareSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse) }
-}
-
-extension IssueRequest {
-	var dpopKeyId: String { id + "_dpop" }
 }
 
 extension URL {
@@ -411,10 +404,7 @@ extension JSON {
 
 
 extension SecureAreaSigner: eudi_lib_sdjwt_swift.AsyncSignerProtocol {
-    func signAsync(_ data: Data) async throws -> Data {
-        return try await sign(data)
-    }
-
+	func signAsync(_ data: Data) async throws -> Data { try await sign(data) }
 }
 
 extension JSON {

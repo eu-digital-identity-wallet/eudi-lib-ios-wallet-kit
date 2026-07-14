@@ -44,8 +44,11 @@ public actor DocumentStatusService {
 		let tokenFetcher = StatusListTokenFetcher(
 			verifier: VerifyStatusListTokenSignatureWithTrustManager(trustConfig: trustConfig)
 		)
-		let result = try await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew).get()
-		return result
+		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew)
+		switch result {
+			case .success(let status): return status
+			case .failure(let error): throw WalletError(description: "Status check failed", code: .statusCheckFailed, innerError: error)
+		}
 	}
 }
 
