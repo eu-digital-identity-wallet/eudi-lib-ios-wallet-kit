@@ -43,6 +43,8 @@ public struct WalletError: LocalizedError {
 		case trustError
 		/// invalid status token
 		case invalidStatusToken
+		/// status check failed
+		case statusCheckFailed
 		/// Credential offer could not be resolved
 		case offerResolutionFailed
 		/// Issuer metadata could not be resolved
