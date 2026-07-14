@@ -346,7 +346,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	// Get fallback service or create new config
 	func autoRegisterVciConfiguration(_ urlString: String, _ authFlowRedirectionURI: URL?) async throws -> OpenId4VciService {
 		// Todo: validate tot pre-registered isser by a trusted list
-        logger.warning("Issuer for url \(urlString) not registered.")
+		logger.warning("Issuer for url \(urlString) not registered.")
 		let fallbackService = OpenId4VCIServiceRegistry.shared.getAllServices().first
 		var config: OpenId4VciConfiguration
 		if let fallbackService {
@@ -368,7 +368,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
 		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
-		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { .ignoreSigned }
+		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { trustConfig.issuerMetadataPolicy }
 		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
 		let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
 		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
@@ -399,7 +399,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///  - configuration: Optional OpenId4VciConfiguration to override the default one for this issuance
 	/// - Returns: Array of issued and stored documents
 	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> [WalletStorage.Document] {
-		let issuerMetadataPolicy = configuration?.issuerMetadataPolicy ?? .ignoreSigned
+		let issuerMetadataPolicy = configuration?.issuerMetadataPolicy ?? trustConfig.issuerMetadataPolicy
 		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
 		let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
 		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
