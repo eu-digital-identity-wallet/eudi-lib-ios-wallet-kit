@@ -101,7 +101,6 @@ extension OpenId4VciConfiguration {
 		let publicKey: SecKey
 		let jwsAlgorithm: JWSAlgorithm
 		let jwk: any JWK
-		// let keyId = privateKeyId ?? UUID().uuidString
 		logger.info("Constructing POP for keyId: \(privateKeyId), usage: \(popUsage)")
 		if let keyOptions {
 			// If keyOptions is specified, use it to determine key generation parameters
@@ -169,7 +168,7 @@ extension OpenId4VciConfiguration {
 	}
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
-		let keyId = Self.generatePopKeyId(credentialIssuerId: credentialIssuerId)
+		let keyId = Self.generatePopKeyId(popUsage: .clientAttestation, credentialIssuerId: credentialIssuerId)
 		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else {
 			throw WalletError(description: "Failed to create DPoP constructor for client attestation", code: .internalError)
 		}
@@ -197,11 +196,12 @@ extension OpenId4VciConfiguration {
 	///
 	/// - Parameter credentialIssuerId: The credential issuer identifier to hash
 	/// - Returns: A deterministic, stable key alias for the given issuer
-	static func generatePopKeyId(credentialIssuerId: String) -> String {
+	static func generatePopKeyId(popUsage: PopUsage, credentialIssuerId: String) -> String {
 		// Create a hash of the issuer ID to get a stable, URL-safe identifier
 		let data = Data(credentialIssuerId.utf8)
 		let hash = SHA256.hash(data: data)
 		let hashHex = hash.map { String(format: "%02x", $0) }.joined().prefix(16)
-		return "client-attestation-\(hashHex)"
+		let prefix = switch popUsage { case .clientAttestation: "client-attestation-"; case .dpop: "dpop-" }
+		return "\(prefix)\(hashHex)"
 	}
 }
