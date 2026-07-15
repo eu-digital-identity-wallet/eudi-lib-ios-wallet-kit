@@ -43,13 +43,18 @@ struct IssuanceNotificationTests {
 			keyAttestationsConfig: keyAttestConfig, parUsage: .required(authorizationCodeDPoPBinding: true),
 			requireDpop: true
 		)
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		#else
+		let trustConfig = TrustConfiguration(rootIaca: [])
+		#endif
 		return try OpenId4VciService(
 			uiCulture: nil,
 			config: config,
 			networking: networking,
 			storage: storage,
 			storageService: storageService,
-			trustConfig: .init(trustSource: .etsi(.eudiRef))
+			trustConfig: trustConfig
 		)
 	}
 
