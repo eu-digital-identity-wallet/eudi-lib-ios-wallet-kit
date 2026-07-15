@@ -57,6 +57,8 @@ public struct WalletError: LocalizedError {
 		case issuanceRequestFailed
 		/// The DCQL/VP query resolution was invalid
 		case invalidQueryResolution
+		/// OpenID4VP not secured request
+		case notSecuredRequest
 		/// Response encryption specification missing for directPostJWT
 		case responseEncryptionMissing
 		/// Invalid service name or parameters
