@@ -19,6 +19,7 @@ import Copyable
 import struct OpenID4VP.PreregisteredClient
 import class OpenID4VP.JWSAlgorithm
 import enum OpenID4VP.WebKeySource
+import struct OpenID4VP.WebKeySet
 import enum OpenID4VP.ResponseEncryptionConfiguration
 import struct OpenID4VP.SupportedTransactionDataType
 import enum OpenID4VP.ResponseMode
@@ -118,7 +119,7 @@ public struct OpenId4VpConfiguration: Sendable {
 }
 
 extension PreregisteredClient {
-	public init(clientId: String, verifierApiUri: String, verifierLegalName: String) {
-		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.fetchByReference(url: URL(string: "\(verifierApiUri)/wallet/public-keys.json")!))
+	public init(clientId: String, verifierApiUri: String, verifierLegalName: String, webKeys: WebKeySet) {
+		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.passByValue(webKeys: webKeys))
 	}
 }
