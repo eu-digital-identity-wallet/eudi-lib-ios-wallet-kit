@@ -26,7 +26,7 @@ import struct WalletStorage.Document
 
 public final class BlePresentationService: @unchecked Sendable, PresentationService {
 	var bleTranport: any MdocBleTransport
-	var bleServer: MdocGattServer?
+	var bleServer: (any MdocBleTransport)?
 	let bleTransferMode: BleTransferMode
 	public var status: TransferStatus = .initialized
 	var isPeripheralManagerPoweredOn = false
@@ -56,7 +56,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var deviceResponseBytes: Data?
 	public var responseMetadata: [Data?]!
 
-	public init(parameters: InitializeTransferData) async throws {
+	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
@@ -65,8 +65,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		self.dauthMethod = objs.deviceAuthMethod
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
-		bleTranport = bleTransferMode == .server ? MdocGattServer() : MdocGattCentral()
-		if bleTransferMode == .both { bleServer = MdocGattServer() }
+		let factory = transportFactory ?? DefaultBleTransportFactory()
+		bleTranport = bleTransferMode == .server ? factory.createServer() : factory.createClient()
+		if bleTransferMode == .both { bleServer = factory.createServer() }
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
 		bleTranport.delegate = self
 		bleServer?.delegate = self
@@ -273,11 +274,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		handleSelected = nil
 		// documentIds is populated by userSelected after a successful response build.
-		// docType and displayName are not available on this service; they are populated by the
-		// PresentationSession caller which has access to docIdToPresentInfo.
-let firstDocId = documentIds.first
-let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
-TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
+		// docType and displayName are not available on this service; they are populated by the PresentationSession caller which has access to docIdToPresentInfo.
+		let firstDocId = documentIds.first		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)		
 	}
 	
 	public func waitForDisconnect() async throws {

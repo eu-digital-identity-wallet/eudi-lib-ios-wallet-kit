@@ -38,6 +38,9 @@ public struct EudiWalletConfiguration: Sendable {
 	/// - `.client`: The holder device acts as a GATT central (client), scanning and connecting to the reader's peripheral.
 	/// - `.both`: The holder device supports both peripheral server and central client modes simultaneously.
 	public let bleTransferMode: BleTransferMode
+	/// Optional factory for creating custom BLE transport instances (e.g., L2CAP, BLE client mdoc).
+	/// When `nil`, the default GATT server/central transports are used.
+	public let bleTransportFactory: (any BleTransportFactory)?
 	/// Default service name for the keychain, used if no service name is provided in the initializer
 	static let defaultServiceName: String = "eudiw"
 
@@ -48,7 +51,8 @@ public struct EudiWalletConfiguration: Sendable {
 		deviceAuthMethod: DeviceAuthMethod = .deviceSignature,
 		uiCulture: String? = nil,
 		logFileName: String? = nil,
-		bleTransferMode: BleTransferMode = .server
+		bleTransferMode: BleTransferMode = .server,
+		bleTransportFactory: (any BleTransportFactory)? = nil
 	) {
 		self.serviceName = serviceName ?? Self.defaultServiceName
 		self.accessGroup = accessGroup
@@ -57,5 +61,6 @@ public struct EudiWalletConfiguration: Sendable {
 		self.uiCulture = uiCulture
 		self.logFileName = logFileName
 		self.bleTransferMode = bleTransferMode
+		self.bleTransportFactory = bleTransportFactory
 	}
 }
