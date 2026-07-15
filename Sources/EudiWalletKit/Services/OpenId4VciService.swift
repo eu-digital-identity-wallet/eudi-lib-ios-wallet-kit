@@ -134,7 +134,7 @@ public actor OpenId4VciService {
 	}
 
 	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], nonce: String?) async throws -> KeyAttestationJWT {
-		let jwt = try await self.config.keyAttestationsConfig.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce!)
+		let jwt = try await self.config.keyAttestationsConfig.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce)
 		let keyAttestationJwt: KeyAttestationJWT = try .init(jws: .init(compactSerialization: jwt))
 		return keyAttestationJwt
 	}
