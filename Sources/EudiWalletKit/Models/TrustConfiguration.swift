@@ -31,6 +31,8 @@ public struct TrustConfiguration: Sendable {
 	public let statusTrustPolicy: TrustPolicy
 	/// Clock skew for the status token verifier
 	public let clockSkew: TimeInterval
+
+#if canImport(EudiEtsi1196x2)
 	/// Trust manager for issuer (document-signer) certificates. Falls back to the `default`
 	/// doc-type mappings only when the trust source does not already define its own.
 	/// When a `fallbackTrustSource` is supplied it is consulted for doc types this manager
@@ -63,9 +65,36 @@ public struct TrustConfiguration: Sendable {
 		accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
 	}
 
-	/// The trust policy effective for the given doc type, falling back to `defaultPolicy`.
-	public func policy(for docType: String) -> TrustPolicy {
-		docTypePolicies[docType] ?? defaultPolicy
+	/// The OpenID4VCI issuer-metadata signature policy derived from this configuration.
+	///
+	/// When `requireSignedMetadata` is set the issuer metadata must be signed and its signing
+	/// certificate chain is validated against the issuer trust anchors; otherwise signing is ignored.
+	public var issuerMetadataPolicy: IssuerMetadataPolicy {
+		guard requireSignedMetadata else { return .ignoreSigned }
+		let chainTrust = IssuerMetadataChainTrust(trustManager: accessTrustManager)
+		return .requireSigned(issuerTrust: .byCertificateChain(certificateChainTrust: chainTrust))
+	}
+#else
+	/// Trust manager for issuer (document-signer) certificates backed by platform `SecTrust`.
+	var issuerTrustManager: SecTrustSource
+	/// Trust manager for reader/relying-party access certificates backed by platform `SecTrust`.
+	let accessTrustManager: SecTrustSource
+
+	public init(
+		rootIaca: [[Data]],
+		defaultPolicy: TrustPolicy = .enforce,
+		docTypePolicies: [String: TrustPolicy] = [:],
+		requireSignedMetadata: Bool = true,
+		statusTrustPolicy: TrustPolicy = .enforce,
+		clockSkew: TimeInterval = 60
+	) {
+		self.defaultPolicy = defaultPolicy
+		self.docTypePolicies = docTypePolicies
+		self.requireSignedMetadata = requireSignedMetadata
+		self.statusTrustPolicy = statusTrustPolicy
+		self.clockSkew = clockSkew
+		issuerTrustManager = SecTrustSource(rootIaca: rootIaca, usage: .mdocAuth)
+		accessTrustManager = SecTrustSource(rootIaca: rootIaca, usage: .mdocReaderAuth)
 	}
 
 	/// The OpenID4VCI issuer-metadata signature policy derived from this configuration.
@@ -77,5 +106,12 @@ public struct TrustConfiguration: Sendable {
 		let chainTrust = IssuerMetadataChainTrust(trustManager: accessTrustManager)
 		return .requireSigned(issuerTrust: .byCertificateChain(certificateChainTrust: chainTrust))
 	}
+#endif
+
+	/// The trust policy effective for the given doc type, falling back to `defaultPolicy`.
+	public func policy(for docType: String) -> TrustPolicy {
+		docTypePolicies[docType] ?? defaultPolicy
+	}
 }
+
 

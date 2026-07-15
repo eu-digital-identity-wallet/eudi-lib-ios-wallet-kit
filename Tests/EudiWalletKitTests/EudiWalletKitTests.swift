@@ -40,8 +40,15 @@ struct EudiWalletKitTests {
         let firstConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-1-\(UUID().uuidString)")
         let secondConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-2-\(UUID().uuidString)")
 
-        let firstWallet = try EudiWallet(eudiWalletConfig: firstConfig, trustConfig: .init(trustSource: .etsi(.eudiRef)))
-        let secondWallet = try EudiWallet(eudiWalletConfig: secondConfig, trustConfig: .init(trustSource: .etsi(.eudiRef)))
+        #if canImport(EudiEtsi1196x2)
+        let trustConfig1 = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trustConfig2 = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        #else
+        let trustConfig1 = TrustConfiguration(rootIaca: [])
+        let trustConfig2 = TrustConfiguration(rootIaca: [])
+        #endif
+        let firstWallet = try EudiWallet(eudiWalletConfig: firstConfig, trustConfig: trustConfig1)
+        let secondWallet = try EudiWallet(eudiWalletConfig: secondConfig, trustConfig: trustConfig2)
 
         #expect(firstWallet.eudiWalletConfig.serviceName != secondWallet.eudiWalletConfig.serviceName)
     }
@@ -391,8 +398,13 @@ struct EudiWalletKitTests {
 	func testCreateKeyBatchWithAttestation() async throws {
 		let storageService = TestDataStorageService()
 		let provider = RecordingWalletAttestationsProvider()
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		#else
+		let trustConfig = TrustConfiguration(rootIaca: [])
+		#endif
 		let wallet = try EudiWallet(
-			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"), trustConfig: .init(trustSource: .etsi(.eudiRef)),
+			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"), trustConfig: trustConfig,
 			storageService: storageService,
 			openID4VciConfigurations: [
 				"attested_issuer": OpenId4VciConfiguration(
@@ -427,14 +439,20 @@ struct EudiWalletKitTests {
 	private func makeVciService(storageService: TestDataStorageService, issuerURL: String = "https://dev.issuer.eudiw.dev") throws -> OpenId4VciService {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
-		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
+		let provider = RecordingWalletAttestationsProvider()
+		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider), parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		#else
+		let trustConfig = TrustConfiguration(rootIaca: [])
+		#endif
 		return try OpenId4VciService(
 			uiCulture: nil,
 			config: config,
 			networking: networking,
 			storage: storage,
 			storageService: storageService,
-			trustConfig: .init(trustSource: .etsi(.eudiRef))
+			trustConfig: trustConfig
 		)
 	}
 

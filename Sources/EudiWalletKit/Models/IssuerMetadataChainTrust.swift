@@ -18,6 +18,7 @@ import Foundation
 import MdocSecurity18013
 import OpenID4VCI
 
+#if canImport(EudiEtsi1196x2)
 /// `CertificateChainTrust` protocol required by OpenID4VCI's `IssuerMetadataPolicy`.
 public struct IssuerMetadataChainTrust: CertificateChainTrust {
 	public let trustManager: EtsiTrustManager
@@ -32,3 +33,20 @@ public struct IssuerMetadataChainTrust: CertificateChainTrust {
 		return await trustManager.validateCertTrustPath(chain: chainData).0
 	}
 }
+#else
+/// `CertificateChainTrust` protocol required by OpenID4VCI's `IssuerMetadataPolicy`.
+/// Uses platform `SecTrust`-based validation when EudiEtsi1196x2 is not available.
+public struct IssuerMetadataChainTrust: CertificateChainTrust {
+	public let trustManager: SecTrustSource
+
+	public init(trustManager: SecTrustSource) {
+		self.trustManager = trustManager
+	}
+
+	public func isValid(chain: [String]) async -> Bool {
+		let chainData = chain.compactMap { Data(base64Encoded: $0) }
+		guard !chainData.isEmpty, chainData.count == chain.count else { return false }
+		return await trustManager.validateCertTrustPath(chain: chainData).0
+	}
+}
+#endif
