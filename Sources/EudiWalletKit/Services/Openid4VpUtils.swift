@@ -206,7 +206,7 @@ class OpenId4VpUtils {
 				}
 				let path = ClaimPath(mappedElements)
 				paths.append(path)
-				values[path] = disclosures.compactMap { disclosure in
+				values[path] = disclosures.map { disclosure in
 					guard let data = Data(base64URLEncoded: disclosure),
 						  let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
 						  json.count >= 3 else { return disclosure }
