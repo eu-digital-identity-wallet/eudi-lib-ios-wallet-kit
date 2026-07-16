@@ -236,7 +236,7 @@ class OpenId4VpUtils {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found", code: .internalError) }
 		let allPaths = Array(allPathsDict.keys)
 		print(allPaths.map { p in p.value.map { $0.description } })
-		let query = Set(requestItems.map(\.claimPath)) //  allPaths.filter { path in requestItems.contains(where: { r in r.claimPath == path }) })
+		let query = Set(requestItems.map(\.claimPath)) 
 		for q in query { print(q.value.map(\.description) ) }
 		let presentedSdJwt = try sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
