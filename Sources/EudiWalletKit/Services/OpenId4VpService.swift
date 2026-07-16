@@ -117,11 +117,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case .notSecured(data: let rrd):
 			if case .redirectUri = rrd.client { return try handleRequestData(rrd) }
-			else { throw WalletError(description: "Not secured request", code: .invalidQueryResolution) }
+			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
 			if let details { logger.error("Details: \(details)") }
-			throw WalletError(description: "Invalid DCQL query: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: .invalidQueryResolution, innerError: error)
+			throw WalletError(description: "OpenID4VP request error: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: readerCertificateValidationMessage != nil ? .trustError : .invalidQueryResolution, innerError: error)
 		case let .jwt(request: rrd):
 			return try handleRequestData(rrd)
 		}

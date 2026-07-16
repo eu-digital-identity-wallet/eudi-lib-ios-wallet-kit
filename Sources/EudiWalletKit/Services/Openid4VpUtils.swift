@@ -206,7 +206,12 @@ class OpenId4VpUtils {
 				}
 				let path = ClaimPath(mappedElements)
 				paths.append(path)
-				values[path] = disclosures
+				values[path] = disclosures.map { disclosure in
+					guard let data = Data(base64URLEncoded: disclosure),
+						  let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
+						  json.count >= 3 else { return disclosure }
+					return if let strValue = json[2] as? String { strValue } else { "\(json[2])" }
+				}
 			}
 			claimPaths[docId] = paths
 			claimValues[docId] = values
@@ -230,8 +235,9 @@ class OpenId4VpUtils {
 	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found", code: .internalError) }
 		let allPaths = Array(allPathsDict.keys)
-		let query = Set(allPaths.filter { path in requestItems.contains(where: { r in r.claimPath == path }) })
-		for q in query { print(q.value.map(\.description) ) }
+		print(allPaths.map { p in p.value.map { $0.description } })
+		let query = Set(requestItems.map(\.claimPath)) 
+		logger.info("Dcql query paths: \(query.map { $0.value.map(\.description) })")
 		let presentedSdJwt = try sdJwt.present(query: query)
 		guard let presentedSdJwt else { return nil }
 		let digestCreator = DigestCreator(hashingAlgorithm: hashingAlg)
@@ -297,7 +303,7 @@ extension CredentialQuery {
 }
 
 extension ClaimPath {
- 	public func contains2(_ that: ClaimPath) -> Bool { zip(self.value, that.value).allSatisfy { (selfElement, thatElement) in selfElement.contains(thatElement) } }
+	public func contains2(_ that: ClaimPath) -> Bool { zip(self.value, that.value).allSatisfy { (selfElement, thatElement) in selfElement.contains(thatElement) } }
 }
 
 extension DCQL {
@@ -367,7 +373,7 @@ extension OpenId4VpUtils {
 				}
 			}
 			if credentialQueryResults[credQuery.id]?.isEmpty != false, dcql.credentialSets == nil {
-   			 throw lastError ?? WalletError(description: "No credential satisfies query \(credQuery.id.value)", code: .dcqlQueryNotSatisfied)
+			 throw lastError ?? WalletError(description: "No credential satisfies query \(credQuery.id.value)", code: .dcqlQueryNotSatisfied)
 			}
 		}
 		// Step 2: Handle credential_sets if present
