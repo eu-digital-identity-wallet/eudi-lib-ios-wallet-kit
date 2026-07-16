@@ -310,7 +310,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		let consent: ClientConsent = if let vpTokens, dcql != nil {
 			// Group by DCQL query id -> array of VPs
 			.vpToken(vpContent: .dcql(verifiablePresentations: Dictionary(grouping: vpTokens, by: { try! QueryId(value: $0.0) }).mapValues { $0.map { $0.2 } } ))
-		} else { .negative(message: "Rejected") }
+		} else { .negative(message: "access_denied") }
 		// Generate a direct post authorisation response, applying wallet-preferred response mode if configured
 		let response = try buildAuthorizationResponse(resolved: resolved, consent: consent)
 		let result: DispatchOutcome = try await openId4Vp.dispatch(response: response)
