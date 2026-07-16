@@ -22,12 +22,12 @@ dependencies: [
 The ``EudiWallet`` class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
 ```swift
-	let certificates = ["pidissuerca02_cz", "pidissuerca02_ee", "pidissuerca02_eu", "pidissuerca02_lu", "pidissuerca02_nl", "pidissuerca02_pt", "pidissuerca02_ut"]
-    wallet = try! EudiWallet(serviceName: "my_wallet_app", trustedReaderCertificates: certificates.map { Data(name: $0, ext: "der")! }, logFileName: "temp.txt")
-    wallet.userAuthenticationRequired = true
-    wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns, .x509Hash])
-    wallet.transactionLogger = MyFileTransactionLogger(wallet: wallet)
-	wallet.loadAllDocuments()
+let config = EudiWalletConfiguration(serviceName: "my_wallet_app", logFileName: "temp.txt")
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
+wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns, .x509Hash])
+wallet.transactionLogger = MyFileTransactionLogger(wallet: wallet)
+wallet.loadAllDocuments()
 ```
 
 ### BLE Transfer Mode
@@ -42,11 +42,28 @@ You can set it during initialization via ``EudiWalletConfiguration/bleTransferMo
 ```swift
 let config = EudiWalletConfiguration(
     serviceName: "my_wallet_app",
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
     bleTransferMode: .server  // default; use .client or .both as needed
 )
-let wallet = try! EudiWallet(eudiWalletConfig: config)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .client
+```
+
+### BLE Transport Factory
+
+The ``EudiWallet/bleTransportFactory`` property lets you plug in a custom BLE transport implementation for proximity presentation. This enables alternative BLE communication channels (e.g., L2CAP or a custom BLE client mdoc transport) without modifying the library.
+
+A transport factory conforms to the `BleTransportFactory` protocol and provides `createServer()` and `createClient()` methods that each return an `MdocBleTransport` instance. When `nil` (the default), `DefaultBleTransportFactory` is used, which creates the standard GATT server/central transports.
+
+```swift
+// Provide a custom factory at initialization
+let config = EudiWalletConfiguration(
+    serviceName: "my_wallet_app",
+    bleTransferMode: .server,
+    bleTransportFactory: MyCustomTransportFactory()
+)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 ```
 
 ### OpenID4VCI Configuration

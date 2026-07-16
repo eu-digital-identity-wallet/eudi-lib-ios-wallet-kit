@@ -141,8 +141,10 @@ let config = OpenId4VciConfiguration(
   issuerMetadataPolicy: issuerMetadataPolicy
 )
 
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
 let wallet = try EudiWallet(
-  eudiWalletConfig: EudiWalletConfiguration(trustedReaderCertificates: []),
+  eudiWalletConfig: EudiWalletConfiguration(),
+  trustConfig: trustConfig,
   openID4VciConfigurations: ["trusted_issuer": config]
 )
 

@@ -13,9 +13,9 @@ Assuming that the application developer has implemented the SecureArea protocol 
 ```swift
 let keyChainStorage = KeyChainSecureKeyStorage(serviceName: self.serviceName, accessGroup: nil)
 let mySecureArea = MySecureArea(storage: keyChainStorage)
-let wallet = try! EudiWallet(serviceName: "wallet_dev_ui",
-		trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
-		secureAreas: [mySecureArea])
+let config = EudiWalletConfiguration(serviceName: "wallet_dev_ui")
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig, secureAreas: [mySecureArea])
 ```
 
 ### Secure key creation on issuing

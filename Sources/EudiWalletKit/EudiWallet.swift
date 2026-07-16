@@ -57,6 +57,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public private(set) var modelFactory: (any DocClaimsDecodableFactory)?
 	/// Ble transfer mode
 	public var bleTransferMode: BleTransferMode = .server
+	/// Factory for creating BLE transport instances. When nil, default GATT transports are used.
+	public var bleTransportFactory: (any BleTransportFactory)?
 	/// Repository for zk system parameters, used in mdoc presentation when zk proofs are required.
 	public var zkSystemRepository: ZkSystemRepository?
 
@@ -104,6 +106,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.modelFactory = modelFactory
 		self.zkSystemRepository = zkSystemRepository
 		self.bleTransferMode = eudiWalletConfig.bleTransferMode
+		self.bleTransportFactory = eudiWalletConfig.bleTransportFactory
 		storage = StorageManager(storageService: storageServiceObj, modelFactory: modelFactory)
 		if let secureAreas, !secureAreas.isEmpty {
 			for asa in secureAreas { SecureAreaRegistry.shared.register(secureArea: asa) }
@@ -628,7 +631,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters)
+				let bleSvc = try await BlePresentationService(parameters: parameters, transportFactory: bleTransportFactory)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
 				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in

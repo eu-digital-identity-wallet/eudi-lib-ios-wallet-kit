@@ -339,8 +339,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				}
 			}
 			let responsePayload = VpResponsePayload(verifiable_presentations: vpTokenValues, data_formats: data_formats, transaction_data: transactionData)
-			// Resolve document identity from the first presented document.
-			// docType comes from transferInfo.idsToDocTypes; displayName is not held on this service.
+			// Resolve document identity from the first presented document. docType comes from transferInfo.idsToDocTypes; displayName is not held on this service.
 			let firstDocId = vpTokens.compactMap { $0.1 }.first
 			let firstDocType = firstDocId.flatMap { transferInfo.idsToDocTypes[$0] }
 			TransactionLogUtils.setTransactionLogResponseInfo(deviceResponseBytes: try? JSONEncoder().encode(responsePayload), dataFormat: .json, sessionTranscript: Data(sessionTranscript.taggedEncoded.encode(options: CBOROptions())), responseMetadata: responseMetadata, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)

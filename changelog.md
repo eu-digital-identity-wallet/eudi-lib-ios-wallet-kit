@@ -7,6 +7,7 @@ Trust validation now uses ETSI Trusted Lists via `EtsiTrustManager` instead of m
 - **Issuer certificate validation** during OpenID4VCI issuance uses the configured issuer trust manager (with optional fallback trust source).
 - **Reader/relying-party certificate validation** during OpenID4VP and BLE presentations uses the access trust manager (WRPAC verification context).
 - **Status token signature validation** now verifies the x5c certificate chain against the trust configuration instead of ignoring signatures.
+- **`statusTrustPolicy`** allows controlling trust failure behaviour specifically for status list tokens (`.enforce` or `.warning`). Defaults to `.enforce`.
 - **Signed issuer metadata** is validated against the trust anchors when `requireSignedMetadata` is enabled (default).
 - Per doc-type trust policy overrides are supported via `TrustConfiguration.docTypePolicies`.
 
