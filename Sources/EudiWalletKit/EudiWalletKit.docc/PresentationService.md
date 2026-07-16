@@ -21,11 +21,48 @@ Set it through ``EudiWalletConfiguration/bleTransferMode`` during initialization
 
 ```swift
 let config = EudiWalletConfiguration(
-    trustedReaderCertificates: [Data(name: "eudi_pid_issuer_ut", ext: "der")!],
     bleTransferMode: .server  // default
 )
-let wallet = try! EudiWallet(eudiWalletConfig: config)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .both
+```
+
+## BLE Transport Factory
+
+The ``EudiWallet/bleTransportFactory`` property allows you to inject a custom BLE transport implementation for proximity presentation. This is useful when you need to use alternative BLE communication channels such as L2CAP or a custom BLE client mdoc transport.
+
+The factory conforms to the `BleTransportFactory` protocol, which requires two methods:
+- `createServer()` – returns a transport instance acting as a GATT peripheral (server).
+- `createClient()` – returns a transport instance acting as a GATT central (client).
+
+When no factory is provided (the default), `DefaultBleTransportFactory` is used, which creates standard GATT server and central transports from the `MdocDataTransfer18013` library.
+
+You can set the factory during initialization via ``EudiWalletConfiguration/bleTransportFactory`` or assign it directly on the wallet instance before starting a BLE presentation:
+
+```swift
+// Custom factory example
+struct L2CAPTransportFactory: BleTransportFactory {
+    func createServer() -> any MdocBleTransport {
+        // return your custom L2CAP server transport
+    }
+    func createClient() -> any MdocBleTransport {
+        // return your custom L2CAP client transport
+    }
+}
+
+// Set via configuration
+let config = EudiWalletConfiguration(
+    bleTransferMode: .server,
+    bleTransportFactory: L2CAPTransportFactory()
+)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef),fallbackTrustSource: nil)
+let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
+```
+
+```swift
+// Or set directly on the wallet instance
+wallet.bleTransportFactory = L2CAPTransportFactory()
 ```
 
 ```swift

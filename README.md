@@ -163,6 +163,7 @@ let trustConfig = TrustConfiguration(
     defaultPolicy: .enforce,             // .enforce (reject on failure) or .warning (log only)
     docTypePolicies: [:],                // optional per-doc-type overrides of defaultPolicy
     requireSignedMetadata: true,         // require signed OpenID4VCI issuer metadata
+    statusTrustPolicy: .warning,         // trust policy for status token signature validation
     clockSkew: 60                        // allowed clock skew (seconds) for status token verification
 )
 ```
@@ -170,6 +171,8 @@ let trustConfig = TrustConfiguration(
 The `fallbackTrustSource` is optional (pass `nil` to disable it). When the primary trust source cannot evaluate a chain — for example, it has no verification context configured for the requested doc type — validation is delegated to the fallback source.
 
 Use `defaultPolicy` to control the behaviour on a trust failure: `.enforce` rejects the certificate chain, while `.warning` logs the failure but allows the operation to continue. Provide `docTypePolicies` to override the policy for specific doc types.
+
+The `statusTrustPolicy` parameter controls how the wallet handles trust failures when validating status list token signatures (used for document revocation/suspension checks). It defaults to `.enforce`, which rejects tokens whose signing certificate chain cannot be validated. Set it to `.warning` to log the trust failure but still allow the status check to succeed — useful during development or when status token issuers use certificates outside the configured trust anchors.
 
 ### OpenID4VCI Configuration
 
