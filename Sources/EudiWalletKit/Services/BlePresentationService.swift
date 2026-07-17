@@ -34,6 +34,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var continuationPowerOn: CheckedContinuation<Void, Error>?
 	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
 	var continuationDisconnect: CheckedContinuation<Void, Error>?
+    /// Continuation for awaiting L2CAP PSM publication
+    var psm: UInt16?
 	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
@@ -102,19 +104,17 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		try await deviceEngagement!.makePrivateKey(secureArea: secureArea, keyOptions: keyOptions)
 		sessionEncryption = nil
 #if os(iOS)
-		qrCodePayload = deviceEngagement!.getQrCodePayload()
+
 		guard bleTranport.isAuthorized else {
 			throw MdocHelpers.makeError(code: .bleNotAuthorized)
 		}
 		//if !bleTranport.isBlePoweredOn {
-			try await withCheckedThrowingContinuation { c in
-				continuationPowerOn = c
-				evaluatePowerOnStatus()
-			}
+		try await withCheckedThrowingContinuation { c in
+			continuationPowerOn = c
+			evaluatePowerOnStatus()
+		}
 		//} // ensure that BLE is powered on before proceeding
 		continuationPowerOn = nil
-		status = .qrEngagementReady
-		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
 		bleTranport.startBleAdvertising()
 		bleServer?.startBleAdvertising()
@@ -126,11 +126,14 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Returns: The image data for the QR code
 	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
 		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), keyOptions: keyOptions)
+		if bleTranport.supportsL2cap, let psm { deviceEngagement?.updatePsm(psm) }
+		qrCodePayload = deviceEngagement!.getQrCodePayload()
+		logger.info("Created qrCode payload: \(qrCodePayload!)")
+		status = .qrEngagementReady
 		return status == .qrEngagementReady ? (qrCodePayload ?? "") : ""
 	}
 
-	
-	func handleStatusChange(_ newValue: TransferStatus) async {
+func handleStatusChange(_ newValue: TransferStatus) async {
 		guard !isInErrorState else {
 			return
 		}
@@ -275,7 +278,10 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		handleSelected = nil
 		// documentIds is populated by userSelected after a successful response build.
 		// docType and displayName are not available on this service; they are populated by the PresentationSession caller which has access to docIdToPresentInfo.
-		let firstDocId = documentIds.first		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)		
+		let firstDocId = documentIds.first
+		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
+		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
+		
 	}
 	
 	public func waitForDisconnect() async throws {
@@ -339,6 +345,14 @@ public func didPoweredOn(isPeripheralManager: Bool) {
 	public func didReceiveRequest(_ data: Data) {
 		logger.info("Ble received request data of length: \(data.count)")
 		readBuffer = data
+	}
+
+	/// - Parameters:
+	///   - request: Request information
+	///   - handleSelected: Callback function to call after user selection of items to send
+	public func didPublishedPsmChannel(psm: UInt16?) {
+		if let psm { logger.info("Ble published PSM channel: \(psm)") }
+		self.psm = psm
 	}
 
 }
