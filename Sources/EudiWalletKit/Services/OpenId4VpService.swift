@@ -113,7 +113,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> [UserRequestInfo] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw WalletError(description: "Invalid link \(openid4VPlink)", code: .invalidQueryResolution) }
-		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
+		let dcqlQ = decodeDocuments()
+		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf(dcqlQ: dcqlQ))
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case .notSecured(data: let rrd, policyViolations: let violations):
 			if !violations.isEmpty { logger.warning("Policy warnings: \(violations.mapValues{$0.map(\.message)})") }
@@ -162,7 +163,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let deviceRequestBytes = try? JSONEncoder().encode(dcql)
 			let (fmtsReq, imap, zkSpecMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
-			decodeDocuments()
+			dcqlQueryable = decodeDocuments()
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, docTypeDisplayNames: docTypeDisplayNames)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
@@ -225,7 +226,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return (VerifiablePresentation.generic(vpTokenStr), vpTokenData, resp.responseMetadata, resp.zkpDocumentIds)
 	}
 
-	func decodeDocuments() {
+	func decodeDocuments() -> DefaultDcqlQueryable {
+		if formatsRequested == nil {
+			// Derive formatsRequested from existing document data when not yet set (e.g. early policy validation)
+			var fmts = [DocType: DocDataFormat]()
+			for (docId, docType) in transferInfo.idsToDocTypes {
+				if let fmt = transferInfo.dataFormats[docId] { fmts[docType] = fmt }
+			}
+			formatsRequested = fmts
+		}
 		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
 		let parser = CompactParser()
 		let docJwtStrings = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
@@ -239,7 +248,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		var claimValues = [Document.ID: [ClaimPath: [String]]]()
 		OpenId4VpUtils.makeCborClaimData(from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
 		OpenId4VpUtils.makeSdJwtClaimData(from: docsSdJwt, claimPaths: &claimPaths, claimValues: &claimValues)
-		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+		let defaultDcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+		return defaultDcqlQueryable
 	}
 
 	/// Send response via openid4vp
@@ -367,7 +377,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	}
 
 	/// OpenId4VP wallet configuration
-	func getWalletConf() -> OpenId4VPConfiguration? {
+	func getWalletConf(dcqlQ: DefaultDcqlQueryable?) -> OpenId4VPConfiguration? {
 		guard let rsaPrivateKey = try? KeyController.generateRSAPrivateKey(), let privateKey = try? KeyController.generateECDHPrivateKey(),
 		let rsaPublicKey = try? KeyController.generateRSAPublicKey(from: rsaPrivateKey) else { return nil }
 		guard let rsaJWK = try? RSAPublicKey(publicKey: rsaPublicKey, additionalParameters: ["use": "sig", "kid": UUID().uuidString, "alg": "RS256"]) else { return nil }
@@ -393,7 +403,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			session: networking,
 			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default(),
 			registrationCertificatePolicy: openID4VpConfig.registrationCertificatePolicy ??
-				.default(certificateTrust: { _ in true}, policyDcql: { _ in nil}))
+				.default(certificateTrust: { _ in true}, dcqlQ: dcqlQ))
 		return res
 	}
 
@@ -402,7 +412,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// When not set, delegates to the standard `AuthorizationResponse` init (current behavior).
 	func buildAuthorizationResponse(resolved: ResolvedRequestData, consent: ClientConsent) throws -> AuthorizationResponse {
 		guard let preferred = openID4VpConfig.preferredResponseMode else {
-			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(dcqlQ: dcqlQueryable), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
 		}
 		let request = resolved.request
 		// Extract the response URI from the request's response mode
@@ -414,7 +424,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		case .some(.none), nil: nil
 		}
 		guard let uri = responseURI else {
-			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
+			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(dcqlQ: dcqlQueryable), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
 		}
 		let payload: AuthorizationResponsePayload
 		switch consent {

@@ -637,7 +637,7 @@ extension RegistrationCertificatePolicy {
 	/// - Returns: A policy that warns when the request DCQL is a superset of the policy DCQL
 	static func `default`(
 	  certificateTrust: @escaping CertificateTrust,
-	  policyDcql: @escaping @Sendable (_ wrprc: WRPRegistrationCertificate) async -> DCQL?
+	  dcqlQ: DefaultDcqlQueryable?
 	) -> RegistrationCertificatePolicy {
 	  RegistrationCertificatePolicy(
 		certificateTrust: certificateTrust,
@@ -645,10 +645,12 @@ extension RegistrationCertificatePolicy {
 			do {
 				let jws = try JWS(jwsString: wrprc.jwt)
 				let policy = try JSONDecoder().decode(WRPRegistrationPolicy.self, from: jws.payload)
-				return  ["":OpenId4VpUtils.validateDcqlPolicy(dcql: dcql, policy: policy)]
+				guard let dcqlQ else { throw WalletError(description: "DCQL queryable not computed", code: .internalError)}
+				let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQ)
+				return OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
 			} catch {
 				print(error)
-			  return [:]
+				return ["": [.error(PolicyViolationError(code: "Internal", message: error.localizedDescription))]]
 		  }
 		}
 	  )

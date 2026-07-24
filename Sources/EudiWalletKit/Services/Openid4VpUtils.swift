@@ -490,50 +490,53 @@ extension OpenId4VpUtils {
 	///   - dcql: The DCQL from the authorization request
 	///   - policyDcql: The DCQL declared in the WRPRC (permitted scope)
 	/// - Returns: Warnings for each extra claim path found in the request but not in the policy
-	static func validateDcqlPolicy(dcql: DCQL, policy: WRPRegistrationPolicy) -> [PolicyViolation] {
-	  var violations: [PolicyViolation] = []
-/*
-	  for requestCredential in dcql.credentials {
-		// Find matching policy credential by format and query id
-		let policyCredential = policy.credentials.first { policyCredential in
-		  policyCredential.format == requestCredential.format
-		  && policyCredential.id == requestCredential.id
+	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WRPRegistrationPolicy) -> [String:[PolicyViolation]] {
+		var result = [String: [PolicyViolation]]()
+		for (key, selectionSet) in credentialSetOptions {
+			var violations = [PolicyViolation]()
+			for selection in selectionSet {
+				// Find matching policy credential by doctype or vct
+				let policyCredential = policy.credentials.first { policyCred in
+					if let doctypeValue = policyCred.meta.doctypeValue {
+						return doctypeValue == selection.docType
+					}
+					if let vctValues = policyCred.meta.vctValues {
+						return vctValues.contains(selection.docType)
+					}
+					return false
+				}
+				guard let policyCredential else {
+					violations.append(.warning(PolicyViolationWarning(
+						code: "DCQL_EXTRA_CREDENTIAL",
+						message: "Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
+					)))
+					continue
+				}
+				// Compare claims: find claims in request that are not covered by policy
+				let requestClaims = selection.claimQueries
+				guard !requestClaims.isEmpty else { continue }
+				let policyPaths: Set<[String]> = Set(policyCredential.claim.map { $0.path.compactMap { $0 } })
+				let extraClaims = requestClaims.filter { requestClaim in
+					let claimPath = requestClaim.path.value.map(\.claimName)
+					return !policyPaths.contains(where: { policyPath in
+						claimPath == policyPath
+					})
+				}
+				if !extraClaims.isEmpty {
+					let extraPaths = extraClaims
+						.map { $0.path.value.map(\.description).joined(separator: "/") }
+						.joined(separator: ", ")
+					violations.append(.warning(PolicyViolationWarning(
+						code: "DCQL_EXTRA_CLAIMS",
+						message: "Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
+					)))
+				}
+			}
+			if !violations.isEmpty {
+				result[key] = violations
+			}
 		}
-
-		guard let policyCredential else {
-		  // No matching credential in policy — warn about the entire credential query
-		  violations.append(.warning(PolicyViolationWarning(
-			code: "DCQL_EXTRA_CREDENTIAL",
-			message: "Credential query '\(requestCredential.id.value)' (format: \(requestCredential.format.format)) is not declared in the registration certificate policy"
-		  )))
-		  continue
-		}
-
-		// Compare claims: find claims in request that are not covered by policy
-		guard let requestClaims = requestCredential.claims else { continue }
-		let policyClaims = policyCredential.claims ?? []
-
-		let policyPaths = Set(policyClaims.map(\.path))
-
-		let extraClaims = requestClaims.filter { requestClaim in
-		  !policyPaths.contains(where: { policyPath in
-			requestClaim.path == policyPath
-		  })
-		}
-
-		if !extraClaims.isEmpty {
-		  let extraPaths = extraClaims
-			.map { $0.path.value.map(\.description).joined(separator: "/") }
-			.joined(separator: ", ")
-
-		  violations.append(.warning(PolicyViolationWarning(
-			code: "DCQL_EXTRA_CLAIMS",
-			message: "Credential '\(requestCredential.id.value)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
-		  )))
-		}
-	  }
-*/
-	  return violations
+		return result
 	}
 
 	/// Resolves claims for a specific credential query and credential
