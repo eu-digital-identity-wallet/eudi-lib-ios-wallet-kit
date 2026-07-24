@@ -1218,11 +1218,11 @@ struct DcqlQueryTests {
 		)
 	}
 
-	private func makePolicyCredential(doctype: String? = nil, vctValues: [String]? = nil, claimPaths: [[String?]]) -> PolicyCredential {
+	private func makePolicyCredential(doctype: String? = nil, vctValues: [String]? = nil, claimPaths: [[String]]) -> PolicyCredential {
 		PolicyCredential(
 			format: doctype != nil ? "mso_mdoc" : "dc+sd-jwt",
 			meta: Meta(vctValues: vctValues, doctypeValue: doctype),
-			claim: claimPaths.map { PolicyClaim(path: $0) }
+			claim: claimPaths.map { PolicyClaim(path: ClaimPath($0.map { ClaimPathElement.claim(name: $0) })) }
 		)
 	}
 
