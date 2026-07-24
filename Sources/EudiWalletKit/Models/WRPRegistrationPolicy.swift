@@ -15,9 +15,10 @@
  */
 
 import Foundation
+import struct OpenID4VP.ClaimPath
 
 // MARK: - WRPRegistrationPolicy
-struct WRPRegistrationPolicy: Codable {
+struct WRPRegistrationPolicy: Decodable {
 	let entitlements: [String]
 	let sub: String
 	let country: String
@@ -58,7 +59,7 @@ struct WRPRegistrationPolicy: Codable {
 }
 
 // MARK: - Credential
-struct PolicyCredential: Codable {
+struct PolicyCredential: Decodable {
 	let format: String
 	let meta: Meta
 	let claim: [PolicyClaim]
@@ -71,8 +72,8 @@ struct PolicyCredential: Codable {
 }
 
 // MARK: - Claim
-struct PolicyClaim: Codable {
-	let path: [String?]
+struct PolicyClaim: Decodable {
+	let path: ClaimPath
 
 	enum CodingKeys: String, CodingKey {
 		case path = "path"
@@ -80,7 +81,7 @@ struct PolicyClaim: Codable {
 }
 
 // MARK: - Meta
-struct Meta: Codable {
+struct Meta: Decodable {
 	let vctValues: [String]?
 	let doctypeValue: String?
 
@@ -91,7 +92,7 @@ struct Meta: Codable {
 }
 
 // MARK: - Purpose
-struct Purpose: Codable {
+struct Purpose: Decodable {
 	let lang: String
 	let value: String
 
@@ -102,7 +103,7 @@ struct Purpose: Codable {
 }
 
 // MARK: - Status
-struct Status: Codable {
+struct Status: Decodable {
 	let statusList: StatusList
 
 	enum CodingKeys: String, CodingKey {
@@ -111,7 +112,7 @@ struct Status: Codable {
 }
 
 // MARK: - StatusList
-struct StatusList: Codable {
+struct StatusList: Decodable {
 	let idx: Int
 	let uri: String
 
@@ -122,7 +123,7 @@ struct StatusList: Codable {
 }
 
 // MARK: - SupervisoryAuthority
-struct SupervisoryAuthority: Codable {
+struct SupervisoryAuthority: Decodable {
 	let email: String
 	let phone: String
 	let uri: String

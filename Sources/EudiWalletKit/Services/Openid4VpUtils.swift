@@ -515,12 +515,10 @@ extension OpenId4VpUtils {
 				// Compare claims: find claims in request that are not covered by policy
 				let requestClaims = selection.claimQueries
 				guard !requestClaims.isEmpty else { continue }
-				let policyPaths: Set<[String]> = Set(policyCredential.claim.map { $0.path.compactMap { $0 } })
+				let policyPaths: Set<ClaimPath> = Set(policyCredential.claim.map(\.path))
 				let extraClaims = requestClaims.filter { requestClaim in
-					let claimPath = requestClaim.path.value.map(\.claimName)
-					return !policyPaths.contains(where: { policyPath in
-						claimPath == policyPath
-					})
+					let claimPath = requestClaim.path
+					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })
 				}
 				if !extraClaims.isEmpty {
 					let extraPaths = extraClaims
