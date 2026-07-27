@@ -41,11 +41,11 @@ public final class SdJwtUtils {
 		let statusListJson = statusJson?["status_list"]?.dictionary
 		let statusURI = statusListJson?["uri"]?.string
 		let statusIndex = statusListJson?["idx"]?.int32
-		let statusIdentifier: StatusIdentifier? = if let statusURI, let statusIndex { StatusIdentifier(idx: Int(statusIndex), uriString: statusURI) } else { nil }
+		let statusList: StatusList? = if let statusURI, let statusIndex { StatusList(idx: Int(statusIndex), uri: statusURI) } else { nil }
 		let credentialIssuerIdentifier = md?.credentialIssuerIdentifier
 		let configurationIdentifier = md?.configurationIdentifier
 		let displayName = docMetadata?.getDisplayName(uiCulture)
-		let configuration = DocClaimsModelConfiguration(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: displayName, display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusIdentifier: statusIdentifier, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
+		let configuration = DocClaimsModelConfiguration(id: doc.id, createdAt: doc.createdAt, docType: doc.docType, displayName: displayName, display: docMetadata?.display, issuerDisplay: docMetadata?.issuerDisplay, credentialIssuerIdentifier: credentialIssuerIdentifier, configurationIdentifier: configurationIdentifier, validFrom: validFrom, validUntil: validUntil, statusList: statusList, credentialsUsageCounts: nil, credentialPolicy: docKeyInfo.credentialPolicy, secureAreaName: docKeyInfo.secureAreaName, modifiedAt: doc.modifiedAt, docClaims: docClaims, docDataFormat: .sdjwt, hashingAlg: recreatedClaims.hashingAlg)
 		return DocClaimsModel(configuration: configuration)
 	}
 

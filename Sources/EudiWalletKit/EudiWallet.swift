@@ -31,6 +31,7 @@ import UIKit
 import protocol OpenID4VCI.Networking
 import OpenID4VCI
 import eudi_lib_sdjwt_swift
+import struct MdocDataModel18013.StatusList
 
 /// User wallet implementation
 public final class EudiWallet: ObservableObject, @unchecked Sendable {
@@ -697,8 +698,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	/// Get document status
-	public func getDocumentStatus(for statusIdentifier: StatusIdentifier) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusIdentifier: statusIdentifier, trustConfig: trustConfig)
+	public func getDocumentStatus(for statusList: StatusList) async throws -> CredentialStatus {
+		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig)
 		let status = try await actor.getStatus()
 		return status
 	}
