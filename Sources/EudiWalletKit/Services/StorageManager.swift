@@ -233,8 +233,8 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 
 	public static func getCredentialsUsageCount(id: String, secureAreaName: String?) async throws -> CredentialsUsageCounts? {
 		let kbi = try await SecureAreaRegistry.shared.get(name: secureAreaName).getKeyBatchInfo(id: id)
-		let remaining: Int? = if kbi.credentialPolicy == .rotateUse { nil } else { kbi.usedCounts.count { $0 == 0 } }
-		return remaining.map { try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: $0) }
+		let remaining = if kbi.credentialPolicy == .rotateUse { kbi.usedCounts.count } else { kbi.usedCounts.count { $0 == 0 } }
+		return try! CredentialsUsageCounts(total: kbi.usedCounts.count, remaining: remaining)
 	}
 
 	/// Load documents from storage
