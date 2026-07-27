@@ -103,24 +103,9 @@ struct Purpose: Decodable {
 }
 
 // MARK: - Status
-struct Status: Decodable {
-	let statusList: StatusList
 
-	enum CodingKeys: String, CodingKey {
-		case statusList = "status_list"
-	}
-}
 
-// MARK: - StatusList
-struct StatusList: Decodable {
-	let idx: Int
-	let uri: String
 
-	enum CodingKeys: String, CodingKey {
-		case idx = "idx"
-		case uri = "uri"
-	}
-}
 
 // MARK: - SupervisoryAuthority
 struct SupervisoryAuthority: Decodable {
