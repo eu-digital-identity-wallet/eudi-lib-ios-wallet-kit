@@ -16,6 +16,7 @@
 
 import Foundation
 import struct OpenID4VP.ClaimPath
+import struct MdocDataModel18013.Status
 
 // MARK: - WRPRegistrationPolicy
 struct WRPRegistrationPolicy: Decodable {
@@ -101,11 +102,6 @@ struct Purpose: Decodable {
 		case value = "value"
 	}
 }
-
-// MARK: - Status
-
-
-
 
 // MARK: - SupervisoryAuthority
 struct SupervisoryAuthority: Decodable {

@@ -22,26 +22,27 @@ import StatiumSwift
 import SwiftCBOR
 import JSONWebSignature
 import Logging
+import struct MdocDataModel18013.StatusList
 
 #if canImport(EudiEtsi1196x2)
 import EudiEtsi1196x2
 #endif
 
 public actor DocumentStatusService {
-	let statusIdentifier: StatusIdentifier
+	let statusList: StatusList
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
 	let date: Date?
 	private static let logger = Logger(label: "DocumentStatusService")
 
-	public init(statusIdentifier: StatusIdentifier, date: Date = .now, trustConfig: TrustConfiguration) {
-		self.statusIdentifier = statusIdentifier
+	public init(statusList: StatusList, date: Date = .now, trustConfig: TrustConfiguration) {
+		self.statusList = statusList
 		self.trustConfig = trustConfig
 		self.date = date
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
-		guard let statusReference: StatusReference = .init(idx: statusIdentifier.idx, uriString: statusIdentifier.uriString) else {
+		guard let statusReference: StatusReference = .init(idx: statusList.idx, uriString: statusList.uri) else {
 			throw WalletError(description: "Invalid status identifier", code: .invalidStatusToken)
 		}
 		let getStatus = GetStatus()
