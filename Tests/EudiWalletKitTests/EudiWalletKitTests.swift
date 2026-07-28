@@ -243,7 +243,7 @@ struct EudiWalletKitTests {
 		let model = DocClaimsModel(configuration: DocClaimsModelConfiguration(
 			id: UUID().uuidString, docType: docType, displayName: nil, display: nil,
 			credentialIssuerIdentifier: nil, configurationIdentifier: nil,
-			validFrom: nil, validUntil: nil, statusIdentifier: nil,
+			validFrom: nil, validUntil: nil, statusList: nil,
 			credentialsUsageCounts: nil, credentialPolicy: .rotateUse,
 			secureAreaName: nil, modifiedAt: nil,
 			docClaims: docClaims, docDataFormat: .cbor, hashingAlg: nil
