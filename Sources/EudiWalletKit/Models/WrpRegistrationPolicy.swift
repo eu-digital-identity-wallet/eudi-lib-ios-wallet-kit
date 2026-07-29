@@ -19,24 +19,24 @@ import struct OpenID4VP.ClaimPath
 import struct MdocDataModel18013.Status
 
 // MARK: - WRPRegistrationPolicy
-struct WRPRegistrationPolicy: Decodable {
-	let entitlements: [String]
-	let sub: String
-	let country: String
-	let policyID: [String]
-	let credentials: [PolicyCredential]
-	let purpose: [Purpose]
-	let registryURI: String
-	let certificatePolicy: String
-	let srvDescription: [Purpose]
-	let supportURI: String
-	let supervisoryAuthority: SupervisoryAuthority
-	let privacyPolicy: String
-	let name: String
-	let infoURI: String
-	let subLn: String
-	let iat: Int
-	let status: Status
+public struct WrpRegistrationPolicy: Decodable {
+	public let entitlements: [String]
+	public let sub: String
+	public let country: String
+	public let policyID: [String]
+	public let credentials: [PolicyCredential]
+	public let purpose: [Purpose]
+	public let registryURI: String
+	public let certificatePolicy: String
+	public let srvDescription: [Purpose]
+	public let supportURI: String
+	public let supervisoryAuthority: SupervisoryAuthority
+	public let privacyPolicy: String
+	public let name: String
+	public let infoURI: String
+	public let subLn: String
+	public let iat: Int
+	public let status: Status
 
 	enum CodingKeys: String, CodingKey {
 		case entitlements = "entitlements"
@@ -60,10 +60,10 @@ struct WRPRegistrationPolicy: Decodable {
 }
 
 // MARK: - Credential
-struct PolicyCredential: Decodable {
-	let format: String
-	let meta: Meta
-	let claim: [PolicyClaim]
+public struct PolicyCredential: Decodable {
+	public let format: String
+	public let meta: Meta
+	public let claim: [PolicyClaim]
 
 	enum CodingKeys: String, CodingKey {
 		case format = "format"
@@ -73,8 +73,8 @@ struct PolicyCredential: Decodable {
 }
 
 // MARK: - Claim
-struct PolicyClaim: Decodable {
-	let path: ClaimPath
+public struct PolicyClaim: Decodable {
+	public let path: ClaimPath
 
 	enum CodingKeys: String, CodingKey {
 		case path = "path"
@@ -82,9 +82,9 @@ struct PolicyClaim: Decodable {
 }
 
 // MARK: - Meta
-struct Meta: Decodable {
-	let vctValues: [String]?
-	let doctypeValue: String?
+public struct Meta: Decodable {
+	public let vctValues: [String]?
+	public let doctypeValue: String?
 
 	enum CodingKeys: String, CodingKey {
 		case vctValues = "vct_values"
@@ -93,9 +93,9 @@ struct Meta: Decodable {
 }
 
 // MARK: - Purpose
-struct Purpose: Decodable {
-	let lang: String
-	let value: String
+public struct Purpose: Decodable {
+	public let lang: String
+	public let value: String
 
 	enum CodingKeys: String, CodingKey {
 		case lang = "lang"
@@ -104,10 +104,10 @@ struct Purpose: Decodable {
 }
 
 // MARK: - SupervisoryAuthority
-struct SupervisoryAuthority: Decodable {
-	let email: String
-	let phone: String
-	let uri: String
+public struct SupervisoryAuthority: Decodable {
+	public let email: String
+	public let phone: String
+	public let uri: String
 
 	enum CodingKeys: String, CodingKey {
 		case email = "email"
