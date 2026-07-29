@@ -506,10 +506,8 @@ extension OpenId4VpUtils {
 					return false
 				}
 				guard let policyCredential else {
-					violations.append(.warning(PolicyViolationWarning(
-						code: "DCQL_EXTRA_CREDENTIAL",
-						message: "Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
-					)))
+					violations.append(.init("Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
+					))
 					continue
 				}
 				// Compare claims: find claims in request that are not covered by policy
@@ -524,10 +522,8 @@ extension OpenId4VpUtils {
 					let extraPaths = extraClaims
 						.map { $0.path.value.map(\.description).joined(separator: "/") }
 						.joined(separator: ", ")
-					violations.append(.warning(PolicyViolationWarning(
-						code: "DCQL_EXTRA_CLAIMS",
-						message: "Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
-					)))
+					violations.append(.init("Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
+					))
 				}
 			}
 			if !violations.isEmpty {

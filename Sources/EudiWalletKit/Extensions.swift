@@ -32,9 +32,8 @@ import eudi_lib_sdjwt_swift
 import struct OpenID4VP.RegistrationCertificatePolicy
 import struct OpenID4VP.DCQL
 import typealias OpenID4VP.CertificateTrust
-import struct OpenID4VP.WRPRegistrationCertificate
-import enum OpenID4VP.PolicyViolation
-import struct OpenID4VP.PolicyViolationError
+import enum OpenID4VP.Authorization
+import struct OpenID4VP.PolicyViolation
 
 extension String {
 	public func translated() -> String {
@@ -614,17 +613,6 @@ extension EudiWallet {
 	}
 }
 
-extension PolicyViolation {
-	var message: String {
-		switch self {
-		case .warning(let w):
-			w.message
-		case .error(let e):
-			e.message
-		}
-	}
-}
-
 // MARK: - DCQL Policy Validation
 
 extension RegistrationCertificatePolicy {
@@ -640,17 +628,17 @@ extension RegistrationCertificatePolicy {
 	  dcqlQ: DefaultDcqlQueryable?
 	) -> RegistrationCertificatePolicy {
 	  RegistrationCertificatePolicy(
-		certificateTrust: certificateTrust,
 		validatePolicy: { _, wrprc, dcql in
 			do {
-				let jws = try JWS(jwsString: wrprc.jwt)
+				let jws = try JWS(jwsString: wrprc)
 				let policy = try JSONDecoder().decode(WRPRegistrationPolicy.self, from: jws.payload)
 				guard let dcqlQ else { throw WalletError(description: "DCQL queryable not computed", code: .internalError)}
 				let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQ)
-				return OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+				let warnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+				return .granted(warnings: warnings)
 			} catch {
 				print(error)
-				return ["": [.error(PolicyViolationError(code: "Internal", message: error.localizedDescription))]]
+				return .granted(warnings: [:])
 		  }
 		}
 	  )
