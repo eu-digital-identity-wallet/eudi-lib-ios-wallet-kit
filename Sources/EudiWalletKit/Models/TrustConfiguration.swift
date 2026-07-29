@@ -29,6 +29,9 @@ public struct TrustConfiguration: Sendable {
 	/// The trust policy applied to document status token validation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow status checks to succeed even when the status token trust chain cannot be validated.
 	public let statusTrustPolicy: TrustPolicy
+	/// The trust policy applied to WRPRC (Wallet Relying Party Registration Certificate) validation.
+	/// Defaults to `.enforce`. Set to `.warning` to allow presentation to proceed even when the WRPRC trust chain cannot be validated.
+	public let wrprcTrustPolicy: TrustPolicy
 	/// Clock skew for the status token verifier
 	public let clockSkew: TimeInterval
 
@@ -40,6 +43,8 @@ public struct TrustConfiguration: Sendable {
 	var issuerTrustManager: EtsiTrustManager
 	/// Trust manager for reader/relying-party access certificates. Uses the WRPAC verification context.
 	let accessTrustManager: EtsiTrustManager
+	/// Trust manager for reader/relying-party registration certificates. Uses the WRPRC verification context.
+	let registrationTrustManager: EtsiTrustManager
 
 	public init(
 		trustSource: TrustSource,
@@ -48,12 +53,14 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		wrprcTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
 	) {
 		self.defaultPolicy = defaultPolicy
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.wrprcTrustPolicy = wrprcTrustPolicy
 		self.clockSkew = clockSkew
 		let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
 		let fallbackTrustManager: EtsiTrustManager?
@@ -62,7 +69,8 @@ public struct TrustConfiguration: Sendable {
 			fallbackTrustManager = EtsiTrustManager(source: fallbackTrustSource1)
 		} else { fallbackTrustManager = nil }
 		issuerTrustManager = EtsiTrustManager(source: issuerSource, fallback: fallbackTrustManager)
-		accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil))
+		accessTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil), defaultVerificationContext: EtsiContextType.wrpac.verificationContext)
+		registrationTrustManager = EtsiTrustManager(source: trustSource.withContextTypeMappings(nil), defaultVerificationContext: EtsiContextType.wrprc.verificationContext)
 	}
 
 	/// The OpenID4VCI issuer-metadata signature policy derived from this configuration.
@@ -86,12 +94,14 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		wrprcTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
 	) {
 		self.defaultPolicy = defaultPolicy
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.wrprcTrustPolicy = wrprcTrustPolicy
 		self.clockSkew = clockSkew
 		issuerTrustManager = SecTrustSource(rootIaca: rootIaca, usage: .mdocAuth)
 		accessTrustManager = SecTrustSource(rootIaca: rootIaca, usage: .mdocReaderAuth)
