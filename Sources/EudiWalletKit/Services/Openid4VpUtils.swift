@@ -490,7 +490,7 @@ extension OpenId4VpUtils {
 	///   - dcql: The DCQL from the authorization request
 	///   - policyDcql: The DCQL declared in the WRPRC (permitted scope)
 	/// - Returns: Warnings for each extra claim path found in the request but not in the policy
-	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WRPRegistrationPolicy) -> [String:[PolicyViolation]] {
+	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy) -> [String:[PolicyViolation]] {
 		var result = [String: [PolicyViolation]]()
 		for (key, selectionSet) in credentialSetOptions {
 			var violations = [PolicyViolation]()

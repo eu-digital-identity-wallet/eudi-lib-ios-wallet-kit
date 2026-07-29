@@ -1205,8 +1205,8 @@ struct DcqlQueryTests {
 
 	// MARK: - validateDcqlPolicy tests
 
-	private func makePolicy(credentials: [PolicyCredential]) -> WRPRegistrationPolicy {
-		WRPRegistrationPolicy(
+	private func makePolicy(credentials: [PolicyCredential]) -> WrpRegistrationPolicy {
+		WrpRegistrationPolicy(
 			entitlements: [], sub: "test", country: "EU", policyID: ["p1"],
 			credentials: credentials,
 			purpose: [], registryURI: "https://example.com", certificatePolicy: "test",

@@ -73,8 +73,10 @@ public struct WalletError: LocalizedError {
 		case missingVciConfiguration
 		/// Unsupportted credential configuration
 		case unsupportedCredentialConfiguration
-		// no client attestation algorithm found
+		/// no client attestation algorithm found
 		case noClientAttestationAlgorithmFound
+		/// invalid Wrprc
+		case invalidWrprc
 		/// Internal / unexpected error that does not fit another category
 		case internalError
 	}

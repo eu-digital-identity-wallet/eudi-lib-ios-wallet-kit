@@ -623,23 +623,11 @@ extension RegistrationCertificatePolicy {
 	///   - certificateTrust: The trust validator for the WRPRC signing certificate
 	///   - policyDcql: A closure that extracts the permitted DCQL scope from the WRPRC
 	/// - Returns: A policy that warns when the request DCQL is a superset of the policy DCQL
-	static func `default`(
-	  certificateTrust: @escaping CertificateTrust,
-	  dcqlQ: DefaultDcqlQueryable?
-	) -> RegistrationCertificatePolicy {
+	static func `default`(trustConfig: TrustConfiguration, dcqlQueryable: DefaultDcqlQueryable?) -> RegistrationCertificatePolicy {
 	  RegistrationCertificatePolicy(
-		validatePolicy: { _, wrprc, dcql in
-			do {
-				let jws = try JWS(jwsString: wrprc)
-				let policy = try JSONDecoder().decode(WRPRegistrationPolicy.self, from: jws.payload)
-				guard let dcqlQ else { throw WalletError(description: "DCQL queryable not computed", code: .internalError)}
-				let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQ)
-				let warnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-				return .granted(warnings: warnings)
-			} catch {
-				print(error)
-				return .granted(warnings: [:])
-		  }
+		validatePolicy: { wrpac, wrprc, dcql in
+			let serv = WrpRegistrationValidator(trustConfig: trustConfig, dcqlQueryable: dcqlQueryable)
+			return await serv.validateCertificate(wrpac: wrpac, wrprc: wrprc, dcql: dcql)
 		}
 	  )
 	}

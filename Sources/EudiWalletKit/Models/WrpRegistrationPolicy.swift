@@ -25,18 +25,28 @@ public struct WrpRegistrationPolicy: Decodable {
 	public let country: String
 	public let policyID: [String]
 	public let credentials: [PolicyCredential]
-	public let purpose: [Purpose]
+	public let purpose: [PolicyPurpose]
 	public let registryURI: String
 	public let certificatePolicy: String
-	public let srvDescription: [Purpose]
+	public let srvDescription: [PolicyPurpose]
 	public let supportURI: String
 	public let supervisoryAuthority: SupervisoryAuthority
 	public let privacyPolicy: String
 	public let name: String
 	public let infoURI: String
-	public let subLn: String
-	public let iat: Int
-	public let status: Status
+	public let subLn: String?
+	public let subGn: String?
+	public let subFn: String?
+	public let iat: Int?
+	public let exp: Int?
+	public let status: Status?
+	public let intendedUseID: String?
+	public let providesAttestations: [PolicyCredential]?
+	public let intermediary: PolicyIntermediary?
+	/// Identifiers of the registered relying party, derived from the `sub` claim.
+	public var identifiers: [RegistrationIdentifier] {
+		[RegistrationIdentifier(value: sub)] 
+	}
 
 	enum CodingKeys: String, CodingKey {
 		case entitlements = "entitlements"
@@ -54,15 +64,38 @@ public struct WrpRegistrationPolicy: Decodable {
 		case name = "name"
 		case infoURI = "info_uri"
 		case subLn = "sub_ln"
+		case subGn = "sub_gn"
+		case subFn = "sub_fn"
 		case iat = "iat"
+		case exp = "exp"
 		case status = "status"
+		case intendedUseID = "intended_use_id"
+		case providesAttestations = "provides_attestations"
+		case intermediary = "intermediary"
 	}
+}
+
+// MARK: - PolicyIntermediary
+public struct PolicyIntermediary: Decodable {
+	public let identifier: String?
+	// The intermediary common name is carried in the `sname` claim, not `name`.
+	public let name: String?
+
+	enum CodingKeys: String, CodingKey {
+		case identifier = "sub"
+		case name = "sname"
+	}
+}
+
+// MARK: - RegistrationIdentifier
+public struct RegistrationIdentifier {
+	public let value: String
 }
 
 // MARK: - Credential
 public struct PolicyCredential: Decodable {
 	public let format: String
-	public let meta: Meta
+	public let meta: PolicyCredentialMeta
 	public let claim: [PolicyClaim]
 
 	enum CodingKeys: String, CodingKey {
@@ -81,8 +114,8 @@ public struct PolicyClaim: Decodable {
 	}
 }
 
-// MARK: - Meta
-public struct Meta: Decodable {
+// MARK: - PolicyCredentialMeta
+public struct PolicyCredentialMeta: Decodable {
 	public let vctValues: [String]?
 	public let doctypeValue: String?
 
@@ -92,8 +125,8 @@ public struct Meta: Decodable {
 	}
 }
 
-// MARK: - Purpose
-public struct Purpose: Decodable {
+// MARK: - PolicyPurpose
+public struct PolicyPurpose: Decodable {
 	public let lang: String
 	public let value: String
 
@@ -105,11 +138,13 @@ public struct Purpose: Decodable {
 
 // MARK: - SupervisoryAuthority
 public struct SupervisoryAuthority: Decodable {
-	public let email: String
-	public let phone: String
-	public let uri: String
+	public let name: String?
+	public let email: String?
+	public let phone: String?
+	public let uri: String?
 
 	enum CodingKeys: String, CodingKey {
+		case name = "name"
 		case email = "email"
 		case phone = "phone"
 		case uri = "uri"
