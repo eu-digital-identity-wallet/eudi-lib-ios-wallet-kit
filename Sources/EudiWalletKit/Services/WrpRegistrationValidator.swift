@@ -65,6 +65,14 @@ public actor WrpRegistrationValidator {
 			let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
 			let credStatus = try await statusService.getStatus()
 			guard credStatus == .valid else { throw WalletError(description: "WRPRC status not valid", code: .invalidWrprc)  }
+			let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
+			if !isValid {
+				let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
+				switch trustConfig.wrprcTrustPolicy {
+				case .warning: Self.logger.warning("\(message)"); wrpWarnings.append(.init(message))
+				case .enforce: throw WalletError(description: message, code: .trustError)
+				}
+			}
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 			var warnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: wrpRegistrationPolicy)
