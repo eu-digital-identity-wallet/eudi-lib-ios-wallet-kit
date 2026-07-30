@@ -28,16 +28,20 @@ import StatiumSwift
 public actor WrpRegistrationValidator {
 	/// Trust configuration used to validate the reader/relying-party registration certificate.
 	public let trustConfig: TrustConfiguration
-	let date: Date?
-	let dcqlQueryable: DefaultDcqlQueryable?
+	public let date: Date?
+	public var dcqlQueryable: DefaultDcqlQueryable?
 	static let logger = Logger(label: "WrpRegistrationValidator")
 	static let REG_CERT_TYPE_CWT = "rc-wrp+cwt"
-	
+	public var wrpRegistration: WrpRegistrationPolicy?
+	public var wrpWarnings = [PolicyViolation]()
+
 	public init(date: Date = .now, trustConfig: TrustConfiguration, dcqlQueryable: DefaultDcqlQueryable?) {
 		self.trustConfig = trustConfig
 		self.date = date
 		self.dcqlQueryable = dcqlQueryable
 	}
+	
+	public func set(dcqlQueryable: DefaultDcqlQueryable?) { self.dcqlQueryable = dcqlQueryable }
 	
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
 		do {
@@ -58,7 +62,7 @@ public actor WrpRegistrationValidator {
 				wrprcPayload = jws.payload
 			}
 			let wrpRegistrationPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
-			var wrpWarnings = [PolicyViolation]()
+			wrpRegistration = wrpRegistrationPolicy
 			if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .invalidWrprc) }
 			if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) } //else { throw WalletError(description: "WRPRC not bound to requester access certificate", code: .invalidWrprc) }
 			guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC missing status", code: .invalidWrprc) }
@@ -75,16 +79,15 @@ public actor WrpRegistrationValidator {
 			}
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-			var warnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: wrpRegistrationPolicy)
-			warnings[""] = wrpWarnings
-			return .granted(warnings: warnings)
+			var allWarnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: wrpRegistrationPolicy)
+			allWarnings[""] = wrpWarnings
+			return .granted(warnings: allWarnings)
 		} catch {
+			wrpWarnings.append(.init("WRP policy could not be created: \(error.localizedDescription)"))
 			Self.logger.error("Error in validate registration certificate: \(wrprc): \(error)")
 			return trustConfig.wrprcTrustPolicy == .enforce ?
 				.notGranted(error: .init(error.localizedDescription)) :
 				.granted(warnings: ["": [.init(error.localizedDescription)]])
 	  }
 	}
-
-
 }
