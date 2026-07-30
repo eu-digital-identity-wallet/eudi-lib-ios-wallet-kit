@@ -22,6 +22,7 @@ import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
 import struct WalletStorage.Document
+import struct OpenID4VP.PolicyViolation
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
@@ -40,11 +41,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
-	@Published public var disclosedDocumentSets: [[DocElements]] = []
+	@Published public var disclosedDocumentSets: [DisclosedDocumentSet] = []
 	/// Status of the data transfer.
 	@Published public var status: TransferStatus = .initializing
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
+	/// Wallet relying party registration
+	@Published public var relyingPartyRegistration: WrpRegistrationPolicy?
+	/// Wallet relying party registration warnings
+	@Published public var relyingPartyWarnings: [PolicyViolation]?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
@@ -75,14 +80,14 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@MainActor
 	/// Decodes a presentation request
 	///
-	/// The ``disclosedDocuments`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
+	/// The ``disclosedDocumentSets`` property will be set. Additionally ``readerCertIssuer`` and ``readerCertValidationMessage`` may be set
 	/// - Parameter requests: Request information
 	func decodeRequest(_ requests: [UserRequestInfo]) throws {
 		guard docIdToPresentInfo.count > 0 else { throw WalletError(description: "No documents added to session ", code: .noDocumentsAvailable)}
 		// show the items as checkboxes
-		disclosedDocumentSets = [[DocElements]]()
+		disclosedDocumentSets.removeAll()
 		for request in requests {
-			var disclosedDocuments = [DocElements]()
+			var disclosedElements = [DocElements]()
 			for (docId, docPresentInfo) in docIdToPresentInfo {
 				let docType = docPresentInfo.docType
 				let requestFormat = request.docDataFormats[docId] ?? request.docDataFormats[docType]  ?? request.docDataFormats.first(where: { OpenId4VpUtils.vctToDocTypeMatch($0.key, docType)})?.value
@@ -92,16 +97,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 						guard case let .msoMdoc(issuerSigned) = docPresentInfo.typedData else { continue }
 						guard let docItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
 						let msoElements = issuerSigned.extractMsoMdocElements(docId: docId, docType: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: docItemsRequested)
-						disclosedDocuments.append(.msoMdoc(msoElements))
+						disclosedElements.append(.msoMdoc(msoElements))
 					case .sdjwt:
 						guard case let .sdJwt(signedSdJwt) = docPresentInfo.typedData else { continue }
 						guard let sdItemsRequested = request.itemsRequested[docId] ?? request.itemsRequested[docType] else { continue }
 						let sdJwtElements = signedSdJwt.extractSdJwtElements(docId: docId, vct: docType, displayName: docPresentInfo.displayName, docClaims: docPresentInfo.docClaims, itemsRequested: sdItemsRequested)
 						guard let sdJwtElements else { continue }
-						disclosedDocuments.append(.sdJwt(sdJwtElements))
+						disclosedElements.append(.sdJwt(sdJwtElements))
 					default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
 				}
-
 			}
 			if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
 				readerCertIssuer = readerAuthority
@@ -110,9 +114,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 			readerLegalName = request.defaultReaderAuthResult?.legalName
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-			if disclosedDocuments.count == 0 { throw WalletError(description: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
-			disclosedDocumentSets.append(disclosedDocuments)
+			if disclosedElements.count == 0 { throw WalletError(description: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
+			let warningSet: [PolicyViolation]? = if let warnings = presentationService.allWarnings, let requestName = request.requestName { warnings[requestName] } else { nil }
+				disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
 		}
+		relyingPartyRegistration = presentationService.relyingPartyRegistration
+		relyingPartyWarnings = presentationService.allWarnings?[""]
 		status = .requestReceived
 	}
 
@@ -157,7 +164,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Receive request from verifer
 	///
 	/// The request is futher decoded internally. See also ``decodeRequest(_:)``
-	/// On success ``disclosedDocuments`` published variable will be set  and ``status`` will be ``.requestReceived``
+	/// On success ``disclosedDocumentSets`` published variable will be set  and ``status`` will be ``.requestReceived``
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request object
 	public func receiveRequest() async -> [UserRequestInfo]? {
