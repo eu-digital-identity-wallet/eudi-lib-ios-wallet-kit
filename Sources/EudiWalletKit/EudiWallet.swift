@@ -634,7 +634,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters, transportFactory: bleTransportFactory)
+				let bleSvc = try await BlePresentationService(parameters: parameters, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
 				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in

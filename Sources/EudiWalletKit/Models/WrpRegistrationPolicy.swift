@@ -19,20 +19,20 @@ import struct OpenID4VP.ClaimPath
 import struct MdocDataModel18013.Status
 
 public struct WrpRegistrationPolicy: Decodable, Sendable {
-	public let entitlements: [String]
+	public let entitlements: [String]?
 	public let sub: String
-	public let country: String
-	public let policyID: [String]
+	public let country: String?
+	public let policyID: [String]?
 	public let credentials: [PolicyCredential]
-	public let purpose: [PolicyPurpose]
-	public let registryURI: String
-	public let certificatePolicy: String
-	public let srvDescription: [PolicyPurpose]
-	public let supportURI: String
-	public let supervisoryAuthority: SupervisoryAuthority
-	public let privacyPolicy: String
-	public let name: String
-	public let infoURI: String
+	public let purpose: [PolicyPurpose]?
+	public let registryURI: String?
+	public let certificatePolicy: String?
+	public let srvDescription: [PolicyPurpose]?
+	public let supportURI: String?
+	public let supervisoryAuthority: SupervisoryAuthority?
+	public let privacyPolicy: String?
+	public let name: String?
+	public let infoURI: String?
 	public let subLn: String?
 	public let subGn: String?
 	public let subFn: String?

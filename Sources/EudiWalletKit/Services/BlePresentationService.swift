@@ -18,8 +18,11 @@ import Foundation
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
+import X509
 import struct WalletStorage.Document
 import struct OpenID4VP.PolicyViolation
+import struct OpenID4VP.ClaimPath
+import enum OpenID4VP.Authorization
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
@@ -52,6 +55,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var docs: [String: IssuerSigned]!
 	public var docMetadata: [String: Data?]!
 	public var trustValidator: any CertificateTrustValidator
+	/// Validator for the relying party registration certificate carried in the device request
+	let wrpRegistrationValidator: WrpRegistrationValidator?
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var zkSystemRepository: ZkSystemRepository?
@@ -61,12 +66,13 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var deviceResponseBytes: Data?
 	public var responseMetadata: [Data?]!
 
-	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil) async throws {
+	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpRegistrationValidator? = nil) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
 		self.privateKeyObjects = objs.privateKeyObjects
 		self.trustValidator = objs.trustValidator
+		self.wrpRegistrationValidator = wrpRegistrationValidator
 		self.dauthMethod = objs.deviceAuthMethod
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
@@ -152,6 +158,12 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 				deviceRequest = decoded.deviceRequest
 				sessionEncryption = decoded.sessionEncryption
 				if decoded.isValidRequest {
+					do {
+						try await validateWrpRegistration(deviceRequest: decoded.deviceRequest, userRequestInfo: decoded.userRequestInfo)
+					} catch {
+						didFinishedWithError(error)
+						return
+					}
 					self.handleSelected = userSelected
 					continuationRequest?.resume(returning: decoded.userRequestInfo)
 					continuationRequest = nil
@@ -178,6 +190,43 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		}
 	}
 	
+	/// Validate the relying party registration certificate (WRPRC) carried in the BLE device request.
+	///
+	/// According to ETSI TS 119 472-2 (clause 5.3.2), the WRPRC is repeated in the `requestInfo` member
+	/// of each `ItemsRequest`, under the "euWrprc" label. On success ``relyingPartyRegistration`` and
+	/// ``allWarnings`` are set; they are surfaced to the UI by the `PresentationSession` caller.
+	/// - Throws: `WalletError` when the certificate is invalid and the trust policy is set to enforce
+	func validateWrpRegistration(deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo) async throws {
+		guard let wrpRegistrationValidator else { return }
+		let dcql = try OpenId4VpUtils.makeDcql(itemsRequested: userRequestInfo.itemsRequested)
+		await wrpRegistrationValidator.set(dcqlQueryable: makeDcqlQueryable())
+		// The relying party access certificate is the reader authentication leaf certificate
+		let wrpac: Certificate? = if let der = userRequestInfo.defaultReaderAuthResult?.certificateChain?.first { try? Certificate(derEncoded: [UInt8](der)) } else { nil }
+		guard let authorization = await wrpRegistrationValidator.validateDeviceRequestCertificate(wrpac: wrpac, deviceRequest: deviceRequest, dcql: dcql) else {
+			logger.info("No relying party registration certificate present in the device request")
+			return
+		}
+		switch authorization {
+		case .granted(let warnings):
+			allWarnings = warnings
+			relyingPartyRegistration = await wrpRegistrationValidator.wrpRegistration
+			if !warnings.isEmpty { logger.warning("WRP registration policy warnings: \(warnings.mapValues { $0.map(\.violation) })") }
+		case .notGranted(let error):
+			throw WalletError(description: "WRP registration certificate validation failed: \(error.violation)", code: .invalidWrprc)
+		}
+	}
+
+	/// Make a DCQL queryable from the wallet documents of this session, used to resolve the request scope against the registration policy
+	func makeDcqlQueryable() -> DefaultDcqlQueryable {
+		let idsToDocTypes = docs.mapValues { $0.issuerAuth.mso.docType }
+		let formatsRequested = Dictionary(idsToDocTypes.values.map { ($0, DocDataFormat.cbor) }, uniquingKeysWith: { first, _ in first })
+		let credentialMap = OpenId4VpUtils.makeCredentialMap(idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
+		var claimPaths = [Document.ID: [ClaimPath]]()
+		var claimValues = [Document.ID: [ClaimPath: [String]]]()
+		OpenId4VpUtils.makeCborClaimData(from: docs, claimPaths: &claimPaths, claimValues: &claimValues)
+		return DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+	}
+
 	public func stop() {
 		bleTranport.stop()
 		bleServer?.stop()

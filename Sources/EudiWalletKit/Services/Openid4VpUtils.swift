@@ -346,6 +346,22 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
+	/// Build a DCQL query equivalent to the items requested in an ISO/IEC 18013-5 device request.
+	///
+	/// Used to validate the scope of a proximity (BLE) request against the relying party registration policy.
+	/// - Parameter itemsRequested: The requested items (docType to namespaced data elements)
+	/// - Returns: A DCQL query with one mso-mdoc credential query per requested document type
+	static func makeDcql(itemsRequested: RequestItems) throws -> DCQL {
+		let credentials: [CredentialQuery] = try itemsRequested.enumerated().map { index, docRequest in
+			let (docType, nsItems) = docRequest
+			let claims: [ClaimsQuery] = try nsItems.flatMap { ns, items in
+				try items.map { try ClaimsQuery.mdoc(namespace: ns, claimName: $0.elementIdentifier, intentToRetain: $0.intentToRetain) }
+			}
+			return try CredentialQuery(id: QueryId(value: "cred\(index)"), format: Format.MsoMdoc(), meta: JSON(["doctype_value": docType]), claims: claims.isEmpty ? nil : claims)
+		}
+		return try DCQL(credentials: credentials)
+	}
+
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, docTypeDisplayNames: [DocType: String] = [:]) throws -> CredentialSelectionSetOptions {
 		var resultDict: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?

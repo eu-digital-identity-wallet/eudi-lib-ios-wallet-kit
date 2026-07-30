@@ -21,6 +21,7 @@ import StatiumSwift
 import SwiftCBOR
 import JSONWebSignature
 import Logging
+import OrderedCollections
 import X509
 import OpenID4VP
 import StatiumSwift
@@ -32,6 +33,8 @@ public actor WrpRegistrationValidator {
 	public var dcqlQueryable: DefaultDcqlQueryable?
 	static let logger = Logger(label: "WrpRegistrationValidator")
 	static let REG_CERT_TYPE_CWT = "rc-wrp+cwt"
+	/// Label of the `ItemsRequest.requestInfo` member carrying the WRPRC in ISO/IEC 18013-5 requests (ETSI TS 119 472-2)
+	static let REG_CERT_REQUEST_INFO_KEY = "euWrprc"
 	public var wrpRegistration: WrpRegistrationPolicy?
 	public var wrpWarnings = [PolicyViolation]()
 
@@ -44,8 +47,40 @@ public actor WrpRegistrationValidator {
 	public func set(dcqlQueryable: DefaultDcqlQueryable?) { self.dcqlQueryable = dcqlQueryable }
 	
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
+		guard let wrprcData = wrprc.data(using: .ascii) else {
+			wrpWarnings.append(.init("WRPRC cannot be decoded"))
+			return trustConfig.wrprcTrustPolicy == .enforce ?
+				.notGranted(error: .init("WRPRC cannot be decoded")) :
+				.granted(warnings: ["": wrpWarnings])
+		}
+		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
+	}
+
+	/// Validate the relying party registration certificate (WRPRC) carried in an ISO/IEC 18013-5 device request.
+	///
+	/// According to ETSI TS 119 472-2 (proximity profile), the WRPRC is repeated in the `requestInfo`
+	/// member of each `ItemsRequest`, under the "euWrprc" label, as a CBOR byte string containing
+	/// the serialization of the registration certificate (JWT or CWT).
+	/// - Parameters:
+	///   - wrpac: The relying party access certificate (reader authentication leaf certificate), if available
+	///   - deviceRequest: The decoded device request received from the verifier
+	///   - dcql: A DCQL query equivalent to the requested items, used to validate the request scope against the registration policy
+	/// - Returns: The authorization result, or `nil` when the request carries no registration certificate
+	public func validateDeviceRequestCertificate(wrpac: Certificate?, deviceRequest: DeviceRequest, dcql: DCQL) async -> Authorization? {
+		var wrprcValues = [Data]()
+		for docR in deviceRequest.docRequests {
+			guard let extValue = docR.itemsRequest.requestInfo?.extensions?[Self.REG_CERT_REQUEST_INFO_KEY],
+				case let .byteString(bs) = extValue else { continue }
+			wrprcValues.append(Data(bs))
+		}
+		guard let wrprcData = wrprcValues.first else { return nil }
+		if wrprcValues.count < deviceRequest.docRequests.count { wrpWarnings.append(.init("WRPRC not repeated in every ItemsRequest.requestInfo")) }
+		if wrprcValues.dropFirst().contains(where: { $0 != wrprcData }) { wrpWarnings.append(.init("Different WRPRC values found in ItemsRequest.requestInfo")) }
+		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
+	}
+
+	public func validateCertificate(wrpac: Certificate?, wrprcData: Data, dcql: DCQL) async -> Authorization {
 		do {
-			guard let wrprcData = wrprc.data(using: .ascii) else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
 			let wrprcToken = try x5cVerifyJwtOrCwt.parse(attestData: wrprcData, format: nil)
 			let wrprcPayload: Data
 			switch wrprcToken {
@@ -64,11 +99,13 @@ public actor WrpRegistrationValidator {
 			let wrpRegistrationPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
 			wrpRegistration = wrpRegistrationPolicy
 			if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .invalidWrprc) }
-			if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) } //else { throw WalletError(description: "WRPRC not bound to requester access certificate", code: .invalidWrprc) }
+			if let wrpac {
+				if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) } //else { throw WalletError(description: "WRPRC not bound to requester access certificate", code: .invalidWrprc) }
+			} else { wrpWarnings.append(.init("Requester access certificate not available to check WRPRC binding")) }
 			guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC missing status", code: .invalidWrprc) }
 			let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
-			let credStatus = try await statusService.getStatus()
-			guard credStatus == .valid else { throw WalletError(description: "WRPRC status not valid", code: .invalidWrprc)  }
+			let credStatus = try? await statusService.getStatus()
+			if let credStatus, credStatus == .valid { throw WalletError(description: "WRPRC status not valid", code: .invalidWrprc)  }
 			let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
 			if !isValid {
 				let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
@@ -84,7 +121,7 @@ public actor WrpRegistrationValidator {
 			return .granted(warnings: allWarnings)
 		} catch {
 			wrpWarnings.append(.init("WRP policy could not be created: \(error.localizedDescription)"))
-			Self.logger.error("Error in validate registration certificate: \(wrprc): \(error)")
+			Self.logger.error("Error in validate registration certificate: \(error)")
 			return trustConfig.wrprcTrustPolicy == .enforce ?
 				.notGranted(error: .init(error.localizedDescription)) :
 				.granted(warnings: ["": [.init(error.localizedDescription)]])
