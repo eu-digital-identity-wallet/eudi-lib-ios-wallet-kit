@@ -46,6 +46,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var trustConfig: TrustConfiguration
 	/// OpenID4VP configuration
 	public var openID4VpConfig: OpenId4VpConfiguration
+	public var wrpRegistrationValidator: WrpRegistrationValidator
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 	/// OpenID4VCI issuer parameters
@@ -103,6 +104,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		self.openID4VciConfigurations = openID4VciConfigurations
 		self.networkingVci = OpenID4VCINetworking(networking: networking ?? URLSession.shared)
 		self.networkingVp = OpenID4VPNetworking(networking: networking ?? URLSession.shared)
+		self.wrpRegistrationValidator = WrpRegistrationValidator(trustConfig: trustConfig, dcqlQueryable: nil)
 		let storageServiceObj = storageService ?? KeyChainStorageService(serviceName: self.eudiWalletConfig.serviceName, accessGroup: self.eudiWalletConfig.accessGroup)
 		self.modelFactory = modelFactory
 		self.zkSystemRepository = zkSystemRepository
@@ -640,12 +642,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 					return (doc.docType, displayName)
 				}, uniquingKeysWith: { first, _ in first })
 				let openIdSvc = try await OpenId4VpService(
-					parameters: parameters,
-					qrCode: qrCode,
-					openID4VpConfig: self.openID4VpConfig,
-					networking: networkingVp,
-					trustConfig: trustConfig,
-					docTypeDisplayNames: docTypeDisplayNames
+					parameters: parameters, qrCode: qrCode,	openID4VpConfig: self.openID4VpConfig, networking: networkingVp,
+					trustConfig: trustConfig, wrpRegistrationValidator: wrpRegistrationValidator, docTypeDisplayNames: docTypeDisplayNames
 				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
 			default:

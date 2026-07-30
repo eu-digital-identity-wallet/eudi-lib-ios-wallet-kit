@@ -19,6 +19,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
 import struct WalletStorage.Document
+import struct OpenID4VP.PolicyViolation
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
@@ -39,6 +40,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
+	public var relyingPartyRegistration: WrpRegistrationPolicy?
+	public var allWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var documentIds: [Document.ID] = []
 	public var zkpDocumentIds: [Document.ID]?
@@ -281,7 +284,6 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		let firstDocId = documentIds.first
 		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
 		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
-		
 	}
 	
 	public func waitForDisconnect() async throws {
