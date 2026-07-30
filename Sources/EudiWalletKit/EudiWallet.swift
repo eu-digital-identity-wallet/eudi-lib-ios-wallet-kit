@@ -589,7 +589,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		var parameters: InitializeTransferData
 		guard var docs = try await storage.storageService.loadDocuments(status: .issued), docs.count > 0 else {
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-			throw WalletError(description: PresentationSession.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
+			throw WalletError(description: PresentationSession.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
 		}
 		if let format { docs = docs.filter { $0.docDataFormat == format } }
 		let idsToDocData = docs.compactMap { $0.getDataForTransfer() }
@@ -609,7 +609,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		docData = docData.filter { docKeyInfos[$0.key] != nil }
 		guard idsToDocData.count > 0 else {
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-			throw WalletError(description: PresentationSession.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
+			throw WalletError(description: PresentationSession.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable)
 		}
 		let docMetadata = Dictionary(uniqueKeysWithValues: idsToDocData.map(\.metadata))
 		let idsToDocTypes = Dictionary(uniqueKeysWithValues: docs.map { ($0.id, $0.docType) })

@@ -173,7 +173,6 @@ class OpenId4VpUtils {
 		claimValues: inout [Document.ID: [ClaimPath: [String]]]
 	) {
 		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
-
 		for (docId, issuerSigned) in docsCbor ?? [:] {
 			paths.removeAll(); values.removeAll()
 			guard let isNs = issuerSigned.issuerNameSpaces else { continue }

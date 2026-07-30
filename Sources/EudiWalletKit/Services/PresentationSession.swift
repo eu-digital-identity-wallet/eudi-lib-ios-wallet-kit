@@ -114,16 +114,17 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 			readerLegalName = request.defaultReaderAuthResult?.legalName
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-			if disclosedElements.count == 0 { throw WalletError(description: Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
-			let warningSet: [PolicyViolation]? = if let warnings = presentationService.allWarnings, let requestName = request.requestName { warnings[requestName] } else { nil }
-				disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
-		}
+			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
+			let warningsKey = if presentationService.flow == .ble { presentationService.allWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
+			let warningSet: [PolicyViolation]? = if let warnings = presentationService.allWarnings, let warningsKey { warnings[warningsKey] } else { nil }
+			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
+		} // next request
 		relyingPartyRegistration = presentationService.relyingPartyRegistration
 		relyingPartyWarnings = presentationService.allWarnings?[""]
 		status = .requestReceived
 	}
 
-	static let NotAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
+	static let notAvailableStr = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
 
 	/// Start QR engagement to be presented to verifier
 	///
@@ -131,7 +132,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	public func startQrEngagement() async throws {
 		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
-		if docIdToPresentInfo.count == 0 { await setError(Self.NotAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
+		if docIdToPresentInfo.count == 0 { await setError(Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
 		do {
 			let data = try await presentationService.startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256, accessControl: []))
 			await MainActor.run {

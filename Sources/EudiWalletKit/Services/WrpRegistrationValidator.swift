@@ -86,32 +86,37 @@ public actor WrpRegistrationValidator {
 			switch wrprcToken {
 			case .cwt(let readerAuth):
 				let type = readerAuth.coseSign1.protectedHeader.type ?? readerAuth.coseSign1.unprotectedHeader?.type
-				guard let type, type == Self.REG_CERT_TYPE_CWT else { throw WalletError(description: "WRPRC header type must be \(Self.REG_CERT_TYPE_CWT)", code: .invalidWrprc, context: ["type": type ?? ""]) }
+				guard let type, type == Self.REG_CERT_TYPE_CWT else { throw WalletError(description: "WRPRC header type must be \(Self.REG_CERT_TYPE_CWT)", code: .wrprcInvalidType, context: ["type": type ?? ""]) }
 				let jsonData: Data? = if let ps = readerAuth.coseSign1.payload.asString(), let jd = ps.data(using: .ascii) { jd } else if let bs = readerAuth.coseSign1.payload.asBytes() { Data(bs) } else { nil }
-				guard let jsonData else { throw WalletError(description: "WRPRC cwt payload be decoded", code: .invalidWrprc) }
+				guard let jsonData else { throw WalletError(description: "WRPRC cwt payload cannot be decoded", code: .wrprcPayloadDecodingFailed) }
 				wrprcPayload = jsonData
 			case .jwt(let jws):
 				// The JWT typ header must be rc-wrp+jwt.
 				let type = jws.protectedHeader.type
-				guard let type, type == OpenId4VPSpec.WRPRC_JWT_TYPE else { throw WalletError(description: "WRPRC header type must be \(OpenId4VPSpec.WRPRC_JWT_TYPE)", code: .invalidWrprc, context: ["type": jws.protectedHeader.type ?? ""]) }
+				guard let type, type == OpenId4VPSpec.WRPRC_JWT_TYPE else { throw WalletError(description: "WRPRC header type must be \(OpenId4VPSpec.WRPRC_JWT_TYPE)", code: .wrprcInvalidType, context: ["type": jws.protectedHeader.type ?? ""]) }
 				wrprcPayload = jws.payload
 			}
 			let wrpRegistrationPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
 			wrpRegistration = wrpRegistrationPolicy
-			if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .invalidWrprc) }
+			if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .wrprcExpired) }
 			if let wrpac {
 				if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) } //else { throw WalletError(description: "WRPRC not bound to requester access certificate", code: .invalidWrprc) }
 			} else { wrpWarnings.append(.init("Requester access certificate not available to check WRPRC binding")) }
-			guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC missing status", code: .invalidWrprc) }
+			guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC does not have status list", code: .wrprcMissingStatus) }
 			let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
 			let credStatus = try? await statusService.getStatus()
-			if let credStatus, credStatus == .valid { throw WalletError(description: "WRPRC status not valid", code: .invalidWrprc)  }
+			if let credStatus {
+				if credStatus != .valid { throw WalletError(description: "WRPRC status not valid", code: .wrprcStatusInvalid, context: ["status": credStatus == .invalid ? "Invalid" : credStatus == .suspended ? "suspended" : "\(credStatus)"]) }
+			} else {
+				Self.logger.warning("WRPRC status list could not be retrieved")
+				wrpWarnings.append(.init("WRPRC status list could not be retrieved"))
+			}
 			let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
 			if !isValid {
 				let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
 				switch trustConfig.wrprcTrustPolicy {
 				case .warning: Self.logger.warning("\(message)"); wrpWarnings.append(.init(message))
-				case .enforce: throw WalletError(description: message, code: .trustError)
+				case .enforce: throw WalletError(description: message, code: .wrprcTrustError)
 				}
 			}
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }

@@ -169,8 +169,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 					continuationRequest = nil
 				} else {
 					await userSelected(false, nil, nil)
-					let notAvailableMessage = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
-					let userInfo = [NSLocalizedDescriptionKey: notAvailableMessage]
+					let userInfo = [NSLocalizedDescriptionKey: PresentationSession.notAvailableStr]
 					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo))
 				}
 			case .failure(let err):
