@@ -18,8 +18,7 @@ import Foundation
 import struct OpenID4VP.ClaimPath
 import struct MdocDataModel18013.Status
 
-// MARK: - WRPRegistrationPolicy
-public struct WrpRegistrationPolicy: Decodable {
+public struct WrpRegistrationPolicy: Decodable, Sendable {
 	public let entitlements: [String]
 	public let sub: String
 	public let country: String
@@ -75,8 +74,7 @@ public struct WrpRegistrationPolicy: Decodable {
 	}
 }
 
-// MARK: - PolicyIntermediary
-public struct PolicyIntermediary: Decodable {
+public struct PolicyIntermediary: Decodable, Sendable {
 	public let identifier: String?
 	// The intermediary common name is carried in the `sname` claim, not `name`.
 	public let name: String?
@@ -87,13 +85,11 @@ public struct PolicyIntermediary: Decodable {
 	}
 }
 
-// MARK: - RegistrationIdentifier
-public struct RegistrationIdentifier {
+public struct RegistrationIdentifier: Decodable, Sendable {
 	public let value: String
 }
 
-// MARK: - Credential
-public struct PolicyCredential: Decodable {
+public struct PolicyCredential: Decodable, Sendable {
 	public let format: String
 	public let meta: PolicyCredentialMeta
 	public let claim: [PolicyClaim]
@@ -105,8 +101,7 @@ public struct PolicyCredential: Decodable {
 	}
 }
 
-// MARK: - Claim
-public struct PolicyClaim: Decodable {
+public struct PolicyClaim: Decodable, Sendable {
 	public let path: ClaimPath
 
 	enum CodingKeys: String, CodingKey {
@@ -114,8 +109,7 @@ public struct PolicyClaim: Decodable {
 	}
 }
 
-// MARK: - PolicyCredentialMeta
-public struct PolicyCredentialMeta: Decodable {
+public struct PolicyCredentialMeta: Decodable, Sendable {
 	public let vctValues: [String]?
 	public let doctypeValue: String?
 
@@ -125,8 +119,7 @@ public struct PolicyCredentialMeta: Decodable {
 	}
 }
 
-// MARK: - PolicyPurpose
-public struct PolicyPurpose: Decodable {
+public struct PolicyPurpose: Decodable, Sendable {
 	public let lang: String
 	public let value: String
 
@@ -136,8 +129,7 @@ public struct PolicyPurpose: Decodable {
 	}
 }
 
-// MARK: - SupervisoryAuthority
-public struct SupervisoryAuthority: Decodable {
+public struct SupervisoryAuthority: Decodable, Sendable {
 	public let name: String?
 	public let email: String?
 	public let phone: String?
