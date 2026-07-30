@@ -630,6 +630,47 @@ let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
 		})
 ```
 
+### Registration Certificate (WRPRC)
+
+The wallet validates the Wallet-Relying Party Registration Certificate (WRPRC) that a relying party may present with a data-sharing request, per [ETSI TS 119 475](https://www.etsi.org/standards) and Commission Implementing Regulation (EU) 2025/848 Article 8(2). The outcome is surfaced to the application so the user can be informed before sharing.
+
+The WRPRC is carried as a `euWrprc` byte string in proximity requests (ETSI TS 119 472-2 §5.3.2) or as a `verifier_info` element in OpenID4VP requests (§6.3.2.2).
+
+#### Configuration
+
+Trust for WRPRC validation is configured through `TrustConfiguration`:
+
+```swift
+let trustConfig = TrustConfiguration(
+    trustSource: .etsi(.eudiRef),
+    fallbackTrustSource: nil,
+    wrprcTrustPolicy: .enforce // .enforce (default) or .warning
+)
+```
+
+- `.enforce` — validation failure causes the request to fail.
+- `.warning` — validation failure is added to warnings; the request continues.
+
+For OpenID4VP, a `RegistrationCertificatePolicy` can be supplied via `OpenId4VpConfiguration.registrationCertificatePolicy`. When `nil`, a default policy backed by `WrpRegistrationValidator` is used.
+
+#### Reading the outcome
+
+After receiving a request, the result is available on `PresentationSession`:
+
+- `relyingPartyRegistration: WrpRegistrationPolicy?` — the parsed registration (name, country, purpose, registered credentials).
+- `relyingPartyWarnings: [PolicyViolation]?` — validation warnings including over-asked claims.
+
+Each `DisclosedDocumentSet` in `disclosedDocumentSets` also carries per-option `warnings` for policy violations specific to that credential combination.
+
+```swift
+if let registration = presentationSession.relyingPartyRegistration {
+    // Show relying party info: registration.name, registration.country, registration.purpose
+}
+if let warnings = presentationSession.relyingPartyWarnings, !warnings.isEmpty {
+    // Warn the user about validation issues or over-asked claims
+}
+```
+
 ## Logging
 The SwiftLog library is used for logging. The library provides a default logger that logs to the console. The main app configures logging outputs such as file logging.
 To use the logger create a logger instance with the desired label. The logger can be used to log messages with different log levels.

@@ -95,7 +95,9 @@ On view appearance the attestations are presented with the ``PresentationService
 
 ## Credential Selection
 
-After the request is received, ``PresentationSession/disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` array representing one valid combination of credentials that satisfies the verifier's DCQL query. When credential sets or the `multiple` flag produce multiple satisfiable combinations, the UI should allow the user to pick which option to present.
+After the request is received, ``PresentationSession/disclosedDocumentSets`` contains an array of ``DisclosedDocumentSet`` values. Each set holds the matching documents (`docElements`) and any registration-policy `warnings` for that combination. When credential sets or the `multiple` flag produce multiple satisfiable combinations, the UI should allow the user to pick which option to present.
+
+Each ``DisclosedDocumentSet`` carries per-option `PolicyViolation` warnings raised during WRPRC validation (see <doc:RegistrationCertificate>). These indicate over-asked claims or other policy violations specific to that credential combination and should be surfaced to the user.
 
 When partial-claim presentation is enabled, each option includes only the claims that are both requested and available. The selected state of the items can be modified via UI binding.
 
@@ -103,12 +105,14 @@ The `deviceNameSpacesToSend` parameter allows including device-signed namespaces
 
 ```swift
 // Example: use the first credential selection option
-let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
+let selectedOption = presentationSession.disclosedDocumentSets.first
+let items = selectedOption?.docElements ?? []
+let warnings = selectedOption?.warnings ?? []
 
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
 await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: selectedOption.items, onCancel: { dismiss() }, onSuccess: {
+  itemsToSend: items.items, onCancel: { dismiss() }, onSuccess: {
     if let url = $0 {
       // handle URL
     }
