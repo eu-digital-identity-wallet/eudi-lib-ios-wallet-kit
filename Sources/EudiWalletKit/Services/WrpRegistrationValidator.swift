@@ -100,8 +100,10 @@ public actor WrpRegistrationValidator {
 			wrpRegistration = wrpRegistrationPolicy
 			if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .wrprcExpired) }
 			if let wrpac {
-				if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) } //else { throw WalletError(description: "WRPRC not bound to requester access certificate", code: .invalidWrprc) }
-			} else { wrpWarnings.append(.init("Requester access certificate not available to check WRPRC binding")) }
+				if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings.append(.init("WRPRC not bound to requester access certificate")) }
+			} else {
+				wrpWarnings.append(.init("Requester access certificate not available to check WRPRC binding"))
+			}
 			guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC does not have status list", code: .wrprcMissingStatus) }
 			let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
 			let credStatus = try? await statusService.getStatus()
