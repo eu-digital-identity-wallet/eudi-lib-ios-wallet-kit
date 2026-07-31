@@ -47,6 +47,32 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 		[RegistrationIdentifier(value: sub)] 
 	}
 
+	public init(entitlements: [String]? = nil, sub: String, country: String? = nil, policyID: [String]? = nil, credentials: [PolicyCredential], purpose: [PolicyPurpose]? = nil, registryURI: String? = nil, certificatePolicy: String? = nil, srvDescription: [PolicyPurpose]? = nil, supportURI: String? = nil, supervisoryAuthority: SupervisoryAuthority? = nil, privacyPolicy: String? = nil, name: String? = nil, infoURI: String? = nil, subLn: String? = nil, subGn: String? = nil, subFn: String? = nil, iat: Int? = nil, exp: Int? = nil, status: Status? = nil, intendedUseID: String? = nil, providesAttestations: [PolicyCredential]? = nil, intermediary: PolicyIntermediary? = nil) {
+		self.entitlements = entitlements
+		self.sub = sub
+		self.country = country
+		self.policyID = policyID
+		self.credentials = credentials
+		self.purpose = purpose
+		self.registryURI = registryURI
+		self.certificatePolicy = certificatePolicy
+		self.srvDescription = srvDescription
+		self.supportURI = supportURI
+		self.supervisoryAuthority = supervisoryAuthority
+		self.privacyPolicy = privacyPolicy
+		self.name = name
+		self.infoURI = infoURI
+		self.subLn = subLn
+		self.subGn = subGn
+		self.subFn = subFn
+		self.iat = iat
+		self.exp = exp
+		self.status = status
+		self.intendedUseID = intendedUseID
+		self.providesAttestations = providesAttestations
+		self.intermediary = intermediary
+	}
+
 	enum CodingKeys: String, CodingKey {
 		case entitlements = "entitlements"
 		case sub = "sub"
@@ -79,6 +105,11 @@ public struct PolicyIntermediary: Decodable, Sendable {
 	// The intermediary common name is carried in the `sname` claim, not `name`.
 	public let name: String?
 
+	public init(identifier: String? = nil, name: String? = nil) {
+		self.identifier = identifier
+		self.name = name
+	}
+
 	enum CodingKeys: String, CodingKey {
 		case identifier = "sub"
 		case name = "sname"
@@ -87,12 +118,22 @@ public struct PolicyIntermediary: Decodable, Sendable {
 
 public struct RegistrationIdentifier: Decodable, Sendable {
 	public let value: String
+
+	public init(value: String) {
+		self.value = value
+	}
 }
 
 public struct PolicyCredential: Decodable, Sendable {
 	public let format: String
 	public let meta: PolicyCredentialMeta
 	public let claim: [PolicyClaim]
+
+	public init(format: String, meta: PolicyCredentialMeta, claim: [PolicyClaim]) {
+		self.format = format
+		self.meta = meta
+		self.claim = claim
+	}
 
 	enum CodingKeys: String, CodingKey {
 		case format = "format"
@@ -104,6 +145,10 @@ public struct PolicyCredential: Decodable, Sendable {
 public struct PolicyClaim: Decodable, Sendable {
 	public let path: ClaimPath
 
+	public init(path: ClaimPath) {
+		self.path = path
+	}
+
 	enum CodingKeys: String, CodingKey {
 		case path = "path"
 	}
@@ -112,6 +157,11 @@ public struct PolicyClaim: Decodable, Sendable {
 public struct PolicyCredentialMeta: Decodable, Sendable {
 	public let vctValues: [String]?
 	public let doctypeValue: String?
+
+	public init(vctValues: [String]? = nil, doctypeValue: String? = nil) {
+		self.vctValues = vctValues
+		self.doctypeValue = doctypeValue
+	}
 
 	enum CodingKeys: String, CodingKey {
 		case vctValues = "vct_values"
@@ -122,6 +172,11 @@ public struct PolicyCredentialMeta: Decodable, Sendable {
 public struct PolicyPurpose: Decodable, Sendable {
 	public let lang: String
 	public let value: String
+
+	public init(lang: String, value: String) {
+		self.lang = lang
+		self.value = value
+	}
 
 	enum CodingKeys: String, CodingKey {
 		case lang = "lang"
@@ -134,6 +189,13 @@ public struct SupervisoryAuthority: Decodable, Sendable {
 	public let email: String?
 	public let phone: String?
 	public let uri: String?
+
+	public init(name: String? = nil, email: String? = nil, phone: String? = nil, uri: String? = nil) {
+		self.name = name
+		self.email = email
+		self.phone = phone
+		self.uri = uri
+	}
 
 	enum CodingKeys: String, CodingKey {
 		case name = "name"
