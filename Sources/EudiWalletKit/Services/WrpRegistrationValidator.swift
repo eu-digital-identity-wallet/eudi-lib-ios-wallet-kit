@@ -113,6 +113,7 @@ public actor WrpRegistrationValidator {
 				Self.logger.warning("WRPRC status list could not be retrieved")
 				wrpWarnings.append(.init("WRPRC status list could not be retrieved"))
 			}
+			#if canImport(EudiEtsi1196x2)
 			let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
 			if !isValid {
 				let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
@@ -121,6 +122,7 @@ public actor WrpRegistrationValidator {
 				case .enforce: throw WalletError(description: message, code: .wrprcTrustError)
 				}
 			}
+			#endif
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 			var allWarnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: wrpRegistrationPolicy)
