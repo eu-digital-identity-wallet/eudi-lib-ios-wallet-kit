@@ -47,6 +47,13 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// - `.preferSigned(issuerTrust:)`: wallet sends `Accept: application/jwt, application/json`. If the issuer returns a signed JWT, the signature is verified against the supplied trust anchor; otherwise plain JSON is accepted as a fallback.
 	/// - `.requireSigned(issuerTrust:)`: wallet sends `Accept: application/jwt`. The issuer must return a signed JWT whose signature validates against the supplied trust anchor; plain JSON responses are rejected.
 	public let issuerMetadataPolicy: IssuerMetadataPolicy
+	/// Whether to validate the WRP registration certificate (WRPRC) delivered in the issuer metadata `issuer_info`.
+	///
+	/// When enabled, the issuer is constructed with `Issuer.make(...)` which enforces the WRPRC policy
+	/// against the resolved offer; the WRPRC is validated by ``WrpRegistrationValidator`` using the
+	/// wallet trust configuration. Requires `issuerMetadataPolicy` to be `.requireSigned`, since WRPRC
+	/// enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
+	public let validateRegistrationCertificate: Bool
 	/// Whether user authentication is required for credential issuance
 	public let userAuthenticationRequired: Bool
 	/// Key options for generating DPoP keys, if DPoP is used
@@ -61,6 +68,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		parUsage: ParUsage = .required(authorizationCodeDPoPBinding: true),
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
+		validateRegistrationCertificate: Bool = false,
 		cacheIssuerMetadata: Bool = true,
 		userAuthenticationRequired: Bool = false,
 		dpopKeyOptions: KeyOptions? = nil,
@@ -74,6 +82,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.parUsage = parUsage
 		self.requireDpop = requireDpop
 		self.issuerMetadataPolicy = issuerMetadataPolicy
+		self.validateRegistrationCertificate = validateRegistrationCertificate
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
 	}
@@ -161,10 +170,17 @@ extension OpenId4VciConfiguration {
 	
 	static let supportedCredentialReusePolicies: SupportedCredentialReusePolicies = .supported([.limitedTime, .onceOnly, .rotatingBatch])
 
-	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]) async throws -> OpenId4VCIConfig {
+	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm], registrationCertificatePolicy: RegistrationCertificatePolicy? = nil) async throws -> OpenId4VCIConfig {
+		if registrationCertificatePolicy != nil {
+			// The OpenID4VCI library traps at OpenId4VCIConfig construction for this combination:
+			// WRPRC enforcement requires a cryptographically bound issuer metadata signer to supply the WRPAC.
+			guard case .requireSigned = issuerMetadataPolicy else {
+				throw WalletError(description: "Registration certificate validation requires issuerMetadataPolicy to be .requireSigned", code: .invalidWrprc)
+			}
+		}
 		let client: Client = try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported)
 		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder()
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy)
 	}
 
 	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {

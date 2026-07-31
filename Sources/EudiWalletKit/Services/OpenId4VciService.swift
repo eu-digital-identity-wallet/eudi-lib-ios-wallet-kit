@@ -52,6 +52,9 @@ public actor OpenId4VciService {
 	var transactionLogger: (any TransactionLogger)?
 	/// Trust configuration used to validate issuer (document-signer) certificate chains of issued documents.
 	var trustConfig: TrustConfiguration
+	/// Warnings produced by the WRP registration certificate policy during the last `getIssuer(offer:)` call.
+	/// Keyed by credential configuration identifier; "global" holds request-wide warnings.
+	public private(set) var wrpRegistrationWarnings: [String: [PolicyViolation]] = [:]
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
@@ -293,8 +296,26 @@ public actor OpenId4VciService {
 			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: keyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions)
 		}
 		guard let algs = offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
-		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs)
+		let registrationCertificatePolicy = makeRegistrationCertificatePolicy()
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs, registrationCertificatePolicy: registrationCertificatePolicy)
+		if registrationCertificatePolicy != nil {
+			let result = try await Issuer.make(credentialOffer: offer, config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
+			wrpRegistrationWarnings = result.warnings
+			if !result.warnings.isEmpty { logger.warning("WRP registration certificate warnings: \(result.warnings.mapValues { $0.map(\.value) })") }
+			return result.issuer
+		}
 		return try Issuer(authorizationServerMetadata: offer.authorizationServerMetadata, issuerMetadata: offer.credentialIssuerMetadata, config: vciConfig, parPoster: Poster(session: networking), tokenPoster: Poster(session: networking), requesterPoster: Poster(session: networking), deferredRequesterPoster: Poster(session: networking), notificationPoster: Poster(session: networking), noncePoster: Poster(session: networking), dpopConstructor: dpopConstructor)
+	}
+
+	/// Builds the WRPRC enforcement policy for `OpenId4VCIConfig.registrationCertificatePolicy`
+	/// when enabled in the wallet configuration; the WRPRC is validated by ``WrpRegistrationValidator``
+	/// using the wallet trust configuration.
+	func makeRegistrationCertificatePolicy() -> RegistrationCertificatePolicy? {
+		guard config.validateRegistrationCertificate else { return nil }
+		let validator = WrpRegistrationValidator(trustConfig: trustConfig)
+		return RegistrationCertificatePolicy { wrpac, wrprc, offeredConfigurations in
+			await validator.validateCertificate(wrpac: wrpac, wrprc: wrprc, offeredConfigurations: offeredConfigurations)
+		}
 	}
 
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
@@ -321,7 +342,7 @@ public actor OpenId4VciService {
 		return (issuer, dpopConstructor)
 	}
 
-	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration]) {
+	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration], [String: [PolicyViolation]]) {
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw WalletError(description: "offerUri \(offerUri) not resolved. resolveOfferDocTypes must be called first", code: .internalError)
 		}
@@ -342,7 +363,7 @@ public actor OpenId4VciService {
 				logger.info("Access token issued at: \(Date(timeIntervalSinceReferenceDate:authorized.timeStamp)), now: \(Date()), expires at \(Date(timeIntervalSinceReferenceDate:authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0)))")
 				authorized = try await refreshAuthorization(issuer: issuer, authorized: authorized,	configuration: credentialConfigurations[0], forceRefreshToken: forceRefreshToken)
 				authorizedOutcome = .authorized(authorized)
-				return (authorizedOutcome, issuer, credentialConfigurations)
+				return (authorizedOutcome, issuer, credentialConfigurations, wrpRegistrationWarnings)
 			}
 			catch CredentialIssuanceError.requestFailed(let code, let error, let description) where !backgroundOnly && forceRefreshToken && (400..<500).contains(code) {
 				logger.error("Refresh token authentication failure with status code: \(code), error: \(error) \(description ?? "").")
@@ -358,7 +379,7 @@ public actor OpenId4VciService {
 		} else {
 			throw WalletError(description: "Offer requires user interaction for authorization, but backgroundOnly is set to true, forced refresh token is \(forceRefreshToken).", code: .authorizationFailed)
 		}
-		return (authorizedOutcome, issuer, credentialConfigurations)
+		return (authorizedOutcome, issuer, credentialConfigurations, wrpRegistrationWarnings)
 	}
 
 	func issueDocumentByOfferUrl(issuer: Issuer, offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], promptMessage: String? = nil) async throws -> IssuanceOutcome {
@@ -478,7 +499,8 @@ public actor OpenId4VciService {
 			try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: docTypeModel.credentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage, offer: offer)
 			openId4VCIServices.append(svc)
 		}
-		let (auth, issuer, credentialInfos) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
+		let (auth, issuer, credentialInfos, wrpWarnings) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
+		wrpRegistrationWarnings = wrpWarnings
 		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? issuerIdentifier
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
