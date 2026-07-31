@@ -1202,4 +1202,160 @@ struct DcqlQueryTests {
 		#expect(result.count == 2, "Should have two options for the two mDL alternatives")
 		#expect(result.values.allSatisfy { $0.contains(where: { $0.credentialId == "pid_cred" }) })
 	}
+
+	// MARK: - validateDcqlPolicy tests
+
+	private func makePolicy(credentials: [PolicyCredential]) -> WrpRegistrationPolicy {
+		WrpRegistrationPolicy(
+			entitlements: [], sub: "test", country: "EU", policyID: ["p1"],
+			credentials: credentials,
+			purpose: [], registryURI: "https://example.com", certificatePolicy: "test",
+			srvDescription: [], supportURI: "https://example.com",
+			supervisoryAuthority: SupervisoryAuthority(email: "a@b.com", phone: "123", uri: "https://example.com"),
+			privacyPolicy: "https://example.com", name: "Test",
+			infoURI: "https://example.com", subLn: "test", iat: 0,
+			status: nil)
+	}
+
+	private func makePolicyCredential(doctype: String? = nil, vctValues: [String]? = nil, claimPaths: [[String]]) -> PolicyCredential {
+		PolicyCredential(
+			format: doctype != nil ? "mso_mdoc" : "dc+sd-jwt",
+			meta: PolicyCredentialMeta(vctValues: vctValues, doctypeValue: doctype),
+			claim: claimPaths.map { PolicyClaim(path: ClaimPath($0.map { ClaimPathElement.claim(name: $0) })) }
+		)
+	}
+
+	private func makeSelection(credentialId: String, docType: String, queryId: String, claimPaths: [[String]]) throws -> CredentialSelection {
+		try CredentialSelection(
+			credentialId: credentialId, docType: docType,
+			queryId: QueryId(value: queryId), optionId: "opt1",
+			claimQueries: claimPaths.map {
+				ClaimsQuery(id: nil, path: ClaimPath($0.map { ClaimPathElement.claim(name: $0) }), values: nil, intentToRetain: nil)
+			}
+		)
+	}
+
+	@Test("validateDcqlPolicy - no violations when all claims are within policy")
+	func testValidateDcqlPolicyNoViolations() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(doctype: "org.iso.18013.5.1.mDL", claimPaths: [
+				["org.iso.18013.5.1", "family_name"],
+				["org.iso.18013.5.1", "given_name"],
+			])
+		])
+		let selection = try makeSelection(
+			credentialId: "cred1", docType: "org.iso.18013.5.1.mDL", queryId: "q1",
+			claimPaths: [["org.iso.18013.5.1", "family_name"], ["org.iso.18013.5.1", "given_name"]]
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [selection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.isEmpty, "Should have no violations when all claims are within policy")
+	}
+
+	@Test("validateDcqlPolicy - warns on extra claims beyond policy scope")
+	func testValidateDcqlPolicyExtraClaims() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(doctype: "org.iso.18013.5.1.mDL", claimPaths: [
+				["org.iso.18013.5.1", "family_name"],
+			])
+		])
+		let selection = try makeSelection(
+			credentialId: "cred1", docType: "org.iso.18013.5.1.mDL", queryId: "q1",
+			claimPaths: [["org.iso.18013.5.1", "family_name"], ["org.iso.18013.5.1", "portrait"]]
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [selection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.count == 1, "Should have one option key with violations")
+		let violations = result["option1"]
+		#expect(violations?.count == 1)
+		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CLAIMS") == true || violations?.first?.violation.contains("portrait") == true)
+	}
+
+	@Test("validateDcqlPolicy - warns on credential not declared in policy")
+	func testValidateDcqlPolicyExtraCredential() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(doctype: "org.iso.18013.5.1.mDL", claimPaths: [
+				["org.iso.18013.5.1", "family_name"],
+			])
+		])
+		let selection = try makeSelection(
+			credentialId: "cred1", docType: "eu.europa.ec.eudi.pid.1", queryId: "q1",
+			claimPaths: [["eu.europa.ec.eudi.pid.1", "family_name"]]
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [selection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.count == 1)
+		let violations = result["option1"]
+		#expect(violations?.count == 1)
+		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CREDENTIAL") == true || violations?.first?.violation.contains("not declared") == true)
+	}
+
+	@Test("validateDcqlPolicy - no violations when selection has no claim queries")
+	func testValidateDcqlPolicyEmptyClaims() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(doctype: "org.iso.18013.5.1.mDL", claimPaths: [
+				["org.iso.18013.5.1", "family_name"],
+			])
+		])
+		let selection = try makeSelection(
+			credentialId: "cred1", docType: "org.iso.18013.5.1.mDL", queryId: "q1",
+			claimPaths: []
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [selection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.isEmpty, "Should have no violations when no claims are requested")
+	}
+
+	@Test("validateDcqlPolicy - matches by vct_values for SD-JWT credentials")
+	func testValidateDcqlPolicyMatchesByVctValues() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(vctValues: ["urn:eudi:pid:1", "urn:eudi:pid:2"], claimPaths: [
+				["family_name"],
+				["given_name"],
+			])
+		])
+		let selection = try makeSelection(
+			credentialId: "cred1", docType: "urn:eudi:pid:1", queryId: "q1",
+			claimPaths: [["family_name"]]
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [selection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.isEmpty, "Should match by vct_values and find no violations")
+	}
+
+	@Test("validateDcqlPolicy - multiple selections with mixed violations")
+	func testValidateDcqlPolicyMixedViolations() throws {
+		let policy = makePolicy(credentials: [
+			makePolicyCredential(doctype: "org.iso.18013.5.1.mDL", claimPaths: [
+				["org.iso.18013.5.1", "family_name"],
+			])
+		])
+		let validSelection = try makeSelection(
+			credentialId: "cred1", docType: "org.iso.18013.5.1.mDL", queryId: "q1",
+			claimPaths: [["org.iso.18013.5.1", "family_name"]]
+		)
+		let unknownCredSelection = try makeSelection(
+			credentialId: "cred2", docType: "some.unknown.doctype", queryId: "q2",
+			claimPaths: [["some_claim"]]
+		)
+		var options = CredentialSelectionSetOptions()
+		options["option1"] = [validSelection, unknownCredSelection]
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.count == 1)
+		let violations = result["option1"]
+		#expect(violations?.count == 1, "Should have one violation for the unknown credential")
+	}
+
+	@Test("validateDcqlPolicy - empty options returns empty result")
+	func testValidateDcqlPolicyEmptyOptions() {
+		let policy = makePolicy(credentials: [])
+		let options = CredentialSelectionSetOptions()
+		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
+		#expect(result.isEmpty)
+	}
 }

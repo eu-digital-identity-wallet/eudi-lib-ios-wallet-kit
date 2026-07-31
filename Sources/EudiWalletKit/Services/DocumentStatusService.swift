@@ -24,10 +24,6 @@ import JSONWebSignature
 import Logging
 import struct MdocDataModel18013.StatusList
 
-#if canImport(EudiEtsi1196x2)
-import EudiEtsi1196x2
-#endif
-
 public actor DocumentStatusService {
 	let statusList: StatusList
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
@@ -62,47 +58,16 @@ struct StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 	private static let logger = Logger(label: "StatusListTokenSignatureVerifier")
 
 	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
-		let certsData: [Data]
-		switch format {
-		case .jwt:
-			guard let jwtString = String(data: statusListToken, encoding: .utf8) else { throw JWS.JWSError.invalidString }
-			try Self.verifyJwtSignature(jwt: jwtString)
-			let jws = try JWS(jwsString: jwtString)
-			guard let b64certs = jws.protectedHeader.x509CertificateChain else { throw JWS.JWSError.somethingWentWrong }
-			certsData = b64certs.compactMap { Data(base64Encoded: $0) }
-			guard certsData.count == b64certs.count else { throw JWS.JWSError.somethingWentWrong }
-		case .cwt:
-			let readerAuth = try ReaderAuth(data: [UInt8](statusListToken))
-			certsData = readerAuth.x5chain.map { Data($0) }
-		}
-		guard certsData.count > 0 else { throw JWS.JWSError.somethingWentWrong }
-		let (isValid, reason) = await trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
+		let attTF: AttestToken.Format = switch format { case .jwt: .jwt; case .cwt: .cwt }
+		let att = try x5cVerifyJwtOrCwt.parse(attestData: statusListToken, format: attTF)
+		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.accessTrustManager)
 		guard isValid else {
 			let message = "\(format) status token trust error: \(reason ?? "")"
 			switch trustConfig.statusTrustPolicy {
-			case .warning:
-				Self.logger.warning("\(message)")
-				return
-			case .enforce:
-				throw WalletError(description: message, code: .trustError)
+			case .warning: Self.logger.warning("\(message)"); return
+			case .enforce: throw WalletError(description: message, code: .trustError)
 			}
 		}
-	}
-
-	/// Verify the JWS signature against the leaf certificate carried in the `x5c` header.
-	private static func verifyJwtSignature(jwt: String) throws {
-		#if canImport(EudiEtsi1196x2)
-		try x5cVerifyJwtSignature.verify(jwt: jwt)
-		#else
-		let jws = try JWS(jwsString: jwt)
-		guard let leafBase64 = jws.protectedHeader.x509CertificateChain?.first, let certData = Data(base64Encoded: leafBase64) else {
-			throw JWS.JWSError.missingKey
-		}
-		guard let certificate = SecCertificateCreateWithData(nil, certData as CFData), let publicKey = SecCertificateCopyKey(certificate) else {
-			throw JWS.JWSError.missingKey
-		}
-		guard try jws.verify(key: publicKey) else { throw JWS.JWSError.somethingWentWrong}
-		#endif
 	}
 }
 

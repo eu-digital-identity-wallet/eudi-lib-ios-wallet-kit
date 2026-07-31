@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,11 +32,12 @@ import SwiftyJSON
 import struct OpenID4VP.ClaimPath
 import enum OpenID4VP.ClaimPathElement
 import struct WalletStorage.Document
+import struct OpenID4VP.PolicyViolation
 /// Implements remote attestation presentation to online verifier
 
 /// Implementation is based on the OpenID4VP specification
 public final class OpenId4VpService: @unchecked Sendable, PresentationService {
- 	public var status: TransferStatus = .initialized
+	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	let transferInfo: InitializeTransferInfo
 	// map of document-id to IssuerSigned
@@ -69,11 +70,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var unlockData: [String: Data]!
 	var verifierInfo: [VerifierInfo]?
 	var docTypeDisplayNames: [DocType: String]
+	public var relyingPartyRegistration: WrpRegistrationPolicy?
+	public var allWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
+	public let wrpRegistrationValidator: WrpRegistrationValidator
 
 	public init(
 		parameters: InitializeTransferData,
@@ -81,6 +85,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		openID4VpConfig: OpenId4VpConfiguration,
 		networking: Networking,
 		trustConfig: TrustConfiguration,
+		wrpRegistrationValidator: WrpRegistrationValidator,
 		docTypeDisplayNames: [DocType: String] = [:]
 	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
@@ -93,6 +98,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.openID4VpConfig = openID4VpConfig
 		self.networking = networking
 		self.trustConfig = trustConfig
+		self.wrpRegistrationValidator = wrpRegistrationValidator
 		self.docTypeDisplayNames = docTypeDisplayNames
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .json)
 	}
@@ -113,34 +119,35 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> [UserRequestInfo] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw WalletError(description: "Invalid link \(openid4VPlink)", code: .invalidQueryResolution) }
+		let dcqlQ = decodeDocuments()
+		await wrpRegistrationValidator.set(dcqlQueryable: dcqlQ)
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
-		case .notSecured(data: let rrd):
-			if case .redirectUri = rrd.client { return try handleRequestData(rrd) }
+		case let .notSecured(data: rrd, warnings):
+			self.allWarnings = warnings
+			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
+			if case .redirectUri = rrd.client { return try await handleRequestData(rrd) }
 			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
 			if let details { logger.error("Details: \(details)") }
 			throw WalletError(description: "OpenID4VP request error: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: readerCertificateValidationMessage != nil ? .trustError : .invalidQueryResolution, innerError: error)
-		case let .jwt(request: rrd):
-			return try handleRequestData(rrd)
+		case let .jwt(request: rrd, warnings):
+			self.allWarnings = warnings
+			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
+			return try await handleRequestData(rrd)
 		}
 	}
 
-	func handleRequestData(_ rrd: ResolvedRequestData) throws -> [UserRequestInfo] {
+	func handleRequestData(_ rrd: ResolvedRequestData) async throws -> [UserRequestInfo] {
+		relyingPartyRegistration = await wrpRegistrationValidator.wrpRegistration
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
 		var jwkThumbprint: Data?  = nil
-
 		if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}),
-			let x = key.x, let xd = Data(base64URLEncoded: x),
-			let y = key.y, let yd = Data(base64URLEncoded: y),
-			let crv = key.crv,
-			let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv),
-			let ecCrvType = ECCurveType(rawValue: crv) {
-			logger.info("Found jwks public key with curve \(crv)")
+			let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y),
+			let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv), let ecCrvType = ECCurveType(rawValue: crv) {
 			eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
-			// Generate a jwkThumbprint if possible.
 			let publicKey = ECPublicKey(crv: ecCrvType, x: x , y: y)
 			jwkThumbprint = (try? publicKey.thumbprint(algorithm: .SHA256)).flatMap { Data(base64URLEncoded: $0) }
 		}
@@ -152,7 +159,6 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		sessionTranscript = SessionTranscript(handOver: OpenId4VpUtils.generateOpenId4VpHandover(clientId: resolvedClientId, responseUri: responseUri, nonce: vpNonce, jwkThumbprint: jwkThumbprint?.byteArray))
 		transactionData = vp.transactionData
 		verifierInfo = vp.verifierInfo
-
 		logger.info("Session Transcript: \(sessionTranscript.encode().toHexString()), for clientId: \(vp.client.id), responseUri: \(responseUri), nonce: \(vp.nonce), mdocGeneratedNonce: \(mdocGeneratedNonce!)")
 		// Only DCQL supported now
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
@@ -160,18 +166,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			let deviceRequestBytes = try? JSONEncoder().encode(dcql)
 			let (fmtsReq, imap, zkSpecMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
 			formatsRequested = fmtsReq; inputDescriptorMap = imap; zkSpecsRequested = zkSpecMap
-			decodeDocuments()
+			dcqlQueryable = decodeDocuments()
 			let credentialSelectionSets = try OpenId4VpUtils.resolveDcql(
 				dcql, queryable: dcqlQueryable, docTypeDisplayNames: docTypeDisplayNames)
 			let requestItemsArray = OpenId4VpUtils.getRequestItems(credentialSelectionSets, idsToDocTypes: transferInfo.idsToDocTypes, formatsRequested: formatsRequested)
 			let transactionDataRequestedArray = transactionData != nil
-				? try OpenId4VpUtils.getTransactionDataRequested(
-					credentialSelectionSets,
-					transactionDataList: transactionData!)
-				: nil
+				? try OpenId4VpUtils.getTransactionDataRequested(credentialSelectionSets, transactionDataList: transactionData!) : nil
 			let verifierInfoRequestedArray = verifierInfo != nil
-				? OpenId4VpUtils.getVerifierInfoRequested(credentialSelectionSets, verifierInfoList: verifierInfo!)
-				: nil
+				? OpenId4VpUtils.getVerifierInfoRequested(credentialSelectionSets, verifierInfoList: verifierInfo!) : nil
 			let certificateIssuerName = readerCertificateIssuer.map(MdocHelpers.getCN(from:))
 			let rar = ReaderAuthenticationResult(isValidated: readerAuthValidated, certificateIssuer: certificateIssuerName, validationMessage: readerCertificateValidationMessage, legalName: rrd.legalName, authBytes: nil, certificateChain: certificateChain)
 			var results = [UserRequestInfo]()
@@ -223,7 +225,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		return (VerifiablePresentation.generic(vpTokenStr), vpTokenData, resp.responseMetadata, resp.zkpDocumentIds)
 	}
 
-	func decodeDocuments() {
+	func decodeDocuments() -> DefaultDcqlQueryable {
+		if formatsRequested == nil {
+			// Derive formatsRequested from existing document data when not yet set (e.g. early policy validation)
+			var fmts = [DocType: DocDataFormat]()
+			for (docId, docType) in transferInfo.idsToDocTypes {
+				if let fmt = transferInfo.dataFormats[docId] { fmts[docType] = fmt }
+			}
+			formatsRequested = fmts
+		}
 		if formatsRequested.first(where: { (_, value: DocDataFormat) in value == .cbor }) != nil { makeCborDocs() }
 		let parser = CompactParser()
 		let docJwtStrings = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .sdjwt)}.compactMapValues { String(data: $0, encoding: .utf8) }
@@ -237,7 +247,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		var claimValues = [Document.ID: [ClaimPath: [String]]]()
 		OpenId4VpUtils.makeCborClaimData(from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
 		OpenId4VpUtils.makeSdJwtClaimData(from: docsSdJwt, claimPaths: &claimPaths, claimValues: &claimValues)
-		dcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+		let defaultDcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+		return defaultDcqlQueryable
 	}
 
 	/// Send response via openid4vp
@@ -384,12 +395,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			supportedClientIdSchemes: supportedClientIdPrefixes,
 			vpFormatsSupported: [],
 			jarConfiguration: .encryptionOption,
-			vpConfiguration: try! .init(
-				vpFormatsSupported: .default(),
-				supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
+			vpConfiguration: try! .init(vpFormatsSupported: .default(), supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
 			errorDispatchPolicy: .allClients,
 			session: networking,
-			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default())
+			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default(),
+			registrationCertificatePolicy: openID4VpConfig.registrationCertificatePolicy ?? .default(validator: wrpRegistrationValidator)
+		)
 		return res
 	}
 

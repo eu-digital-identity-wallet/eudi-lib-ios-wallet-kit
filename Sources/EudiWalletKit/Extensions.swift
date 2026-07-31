@@ -23,11 +23,17 @@ import WalletStorage
 import SwiftCBOR
 import SwiftyJSON
 import JOSESwift
+import JSONWebSignature
 import protocol JSONWebAlgorithms.JWKRepresentable
 import struct JSONWebAlgorithms.SecKeyExtended
 import struct JSONWebKey.JWK
 import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
+import struct OpenID4VP.RegistrationCertificatePolicy
+import struct OpenID4VP.DCQL
+import typealias OpenID4VP.CertificateTrust
+import enum OpenID4VP.Authorization
+import struct OpenID4VP.PolicyViolation
 
 extension String {
 	public func translated() -> String {
@@ -605,4 +611,24 @@ extension EudiWallet {
 		}
 		return credentialIssuer
 	}
+}
+
+// MARK: - DCQL Policy Validation
+
+extension RegistrationCertificatePolicy {
+	
+	/// Creates a default policy that validates certificate trust and checks
+	/// that the request DCQL does not exceed the scope declared in the WRPRC.
+	/// - Parameters:
+	///   - certificateTrust: The trust validator for the WRPRC signing certificate
+	///   - policyDcql: A closure that extracts the permitted DCQL scope from the WRPRC
+	/// - Returns: A policy that warns when the request DCQL is a superset of the policy DCQL
+	static func `default`(validator: WrpRegistrationValidator) -> RegistrationCertificatePolicy {
+	  RegistrationCertificatePolicy(
+		validatePolicy: { wrpac, wrprc, dcql in
+			return await validator.validateCertificate(wrpac: wrpac, wrprc: wrprc, dcql: dcql)
+		}
+	  )
+	}
+	
 }

@@ -73,8 +73,22 @@ public struct WalletError: LocalizedError {
 		case missingVciConfiguration
 		/// Unsupportted credential configuration
 		case unsupportedCredentialConfiguration
-		// no client attestation algorithm found
+		/// no client attestation algorithm found
 		case noClientAttestationAlgorithmFound
+		/// invalid Wrprc
+		case invalidWrprc
+		/// WRPRC header type is not a registration certificate type
+		case wrprcInvalidType
+		/// WRPRC payload could not be decoded
+		case wrprcPayloadDecodingFailed
+		/// WRPRC is expired
+		case wrprcExpired
+		/// WRPRC does not contain a status list reference
+		case wrprcMissingStatus
+		/// WRPRC status is not valid (e.g. revoked or suspended)
+		case wrprcStatusInvalid
+		/// WRPRC trust chain could not be validated
+		case wrprcTrustError
 		/// Internal / unexpected error that does not fit another category
 		case internalError
 	}

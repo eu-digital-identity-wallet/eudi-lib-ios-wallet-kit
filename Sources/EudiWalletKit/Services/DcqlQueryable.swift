@@ -30,7 +30,7 @@ public protocol DcqlQueryable {
 	func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [String]) -> Bool
 }
 
-public class DefaultDcqlQueryable: DcqlQueryable {
+public final class DefaultDcqlQueryable: DcqlQueryable, Sendable {
 	private let credentials: [Document.ID: (docType: DocType, format: DocDataFormat)]
 	private let claimPaths: [Document.ID: [ClaimPath]]
 	private let claimValues: [Document.ID: [ClaimPath: [String]]]

@@ -1,3 +1,70 @@
+## v0.37.6
+
+- Refactor document status handling to use `StatusList` instead of `StatusIdentifier` across services and models.
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.0.
+
+## v0.37.5
+
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.51.0.
+
+## v0.37.4
+
+- Fix credential usage count logic to correctly calculate remaining usage counts.
+- Update `eudi-lib-ios-wallet-storage` to version 0.23.2.
+
+## v0.37.3
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.23.5.
+
+## v0.37.2
+
+- Add L2CAP PSM support in BLE device engagement QR code.
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.23.4 and `eudi-lib-ios-wallet-storage` to version 0.23.1.
+
+## v0.37.1
+
+- Update negative consent message to use `access_denied`.
+
+## v0.37.0
+
+- Add BLE transport factory support to `EudiWallet` and related services.
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.23.3.
+
+## v0.36.2
+
+- Fix trust error code reporting for untrusted reader certificate chains.
+- Fix DCQL value matching for SD-JWT claims by extracting values from disclosures.
+- Fix DCQL array query extraction in `getSdJwtPresentation`.
+
+## v0.36.1
+
+- Add `WebKeySet` parameter to `PreregisteredClient` initializer.
+- Fix optional unwrapping of nonce in `getKeyAttestationJWT`.
+- Refactor trust configuration for platform-specific support.
+- Update swift-tools-version to 6.2.
+- Update `eudi-lib-ios-openid4vp-swift` to version 0.35.1 and `eudi-lib-ios-iso18013-data-transfer` to version 0.23.1.
+
+## v0.36.0
+
+### WIA / Key Attestation Updates
+
+- Generate a unique DPoP key-id per issuer identifier.
+- Drop `jwt-without-attestation` support flag.
+- Fix JWT `ProofType` with attestation issuance; create key binding for the first key only.
+- Refactor `deferredCredentialUseCase` to fix response encryption handling.
+- Show a friendly error in case of status check failure.
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.50.0.
+
+## v0.35.2
+
+- Fixes for ETSI trust validation.
+
+## v0.35.1
+
+- Make `WalletError` code mandatory.
+- Populate `documentId`, `docType`, and `displayName` in `TransactionLog` for OpenID4VP and BLE flows.
+- Add transaction log entry for negative consent case.
+
 ## v0.35.0
 
 ### ETSI Trusted Lists (LOTL/LOTL) Integration
@@ -22,6 +89,50 @@ Trust validation now uses ETSI Trusted Lists via `EtsiTrustManager` instead of m
 - `TrustConfiguration` — describes trust sources, policies, clock skew, and signed metadata requirements.
 - `IssuerMetadataChainTrust` — bridges `EtsiTrustManager` into the OpenID4VCI issuer metadata signature verification flow.
 - `EudiWallet.trustConfig` — public property exposing the active trust configuration.
+
+## v0.34.4
+
+- Make `isValid` function asynchronous for certificate chain validation.
+- Update `eudi-lib-ios-statium-swift` to version 0.5.0 and `eudi-lib-ios-openid4vci-swift` to version 0.41.0.
+
+## v0.34.3
+
+- Send single attestation proof for key batch.
+
+## v0.34.2
+
+- Remove `allowPresentingPartialClaims` flag.
+
+## v0.34.1
+
+- Refactor SD-JWT element extraction and tree building logic to filter children of requested doc-claims.
+- Add `docTypeDisplayNames` parameter to `resolveDcql` method.
+
+## v0.34.0
+
+### Transaction Data for mso_mdoc Credentials
+
+- Implement transaction data support for mso_mdoc credentials using DCQL.
+- Change `sendResponse` method signature.
+- Update `eudi-lib-ios-wallet-storage` to version 0.21.0 and `eudi-lib-ios-iso18013-data-transfer` to version 0.21.0.
+
+## v0.33.5
+
+- Update `eudi-lib-sdjwt-swift` to version 0.14.6.
+
+## v0.33.4
+
+- Add preferred response mode configuration for OpenID4VP authorization responses.
+
+## v0.33.3
+
+- Refactor SD-JWT validation and remove unnecessary public key retrieval during OpenID4VP presentation.
+
+## v0.33.2
+
+- Fix batch size handling for `limitedTime` reuse policy.
+- Enhance document handling and revocation policy integration.
+- Update `eudi-lib-ios-siop-openid4vp-swift` to version 0.35.0, `eudi-lib-ios-iso18013-data-transfer` to version 0.22.0, and `eudi-lib-ios-wallet-storage` to version 0.22.0.
 
 ## v0.33.1
 

@@ -44,9 +44,9 @@ struct IssuanceNotificationTests {
 			requireDpop: true
 		)
 		#if canImport(EudiEtsi1196x2)
-		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
 		#else
-		let trustConfig = TrustConfiguration(rootIaca: [])
+		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
 		#endif
 		return try OpenId4VciService(
 			uiCulture: nil,

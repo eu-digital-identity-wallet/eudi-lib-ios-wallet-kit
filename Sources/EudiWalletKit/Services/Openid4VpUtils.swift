@@ -173,7 +173,6 @@ class OpenId4VpUtils {
 		claimValues: inout [Document.ID: [ClaimPath: [String]]]
 	) {
 		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
-
 		for (docId, issuerSigned) in docsCbor ?? [:] {
 			paths.removeAll(); values.removeAll()
 			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
@@ -346,6 +345,22 @@ extension OpenId4VpUtils {
 	/// - Returns: A dictionary mapping matched credential IDs to arrays of ClaimPath objects representing
 	///            the claims to disclose
 	/// - Throws: WalletError if the query cannot be satisfied, with details about the first missing claim
+	/// Build a DCQL query equivalent to the items requested in an ISO/IEC 18013-5 device request.
+	///
+	/// Used to validate the scope of a proximity (BLE) request against the relying party registration policy.
+	/// - Parameter itemsRequested: The requested items (docType to namespaced data elements)
+	/// - Returns: A DCQL query with one mso-mdoc credential query per requested document type
+	static func makeDcql(itemsRequested: RequestItems) throws -> DCQL {
+		let credentials: [CredentialQuery] = try itemsRequested.enumerated().map { index, docRequest in
+			let (docType, nsItems) = docRequest
+			let claims: [ClaimsQuery] = try nsItems.flatMap { ns, items in
+				try items.map { try ClaimsQuery.mdoc(namespace: ns, claimName: $0.elementIdentifier, intentToRetain: $0.intentToRetain) }
+			}
+			return try CredentialQuery(id: QueryId(value: "cred\(index)"), format: Format.MsoMdoc(), meta: JSON(["doctype_value": docType]), claims: claims.isEmpty ? nil : claims)
+		}
+		return try DCQL(credentials: credentials)
+	}
+
 	static func resolveDcql(_ dcql: DCQL, queryable: DcqlQueryable, docTypeDisplayNames: [DocType: String] = [:]) throws -> CredentialSelectionSetOptions {
 		var resultDict: CredentialSelectionSetOptions = [:]
 		var lastError: WalletError?
@@ -482,6 +497,55 @@ extension OpenId4VpUtils {
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
 		return resultDict
+	}
+	
+	/// Validates that the request DCQL does not exceed the scope declared in the policy DCQL.
+	/// Issues warnings for any extra claims requested beyond what the policy permits.
+	/// - Parameters:
+	///   - dcql: The DCQL from the authorization request
+	///   - policyDcql: The DCQL declared in the WRPRC (permitted scope)
+	/// - Returns: Warnings for each extra claim path found in the request but not in the policy
+	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy) -> [String:[PolicyViolation]] {
+		var result = [String: [PolicyViolation]]()
+		for (key, selectionSet) in credentialSetOptions {
+			var violations = [PolicyViolation]()
+			for selection in selectionSet {
+				// Find matching policy credential by doctype or vct
+				let policyCredential = policy.credentials.first { policyCred in
+					if let doctypeValue = policyCred.meta.doctypeValue {
+						return doctypeValue == selection.docType
+					}
+					if let vctValues = policyCred.meta.vctValues {
+						return vctValues.contains(selection.docType)
+					}
+					return false
+				}
+				guard let policyCredential else {
+					violations.append(.init("Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
+					))
+					continue
+				}
+				// Compare claims: find claims in request that are not covered by policy
+				let requestClaims = selection.claimQueries
+				guard !requestClaims.isEmpty else { continue }
+				let policyPaths: Set<ClaimPath> = Set(policyCredential.claim.map(\.path))
+				let extraClaims = requestClaims.filter { requestClaim in
+					let claimPath = requestClaim.path
+					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })
+				}
+				if !extraClaims.isEmpty {
+					let extraPaths = extraClaims
+						.map { $0.path.value.map(\.description).joined(separator: "/") }
+						.joined(separator: ", ")
+					violations.append(.init("Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
+					))
+				}
+			}
+			if !violations.isEmpty {
+				result[key] = violations
+			}
+		}
+		return result
 	}
 
 	/// Resolves claims for a specific credential query and credential
