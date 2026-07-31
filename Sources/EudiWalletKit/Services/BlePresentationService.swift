@@ -18,7 +18,11 @@ import Foundation
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
+import X509
 import struct WalletStorage.Document
+import struct OpenID4VP.PolicyViolation
+import struct OpenID4VP.ClaimPath
+import enum OpenID4VP.Authorization
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
 
@@ -26,18 +30,21 @@ import struct WalletStorage.Document
 
 public final class BlePresentationService: @unchecked Sendable, PresentationService {
 	var bleTranport: any MdocBleTransport
-	var bleServer: MdocGattServer?
+	var bleServer: (any MdocBleTransport)?
 	let bleTransferMode: BleTransferMode
-	let crlRevocationPolicy: RevocationPolicy
 	public var status: TransferStatus = .initialized
 	var isPeripheralManagerPoweredOn = false
 	var isCentralManagerPoweredOn = false
 	var continuationPowerOn: CheckedContinuation<Void, Error>?
 	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
 	var continuationDisconnect: CheckedContinuation<Void, Error>?
+    /// Continuation for awaiting L2CAP PSM publication
+    var psm: UInt16?
 	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
+	public var relyingPartyRegistration: WrpRegistrationPolicy?
+	public var allWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var documentIds: [Document.ID] = []
 	public var zkpDocumentIds: [Document.ID]?
@@ -47,7 +54,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
 	public var docMetadata: [String: Data?]!
-	public var iaca: [x5chain]!
+	public var trustValidator: any CertificateTrustValidator
+	/// Validator for the relying party registration certificate carried in the device request
+	let wrpRegistrationValidator: WrpRegistrationValidator?
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var zkSystemRepository: ZkSystemRepository?
@@ -57,18 +66,19 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var deviceResponseBytes: Data?
 	public var responseMetadata: [Data?]!
 
-	public init(parameters: InitializeTransferData) async throws {
+	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpRegistrationValidator? = nil) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
 		self.privateKeyObjects = objs.privateKeyObjects
-		self.iaca = objs.iaca
+		self.trustValidator = objs.trustValidator
+		self.wrpRegistrationValidator = wrpRegistrationValidator
 		self.dauthMethod = objs.deviceAuthMethod
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
-		crlRevocationPolicy = parameters.crlRevocationPolicy
-		bleTranport = bleTransferMode == .server ? MdocGattServer() : MdocGattCentral()
-		if bleTransferMode == .both { bleServer = MdocGattServer() }
+		let factory = transportFactory ?? DefaultBleTransportFactory()
+		bleTranport = bleTransferMode == .server ? factory.createServer() : factory.createClient()
+		if bleTransferMode == .both { bleServer = factory.createServer() }
 		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
 		bleTranport.delegate = self
 		bleServer?.delegate = self
@@ -103,19 +113,17 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		try await deviceEngagement!.makePrivateKey(secureArea: secureArea, keyOptions: keyOptions)
 		sessionEncryption = nil
 #if os(iOS)
-		qrCodePayload = deviceEngagement!.getQrCodePayload()
+
 		guard bleTranport.isAuthorized else {
 			throw MdocHelpers.makeError(code: .bleNotAuthorized)
 		}
 		//if !bleTranport.isBlePoweredOn {
-			try await withCheckedThrowingContinuation { c in
-				continuationPowerOn = c
-				evaluatePowerOnStatus()
-			}
+		try await withCheckedThrowingContinuation { c in
+			continuationPowerOn = c
+			evaluatePowerOnStatus()
+		}
 		//} // ensure that BLE is powered on before proceeding
 		continuationPowerOn = nil
-		status = .qrEngagementReady
-		logger.info("Created qrCode payload: \(qrCodePayload!)")
 #endif
 		bleTranport.startBleAdvertising()
 		bleServer?.startBleAdvertising()
@@ -127,11 +135,14 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// - Returns: The image data for the QR code
 	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {
 		try await performDeviceEngagement(secureArea: SecureAreaRegistry.shared.get(name: secureAreaName), keyOptions: keyOptions)
+		if bleTranport.supportsL2cap, let psm { deviceEngagement?.updatePsm(psm) }
+		qrCodePayload = deviceEngagement!.getQrCodePayload()
+		logger.info("Created qrCode payload: \(qrCodePayload!)")
+		status = .qrEngagementReady
 		return status == .qrEngagementReady ? (qrCodePayload ?? "") : ""
 	}
 
-	
-	func handleStatusChange(_ newValue: TransferStatus) async {
+func handleStatusChange(_ newValue: TransferStatus) async {
 		guard !isInErrorState else {
 			return
 		}
@@ -141,19 +152,24 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
 			let compactDocMetadata = docMetadata.compactMapValues { $0 }
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, iaca: iaca, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, crlRevocationPolicy: crlRevocationPolicy, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
 				sessionEncryption = decoded.sessionEncryption
 				if decoded.isValidRequest {
+					do {
+						try await validateWrpRegistration(deviceRequest: decoded.deviceRequest, userRequestInfo: decoded.userRequestInfo)
+					} catch {
+						didFinishedWithError(error)
+						return
+					}
 					self.handleSelected = userSelected
 					continuationRequest?.resume(returning: decoded.userRequestInfo)
 					continuationRequest = nil
 				} else {
 					await userSelected(false, nil, nil)
-					let notAvailableMessage = "The requested document is not available in your EUDI Wallet. Please contact the authorised issuer for further information."
-					let userInfo = [NSLocalizedDescriptionKey: notAvailableMessage]
+					let userInfo = [NSLocalizedDescriptionKey: PresentationSession.notAvailableStr]
 					didFinishedWithError(NSError(domain: "\(MdocGattServer.self)", code: 0, userInfo: userInfo))
 				}
 			case .failure(let err):
@@ -173,6 +189,43 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		}
 	}
 	
+	/// Validate the relying party registration certificate (WRPRC) carried in the BLE device request.
+	///
+	/// According to ETSI TS 119 472-2 (clause 5.3.2), the WRPRC is repeated in the `requestInfo` member
+	/// of each `ItemsRequest`, under the "euWrprc" label. On success ``relyingPartyRegistration`` and
+	/// ``allWarnings`` are set; they are surfaced to the UI by the `PresentationSession` caller.
+	/// - Throws: `WalletError` when the certificate is invalid and the trust policy is set to enforce
+	func validateWrpRegistration(deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo) async throws {
+		guard let wrpRegistrationValidator else { return }
+		let dcql = try OpenId4VpUtils.makeDcql(itemsRequested: userRequestInfo.itemsRequested)
+		await wrpRegistrationValidator.set(dcqlQueryable: makeDcqlQueryable())
+		// The relying party access certificate is the reader authentication leaf certificate
+		let wrpac: Certificate? = if let der = userRequestInfo.defaultReaderAuthResult?.certificateChain?.first { try? Certificate(derEncoded: [UInt8](der)) } else { nil }
+		guard let authorization = await wrpRegistrationValidator.validateDeviceRequestCertificate(wrpac: wrpac, deviceRequest: deviceRequest, dcql: dcql) else {
+			logger.info("No relying party registration certificate present in the device request")
+			return
+		}
+		switch authorization {
+		case .granted(let warnings):
+			allWarnings = warnings
+			relyingPartyRegistration = await wrpRegistrationValidator.wrpRegistration
+			if !warnings.isEmpty { logger.warning("WRP registration policy warnings: \(warnings.mapValues { $0.map(\.violation) })") }
+		case .notGranted(let error):
+			throw WalletError(description: "WRP registration certificate validation failed: \(error.violation)", code: .invalidWrprc)
+		}
+	}
+
+	/// Make a DCQL queryable from the wallet documents of this session, used to resolve the request scope against the registration policy
+	func makeDcqlQueryable() -> DefaultDcqlQueryable {
+		let idsToDocTypes = docs.mapValues { $0.issuerAuth.mso.docType }
+		let formatsRequested = Dictionary(idsToDocTypes.values.map { ($0, DocDataFormat.cbor) }, uniquingKeysWith: { first, _ in first })
+		let credentialMap = OpenId4VpUtils.makeCredentialMap(idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
+		var claimPaths = [Document.ID: [ClaimPath]]()
+		var claimValues = [Document.ID: [ClaimPath: [String]]]()
+		OpenId4VpUtils.makeCborClaimData(from: docs, claimPaths: &claimPaths, claimValues: &claimValues)
+		return DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
+	}
+
 	public func stop() {
 		bleTranport.stop()
 		bleServer?.stop()
@@ -274,7 +327,11 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
 		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		handleSelected = nil
-		TransactionLogUtils.setCborTransactionLogResponseInfo(self, transactionLog: &transactionLog)
+		// documentIds is populated by userSelected after a successful response build.
+		// docType and displayName are not available on this service; they are populated by the PresentationSession caller which has access to docIdToPresentInfo.
+		let firstDocId = documentIds.first
+		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
+		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
 	}
 	
 	public func waitForDisconnect() async throws {
@@ -338,6 +395,14 @@ public func didPoweredOn(isPeripheralManager: Bool) {
 	public func didReceiveRequest(_ data: Data) {
 		logger.info("Ble received request data of length: \(data.count)")
 		readBuffer = data
+	}
+
+	/// - Parameters:
+	///   - request: Request information
+	///   - handleSelected: Callback function to call after user selection of items to send
+	public func didPublishedPsmChannel(psm: UInt16?) {
+		if let psm { logger.info("Ble published PSM channel: \(psm)") }
+		self.psm = psm
 	}
 
 }

@@ -24,6 +24,8 @@ import MdocSecurity18013
 import SwiftyJSON
 import SwiftCBOR
 import X509
+@preconcurrency import JOSESwift
+import JSONWebAlgorithms
 
 struct IssuanceNotificationTests {
 
@@ -33,12 +35,27 @@ struct IssuanceNotificationTests {
 	) throws -> OpenId4VciService {
 		let networking = TestNetworking(metadata: try makeSdJwtIssuerMetadata(forResource: "sjwt-pid-python", issuerURL: issuerURL))
 		let storage = StorageManager(storageService: storageService)
+		let client = TestWalletProviderClient()
+		let popKeyOptions: KeyOptions? = KeyOptions(secureAreaName: SecureEnclaveSecureArea.name, accessControl: .none)
+		let keyAttestConfig = KeyAttestationConfiguration(walletAttestationsProvider: client, popKeyOptions: popKeyOptions)
 		let config = OpenId4VciConfiguration(
 			credentialIssuerURL: issuerURL,
-			parUsage: .required(authorizationCodeDPoPBinding: true),
+			keyAttestationsConfig: keyAttestConfig, parUsage: .required(authorizationCodeDPoPBinding: true),
 			requireDpop: true
 		)
-		return try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: storage, storageService: storageService)
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+		#else
+		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
+		#endif
+		return try OpenId4VciService(
+			uiCulture: nil,
+			config: config,
+			networking: networking,
+			storage: storage,
+			storageService: storageService,
+			trustConfig: trustConfig
+		)
 	}
 
 	private func makeIssuedDocument() throws -> (data: Data, publicKey: Data) {
@@ -71,9 +88,8 @@ struct IssuanceNotificationTests {
 			configurationIdentifier: try CredentialConfigurationIdentifier(value: "eu.europa.ec.eudi.pid.1"),
 			credentialIssuerIdentifier: "https://dev.issuer.eudiw.dev",
 			vct: "urn:eu:europa:ec:eudi:pid:1",
-			supportsAttestationProofType: false,
-			supportsJwtProofTypeWithAttestation: false,
-			supportsJwtProofTypeWithoutAttestation: true,
+			supportsAttestationProofType: true,
+			supportsJwtProofTypeWithAttestation: true,
 			credentialSigningAlgValuesSupported: ["ES256"],
 			dpopSigningAlgValuesSupported: nil,
 			clientAttestationPopSigningAlgValuesSupported: nil,
@@ -247,6 +263,10 @@ actor NotificationSignal {
 }
 
 actor SpyIssuer: IssuerType {
+    func refresh(authorizedRequest: AuthorizedRequest, dPopNonce: Nonce?) async throws -> AuthorizedRequest {
+		return authorizedRequest
+    }
+
 	var notifyCallCount = 0
 	var notifyError: Error?
 	let signal: NotificationSignal
@@ -284,4 +304,14 @@ actor FailingStorageService: DataStorageService {
 	func deleteDocument(id: String, status: WalletStorage.DocumentStatus) async throws {}
 	func deleteDocuments(status: WalletStorage.DocumentStatus) async throws {}
 	func deleteDocumentCredential(id: String, index: Int) async throws {}
+}
+
+final class TestWalletProviderClient: WalletAttestationsProvider {
+	public func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String {
+		return ""
+	}
+
+	public func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
+		return ""
+	}
 }

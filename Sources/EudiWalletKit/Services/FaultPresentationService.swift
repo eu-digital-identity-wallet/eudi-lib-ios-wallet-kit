@@ -18,6 +18,7 @@ import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
 import struct WalletStorage.Document
+import struct OpenID4VP.PolicyViolation
 
 /// Fault presentation service. Used to communicate error state to the user
 public final class FaultPresentationService: @unchecked Sendable, PresentationService {
@@ -25,10 +26,12 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 	public var flow: FlowType = .other
 	public var zkpDocumentIds: [Document.ID]?
 	var error: Error
+	public var relyingPartyRegistration: WrpRegistrationPolicy?
+	public var allWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 
 	public init(msg: String) {
-		self.error = PresentationSession.makeError(str: msg)
+		self.error = WalletError(description: msg, code: .internalError)
 		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, errorMessage: msg, type: .presentation, dataFormat: .cbor)
 		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
 	}

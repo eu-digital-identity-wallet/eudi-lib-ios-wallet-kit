@@ -39,21 +39,76 @@ public struct WalletError: LocalizedError {
 		case noDocumentsAvailable
 		/// The issuer is not registered
 		case issuerNotRegistered
+		/// trust error
+		case trustError
+		/// invalid status token
+		case invalidStatusToken
+		/// status check failed
+		case statusCheckFailed
+		/// Credential offer could not be resolved
+		case offerResolutionFailed
+		/// Issuer metadata could not be resolved
+		case issuerMetadataResolutionFailed
+		/// Authorization request failed (e.g. web login, PAR)
+		case authorizationFailed
+		/// User cancelled the login/authorization flow
+		case userCancelledLogin
+		/// Credential issuance request failed
+		case issuanceRequestFailed
+		/// The DCQL/VP query resolution was invalid
+		case invalidQueryResolution
+		/// OpenID4VP not secured request
+		case notSecuredRequest
+		/// Response encryption specification missing for directPostJWT
+		case responseEncryptionMissing
+		/// Invalid service name or parameters
+		case invalidServiceName
+		/// File system access error (e.g. log file, downloads directory)
+		case fileAccessError
+		/// Unsupported cryptographic algorithm or key type
+		case unsupportedAlgorithm
+		/// Storage operation failed
+		case storageError
+		/// Missing VCI configuration
+		case missingVciConfiguration
+		/// Unsupportted credential configuration
+		case unsupportedCredentialConfiguration
+		/// no client attestation algorithm found
+		case noClientAttestationAlgorithmFound
+		/// invalid Wrprc
+		case invalidWrprc
+		/// WRPRC header type is not a registration certificate type
+		case wrprcInvalidType
+		/// WRPRC payload could not be decoded
+		case wrprcPayloadDecodingFailed
+		/// WRPRC is expired
+		case wrprcExpired
+		/// WRPRC does not contain a status list reference
+		case wrprcMissingStatus
+		/// WRPRC status is not valid (e.g. revoked or suspended)
+		case wrprcStatusInvalid
+		/// WRPRC trust chain could not be validated
+		case wrprcTrustError
+		/// Internal / unexpected error that does not fit another category
+		case internalError
 	}
 
 	public let description: String
 	/// Deprecated: prefer using `code` for programmatic error handling
 	public let localizationKey: String?
-	/// Structured error code for programmatic handling. `nil` for legacy errors.
-	public let code: Code?
+	/// Structured error code for programmatic handling
+	public let code: Code
 	/// Additional context about the error (e.g. claim path, docType).
 	public let context: [String: String]
+	/// The original error that caused this wallet error, preserved for programmatic inspection.
+	public let innerError: Error?
 
-	public init(description: String, localizationKey: String? = nil, code: Code? = nil, context: [String: String] = [:]) {
+	public init(description: String, localizationKey: String? = nil, code: Code, context: [String: String] = [:], innerError: Error? = nil) {
 		self.description = description
 		self.localizationKey = localizationKey
 		self.code = code
 		self.context = context
+		self.innerError = innerError
 	}
 
 	public var errorDescription: String? {
