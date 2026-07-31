@@ -1214,14 +1214,13 @@ struct DcqlQueryTests {
 			supervisoryAuthority: SupervisoryAuthority(email: "a@b.com", phone: "123", uri: "https://example.com"),
 			privacyPolicy: "https://example.com", name: "Test",
 			infoURI: "https://example.com", subLn: "test", iat: 0,
-			status: Status(statusList: StatusList(idx: 0, uri: "https://example.com"))
-		)
+			status: nil)
 	}
 
 	private func makePolicyCredential(doctype: String? = nil, vctValues: [String]? = nil, claimPaths: [[String]]) -> PolicyCredential {
 		PolicyCredential(
 			format: doctype != nil ? "mso_mdoc" : "dc+sd-jwt",
-			meta: Meta(vctValues: vctValues, doctypeValue: doctype),
+			meta: PolicyCredentialMeta(vctValues: vctValues, doctypeValue: doctype),
 			claim: claimPaths.map { PolicyClaim(path: ClaimPath($0.map { ClaimPathElement.claim(name: $0) })) }
 		)
 	}
@@ -1271,7 +1270,7 @@ struct DcqlQueryTests {
 		#expect(result.count == 1, "Should have one option key with violations")
 		let violations = result["option1"]
 		#expect(violations?.count == 1)
-		#expect(violations?.first?.message.contains("DCQL_EXTRA_CLAIMS") == true || violations?.first?.message.contains("portrait") == true)
+		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CLAIMS") == true || violations?.first?.violation.contains("portrait") == true)
 	}
 
 	@Test("validateDcqlPolicy - warns on credential not declared in policy")
@@ -1291,7 +1290,7 @@ struct DcqlQueryTests {
 		#expect(result.count == 1)
 		let violations = result["option1"]
 		#expect(violations?.count == 1)
-		#expect(violations?.first?.message.contains("DCQL_EXTRA_CREDENTIAL") == true || violations?.first?.message.contains("not declared") == true)
+		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CREDENTIAL") == true || violations?.first?.violation.contains("not declared") == true)
 	}
 
 	@Test("validateDcqlPolicy - no violations when selection has no claim queries")
