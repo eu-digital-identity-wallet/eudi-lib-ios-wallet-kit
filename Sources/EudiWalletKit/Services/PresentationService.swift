@@ -38,8 +38,10 @@ public protocol PresentationService: Sendable {
 	var transactionLog: TransactionLog { get }
 	
 	var zkpDocumentIds: [Document.ID]? { get }
-	var wrpRegistrationPolicy: WrpRegistrationPolicy?  { get }
-	var wrpWarnings: [String: [PolicyViolation]]? { get }
+	/// The verifier (relying party) registration policy decoded from the WRPRC carried in the request, if any
+	var wrpVerifierPolicy: WrpRegistrationPolicy?  { get }
+	/// Warnings produced during WRPRC validation, keyed by credential query identifier; the empty key holds request-wide warnings
+	var wrpVerifierWarnings: [String: [PolicyViolation]]? { get }
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response

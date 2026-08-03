@@ -70,8 +70,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var unlockData: [String: Data]!
 	var verifierInfo: [VerifierInfo]?
 	var docTypeDisplayNames: [DocType: String]
-	public var wrpRegistrationPolicy: WrpRegistrationPolicy?
-	public var wrpWarnings: [String: [PolicyViolation]]?
+	public var wrpVerifierPolicy: WrpRegistrationPolicy?
+	public var wrpVerifierWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
@@ -124,7 +124,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case let .notSecured(data: rrd, warnings):
-			self.wrpWarnings = warnings
+			self.wrpVerifierWarnings = warnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
 			if case .redirectUri = rrd.client { return try await handleRequestData(rrd) }
 			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
@@ -133,14 +133,14 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			if let details { logger.error("Details: \(details)") }
 			throw WalletError(description: "OpenID4VP request error: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: readerCertificateValidationMessage != nil ? .trustError : .invalidQueryResolution, innerError: error)
 		case let .jwt(request: rrd, warnings):
-			self.wrpWarnings = warnings
+			self.wrpVerifierWarnings = warnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
 			return try await handleRequestData(rrd)
 		}
 	}
 
 	func handleRequestData(_ rrd: ResolvedRequestData) async throws -> [UserRequestInfo] {
-		wrpRegistrationPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
+		wrpVerifierPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
 		var jwkThumbprint: Data?  = nil
@@ -399,7 +399,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			errorDispatchPolicy: .allClients,
 			session: networking,
 			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default(),
-			registrationCertificatePolicy: openID4VpConfig.registrationCertificatePolicy ?? .default(validator: wrpRegistrationValidator)
+			registrationCertificatePolicy: openID4VpConfig.validateRegistrationCertificate ? .default(validator: wrpRegistrationValidator) : nil
 		)
 		return res
 	}

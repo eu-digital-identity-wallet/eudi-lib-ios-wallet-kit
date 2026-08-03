@@ -20,23 +20,25 @@ import struct OpenID4VCI.PolicyViolation
 
 /// Result of an OpenID4VCI issuance operation.
 ///
-/// Pairs the issued documents with any warnings produced by the WRP registration
-/// certificate (WRPRC) policy when ``OpenId4VciConfiguration/validateRegistrationCertificate``
-/// is enabled.
-public struct IssueResponse: Sendable {
+/// Pairs the issued documents with the decoded issuer registration policy and any warnings
+/// produced by the WRP registration certificate (WRPRC) policy when
+/// ``OpenId4VciConfiguration/validateRegistrationCertificate`` is enabled.
+public struct IssuerResponse: Sendable {
 	/// The issued documents. They are already saved in storage.
 	public let documents: [WalletStorage.Document]
 	/// Warnings produced by the WRP registration certificate policy, keyed by credential
 	/// configuration identifier; the empty key holds request-wide warnings.
-	public let wrpRegistrationWarnings: [String: [PolicyViolation]]
+	/// `nil` when registration certificate validation is not enabled.
+	public let wrpIssuerWarnings: [String: [PolicyViolation]]?
 	/// The WRP registration policy decoded from the issuer registration certificate (WRPRC),
 	/// available when ``OpenId4VciConfiguration/validateRegistrationCertificate`` is enabled.
-	public let wrpRegistrationPolicy: WrpRegistrationPolicy?
+	public let wrpIssuerPolicy: WrpRegistrationPolicy?
 
-	public init(documents: [WalletStorage.Document], wrpRegistrationWarnings: [String: [PolicyViolation]] = [:], wrpRegistrationPolicy: WrpRegistrationPolicy? = nil) {
+	public init(documents: [WalletStorage.Document], wrpIssuerWarnings: [String: [PolicyViolation]]?, wrpIssuerPolicy: WrpRegistrationPolicy? = nil) {
 		self.documents = documents
-		self.wrpRegistrationWarnings = wrpRegistrationWarnings
-		self.wrpRegistrationPolicy = wrpRegistrationPolicy
+		self.wrpIssuerWarnings = wrpIssuerWarnings
+		self.wrpIssuerPolicy = wrpIssuerPolicy
+		if let warns = wrpIssuerWarnings, !warns.isEmpty { logger.info("Issuer registration warnings: \(warns)") }
 	}
 
 	/// Registration-policy warnings matched to each issued document, keyed by document identifier.
@@ -47,7 +49,7 @@ public struct IssueResponse: Sendable {
 		var result = [WalletStorage.Document.ID: [PolicyViolation]]()
 		for document in documents {
 			guard let configurationIdentifier = DocMetadata(from: document.metadata)?.configurationIdentifier,
-				let warnings = wrpRegistrationWarnings[configurationIdentifier], !warnings.isEmpty else { continue }
+				let warnings = wrpIssuerWarnings?[configurationIdentifier], !warnings.isEmpty else { continue }
 			result[document.id] = warnings
 		}
 		return result

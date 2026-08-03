@@ -43,8 +43,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
-	public var wrpRegistrationPolicy: WrpRegistrationPolicy?
-	public var wrpWarnings: [String: [PolicyViolation]]?
+	public var wrpVerifierPolicy: WrpRegistrationPolicy?
+	public var wrpVerifierWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var documentIds: [Document.ID] = []
 	public var zkpDocumentIds: [Document.ID]?
@@ -207,8 +207,8 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		}
 		switch authorization {
 		case .granted(let warnings):
-			wrpWarnings = warnings
-			wrpRegistrationPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
+			wrpVerifierWarnings = warnings
+			wrpVerifierPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
 			if !warnings.isEmpty { logger.warning("WRP registration policy warnings: \(warnings.mapValues { $0.map(\.violation) })") }
 		case .notGranted(let error):
 			throw WalletError(description: "WRP registration certificate validation failed: \(error.violation)", code: .invalidWrprc)

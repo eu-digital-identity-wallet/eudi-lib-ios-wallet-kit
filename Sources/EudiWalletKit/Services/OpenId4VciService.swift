@@ -54,9 +54,10 @@ public actor OpenId4VciService {
 	var trustConfig: TrustConfiguration
 	/// Warnings produced by the WRP registration certificate policy during the last `getIssuer(offer:)` call.
 	/// Keyed by credential configuration identifier; the empty key holds request-wide warnings.
-	public private(set) var wrpRegistrationWarnings: [String: [PolicyViolation]] = [:]
+	/// `nil` when registration certificate validation is not enabled.
+	public private(set) var wrpIssuerWarnings: [String: [PolicyViolation]]?
 	/// The WRP registration policy decoded from the WRPRC during the last `getIssuer(offer:)` call, if any.
-	public private(set) var wrpRegistrationPolicy: WrpRegistrationPolicy?
+	public private(set) var wrpIssuerPolicy: WrpRegistrationPolicy?
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
@@ -302,8 +303,8 @@ public actor OpenId4VciService {
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs, registrationCertificatePolicy: registrationCertificateEnforcement?.policy)
 		if let (_, validator) = registrationCertificateEnforcement {
 			let result = try await Issuer.make(credentialOffer: offer, config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
-			wrpRegistrationWarnings = result.warnings
-			wrpRegistrationPolicy = await validator.wrpVciRegistrationPolicy
+			wrpIssuerWarnings = result.warnings
+			wrpIssuerPolicy = await validator.wrpVciRegistrationPolicy
 			if !result.warnings.isEmpty { logger.warning("WRP registration certificate warnings: \(result.warnings.mapValues { $0.map(\.value) })") }
 			return result.issuer
 		}
@@ -311,7 +312,7 @@ public actor OpenId4VciService {
 	}
 
 	/// Builds the WRPRC enforcement policy for `OpenId4VCIConfig.registrationCertificatePolicy`
-	/// when enabled in the wallet configuration; the WRPRC is validated by ``WrpRegistrationValidator``
+	/// when enabled in the wallet configuration; the WRPRC is validated by ``WrpVciRegistrationValidator``
 	/// using the wallet trust configuration. The validator is returned alongside the policy so the
 	/// decoded registration policy can be read after enforcement.
 	func makeRegistrationCertificatePolicy() -> (policy: RegistrationCertificatePolicy, validator: WrpVciRegistrationValidator)? {
@@ -347,7 +348,7 @@ public actor OpenId4VciService {
 		return (issuer, dpopConstructor)
 	}
 
-	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration], [String: [PolicyViolation]]) {
+	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration], [String: [PolicyViolation]]?) {
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw WalletError(description: "offerUri \(offerUri) not resolved. resolveOfferDocTypes must be called first", code: .internalError)
 		}
@@ -368,7 +369,7 @@ public actor OpenId4VciService {
 				logger.info("Access token issued at: \(Date(timeIntervalSinceReferenceDate:authorized.timeStamp)), now: \(Date()), expires at \(Date(timeIntervalSinceReferenceDate:authorized.timeStamp + (authorized.accessToken.expiresIn ?? 0)))")
 				authorized = try await refreshAuthorization(issuer: issuer, authorized: authorized,	configuration: credentialConfigurations[0], forceRefreshToken: forceRefreshToken)
 				authorizedOutcome = .authorized(authorized)
-				return (authorizedOutcome, issuer, credentialConfigurations, wrpRegistrationWarnings)
+				return (authorizedOutcome, issuer, credentialConfigurations, wrpIssuerWarnings)
 			}
 			catch CredentialIssuanceError.requestFailed(let code, let error, let description) where !backgroundOnly && forceRefreshToken && (400..<500).contains(code) {
 				logger.error("Refresh token authentication failure with status code: \(code), error: \(error) \(description ?? "").")
@@ -384,7 +385,7 @@ public actor OpenId4VciService {
 		} else {
 			throw WalletError(description: "Offer requires user interaction for authorization, but backgroundOnly is set to true, forced refresh token is \(forceRefreshToken).", code: .authorizationFailed)
 		}
-		return (authorizedOutcome, issuer, credentialConfigurations, wrpRegistrationWarnings)
+		return (authorizedOutcome, issuer, credentialConfigurations, wrpIssuerWarnings)
 	}
 
 	func issueDocumentByOfferUrl(issuer: Issuer, offer: CredentialOffer, authorizedOutcome: AuthorizeRequestOutcome, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], promptMessage: String? = nil) async throws -> IssuanceOutcome {
@@ -505,9 +506,9 @@ public actor OpenId4VciService {
 			openId4VCIServices.append(svc)
 		}
 		let authService = openId4VCIServices.first!
-		let (auth, issuer, credentialInfos, wrpWarnings) = try await authService.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
-		wrpRegistrationWarnings = wrpWarnings
-		wrpRegistrationPolicy = await authService.wrpRegistrationPolicy
+		let (auth, issuer, credentialInfos, wrpVciWarnings) = try await authService.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
+		wrpIssuerWarnings = wrpVciWarnings
+		wrpIssuerPolicy = await authService.wrpIssuerPolicy
 		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? issuerIdentifier
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString

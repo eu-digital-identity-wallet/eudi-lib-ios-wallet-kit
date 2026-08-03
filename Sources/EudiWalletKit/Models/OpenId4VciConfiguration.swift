@@ -49,8 +49,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let issuerMetadataPolicy: IssuerMetadataPolicy
 	/// Whether to validate the WRP registration certificate (WRPRC) delivered in the issuer metadata `issuer_info`.
 	///
-	/// When enabled, the issuer is constructed with `Issuer.make(...)` which enforces the WRPRC policy
-	/// against the resolved offer; the WRPRC is validated by ``WrpRegistrationValidator`` using the
+	/// When enabled, the issuer WRPRC is validated by ``WrpRegistrationValidator`` using the
 	/// wallet trust configuration. Requires `issuerMetadataPolicy` to be `.requireSigned`, since WRPRC
 	/// enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
 	public let validateRegistrationCertificate: Bool

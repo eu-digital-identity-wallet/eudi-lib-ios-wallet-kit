@@ -20,12 +20,15 @@ import OpenID4VCI
 import Logging
 import struct OpenID4VCI.PolicyViolation
 
+/// Validates the WRP registration certificate (WRPRC) of a credential issuer during OpenID4VCI issuance.
 public actor WrpVciRegistrationValidator {
-	/// Trust configuration used to validate the reader/relying-party registration certificate.
+	/// Trust configuration used to validate the issuer registration certificate.
 	public let trustConfig: TrustConfiguration
 	public let date: Date?
 	static let logger = Logger(label: "WrpRegistrationValidator")
+	/// The registration policy decoded from the WRPRC by the last ``validateCertificate(wrpac:wrprc:offeredConfigurations:)`` call, if any.
 	public var wrpVciRegistrationPolicy: WrpRegistrationPolicy?
+	/// Warnings collected during validation, keyed by credential configuration identifier; the empty key holds request-wide warnings.
 	public var wrpVciWarnings = [String:[PolicyViolation]]()
 	
 	public init(date: Date = .now, trustConfig: TrustConfiguration) {
@@ -42,7 +45,7 @@ public actor WrpVciRegistrationValidator {
 	///   - wrprc: The raw WRPRC value as delivered in `issuer_info` (typically a compact-serialized JWT)
 	///   - offeredConfigurations: The credential configurations referenced by the resolved credential offer
 	/// - Returns: The authorization result; warnings are keyed by credential configuration identifier,
-	///   with "global" used for request-wide warnings
+	///   with the empty key used for request-wide warnings
 	public func validateCertificate(wrpac: String, wrprc: String, offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported]) async -> Authorization {
 		do {
 			let wrpacCertificate: Certificate?
@@ -54,10 +57,10 @@ public actor WrpVciRegistrationValidator {
 			}
 			let wrprcData = wrprc.data(using: .ascii) ?? Data(base64Encoded: wrprc)
 			guard let wrprcData else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
-			let (policy, w) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData)
+			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData)
 			wrpVciRegistrationPolicy = policy
-			wrpVciWarnings = w.mapValues { $0.map(PolicyViolation.init) }
-			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpWarnings: &wrpVciWarnings)
+			wrpVciWarnings[""] = warns.map(PolicyViolation.init)
+			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpVciWarnings: &wrpVciWarnings)
 			return .granted(warnings: wrpVciWarnings)
 		} catch {
 			wrpVciWarnings["", default: []].append(.init("WRP policy could not be created: \(error.localizedDescription)"))
@@ -70,8 +73,8 @@ public actor WrpVciRegistrationValidator {
 
 	/// Check each offered credential configuration against the attestations the issuer is
 	/// registered to provide (`provides_attestations` claim of the WRPRC).
-	/// - Returns: Warnings keyed by credential configuration identifier for uncovered configurations
-	static func validateOfferedConfigurations(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpWarnings: inout [String: [PolicyViolation]]) {
+	/// Warnings for uncovered configurations are appended to `wrpVciWarnings`, keyed by credential configuration identifier.
+	static func validateOfferedConfigurations(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpVciWarnings: inout [String: [PolicyViolation]]) {
 		guard let providedAttestations = policy.providesAttestations else { return }
 		for (identifier, supported) in offeredConfigurations {
 			let isCovered: Bool = switch supported {
@@ -81,7 +84,7 @@ public actor WrpVciRegistrationValidator {
 			default: true
 			}
 			if !isCovered {
-				wrpWarnings[identifier.value, default: []].append(PolicyViolation("Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
+				wrpVciWarnings[identifier.value, default: []].append(PolicyViolation("Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
 			}
 		}
 	}
@@ -89,12 +92,12 @@ public actor WrpVciRegistrationValidator {
 
 extension WrpVciRegistrationValidator {
 	
-	/// Core WRPRC token validation shared by the presentation (DCQL) and issuance (OpenID4VCI) flows.
+	/// Core WRPRC token validation shared by the presentation (OpenID4VP) and issuance (OpenID4VCI) flows.
 	/// Parses the token, checks its type header, decodes the registration policy, and validates
 	/// expiration, access-certificate binding, status and trust chain.
-	/// - Returns: The decoded registration policy; soft failures are appended to ``wrpWarnings``.
-	static func validateWrprcCore(_ trustConfig: TrustConfiguration, wrpac: Certificate?, wrprcData: Data) async throws -> (WrpRegistrationPolicy, [String: [String]]) {
-		var wrpWarnings = [String: [String]]()
+	/// - Returns: The decoded registration policy, together with warning messages for soft failures.
+	static func validateWrprcCore(_ trustConfig: TrustConfiguration, wrpac: Certificate?, wrprcData: Data) async throws -> (WrpRegistrationPolicy, [String]) {
+		var warnings = [String]()
 		let wrprcToken = try x5cVerifyJwtOrCwt.parse(attestData: wrprcData, format: nil)
 		let wrprcPayload: Data
 		switch wrprcToken {
@@ -110,32 +113,32 @@ extension WrpVciRegistrationValidator {
 			guard let type, type == WRPRC_JWT_TYPE else { throw WalletError(description: "WRPRC header type must be \(WRPRC_JWT_TYPE)", code: .wrprcInvalidType, context: ["type": jws.protectedHeader.type ?? ""]) }
 			wrprcPayload = jws.payload
 		}
-		let wrpRegistrationPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
-		if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .wrprcExpired) }
+		let wrpIssuerPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
+		if let exp = wrpIssuerPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .wrprcExpired) }
 		if let wrpac {
-			if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings["", default: []].append(.init("WRPRC not bound to requester access certificate")) }
+			if !wrpIssuerPolicy.isBound(to: wrpac) { warnings.append(.init("WRPRC not bound to requester access certificate")) }
 		} else {
-			wrpWarnings["", default: []].append(.init("Requester access certificate not available to check WRPRC binding"))
+			warnings.append(.init("Requester access certificate not available to check WRPRC binding"))
 		}
-		guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC does not have status list", code: .wrprcMissingStatus) }
+		guard let status = wrpIssuerPolicy.status else { throw WalletError(description: "WRPRC does not have status list", code: .wrprcMissingStatus) }
 		let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
 		let credStatus = try? await statusService.getStatus()
 		if let credStatus {
 			if credStatus != .valid { throw WalletError(description: "WRPRC status not valid", code: .wrprcStatusInvalid, context: ["status": credStatus == .invalid ? "Invalid" : credStatus == .suspended ? "suspended" : "\(credStatus)"]) }
 		} else {
 			Self.logger.warning("WRPRC status list could not be retrieved")
-			wrpWarnings["", default: []].append(.init("WRPRC status list could not be retrieved"))
+			warnings.append(.init("WRPRC status list could not be retrieved"))
 		}
 		#if canImport(EudiEtsi1196x2)
 		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
 		if !isValid {
 			let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
 			switch trustConfig.wrprcTrustPolicy {
-			case .warning: Self.logger.warning("\(message)"); wrpWarnings["", default: []].append(.init(message))
+			case .warning: Self.logger.warning("\(message)"); warnings.append(.init(message))
 			case .enforce: throw WalletError(description: message, code: .wrprcTrustError)
 			}
 		}
 		#endif
-		return (wrpRegistrationPolicy, wrpWarnings)
+		return (wrpIssuerPolicy, warnings)
 	}
 }
