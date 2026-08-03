@@ -16,8 +16,19 @@
 import Foundation
 import X509
 import OpenID4VCI
+import struct OpenID4VCI.PolicyViolation
 
-extension WrpRegistrationValidator {
+public actor WrpVciRegistrationValidator {
+	/// Trust configuration used to validate the reader/relying-party registration certificate.
+	public let trustConfig: TrustConfiguration
+	public let date: Date?
+	public var dcqlQueryable: DefaultDcqlQueryable?
+	static let logger = Logger(label: "WrpRegistrationValidator")
+	static let REG_CERT_TYPE_CWT = "rc-wrp+cwt"
+	/// Label of the `ItemsRequest.requestInfo` member carrying the WRPRC in ISO/IEC 18013-5 requests (ETSI TS 119 472-2)
+	static let REG_CERT_REQUEST_INFO_KEY = "euWrprc"
+	public var wrpRegistration: WrpRegistrationPolicy?
+	public var wrpWarnings = [String:[PolicyViolation]]()
 	/// Validate the WRP registration certificate (WRPRC) delivered in the issuer metadata
 	/// `issuer_info` during OpenID4VCI issuance.
 	///
@@ -36,28 +47,27 @@ extension WrpRegistrationValidator {
 				wrpacCertificate = certificate
 			} else {
 				wrpacCertificate = nil
-				wrpWarnings.append(.init("WRPAC cannot be decoded"))
+				wrpWarnings["", default: []].append(.init("WRPAC cannot be decoded"))
 			}
-			guard let wrprcData = wrprc.data(using: .ascii) else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
+			let wrprcData = wrprc.data(using: .ascii) ?? Data(base64Encoded: wrprc)
+			guard let wrprcData else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
 			let wrpRegistrationPolicy = try await validateWrprcCore(wrpac: wrpacCertificate, wrprcData: wrprcData)
-			var allWarnings = Self.validateOfferedConfigurations(offeredConfigurations, policy: wrpRegistrationPolicy)
-			if !wrpWarnings.isEmpty { allWarnings["global", default: []].append(contentsOf: wrpWarnings.map { PolicyViolation($0.violation) }) }
-			return .granted(warnings: allWarnings)
+			Self.validateOfferedConfigurations(offeredConfigurations, policy: wrpRegistrationPolicy, wrpWarnings: &wrpWarnings)
+			return .granted(warnings: wrpWarnings)
 		} catch {
-			wrpWarnings.append(.init("WRP policy could not be created: \(error.localizedDescription)"))
+			wrpWarnings["", default: []].append(.init("WRP policy could not be created: \(error.localizedDescription)"))
 			Self.logger.error("Error in validate registration certificate: \(error)")
 			return trustConfig.wrprcTrustPolicy == .enforce ?
 				.notGranted(error: PolicyViolation(error.localizedDescription)) :
-				.granted(warnings: ["global": [PolicyViolation(error.localizedDescription)]])
+				.granted(warnings: ["": [PolicyViolation(error.localizedDescription)]])
 		}
 	}
 
 	/// Check each offered credential configuration against the attestations the issuer is
 	/// registered to provide (`provides_attestations` claim of the WRPRC).
 	/// - Returns: Warnings keyed by credential configuration identifier for uncovered configurations
-	static func validateOfferedConfigurations(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy) -> [String: [PolicyViolation]] {
-		guard let providedAttestations = policy.providesAttestations else { return [:] }
-		var warnings = [String: [PolicyViolation]]()
+	static func validateOfferedConfigurations(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpWarnings: inout [String: [PolicyViolation]]) {
+		guard let providedAttestations = policy.providesAttestations else { return }
 		for (identifier, supported) in offeredConfigurations {
 			let isCovered: Bool = switch supported {
 			case .msoMdoc(let msoMdoc): providedAttestations.contains { $0.meta.doctypeValue == msoMdoc.docType }
@@ -66,9 +76,8 @@ extension WrpRegistrationValidator {
 			default: true
 			}
 			if !isCovered {
-				warnings[identifier.value, default: []].append(PolicyViolation("Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
+				wrpWarnings[identifier.value, default: []].append(PolicyViolation("Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
 			}
 		}
-		return warnings
 	}
 }
