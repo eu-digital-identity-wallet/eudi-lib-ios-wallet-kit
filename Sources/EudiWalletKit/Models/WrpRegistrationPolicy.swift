@@ -23,7 +23,7 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 	public let sub: String
 	public let country: String?
 	public let policyID: [String]?
-	public let credentials: [PolicyCredential]
+	public let credentials: [PolicyCredential]?
 	public let purpose: [PolicyPurpose]?
 	public let registryURI: String?
 	public let certificatePolicy: String?
@@ -127,18 +127,18 @@ public struct RegistrationIdentifier: Decodable, Sendable {
 public struct PolicyCredential: Decodable, Sendable {
 	public let format: String
 	public let meta: PolicyCredentialMeta
-	public let claim: [PolicyClaim]
+	public let claims: [PolicyClaim]?
 
-	public init(format: String, meta: PolicyCredentialMeta, claim: [PolicyClaim]) {
+	public init(format: String, meta: PolicyCredentialMeta, claim: [PolicyClaim]?) {
 		self.format = format
 		self.meta = meta
-		self.claim = claim
+		self.claims = claim
 	}
 
 	enum CodingKeys: String, CodingKey {
 		case format = "format"
 		case meta = "meta"
-		case claim = "claim"
+		case claims = "claim"
 	}
 }
 

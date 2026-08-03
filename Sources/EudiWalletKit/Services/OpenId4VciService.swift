@@ -53,8 +53,10 @@ public actor OpenId4VciService {
 	/// Trust configuration used to validate issuer (document-signer) certificate chains of issued documents.
 	var trustConfig: TrustConfiguration
 	/// Warnings produced by the WRP registration certificate policy during the last `getIssuer(offer:)` call.
-	/// Keyed by credential configuration identifier; "global" holds request-wide warnings.
+	/// Keyed by credential configuration identifier; the empty key holds request-wide warnings.
 	public private(set) var wrpRegistrationWarnings: [String: [PolicyViolation]] = [:]
+	/// The WRP registration policy decoded from the WRPRC during the last `getIssuer(offer:)` call, if any.
+	public private(set) var wrpRegistrationPolicy: WrpRegistrationPolicy?
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
 	typealias FuncKeyAttestationJWT = @Sendable (_ nonce: String?) async throws -> KeyAttestationJWT
 
@@ -296,11 +298,12 @@ public actor OpenId4VciService {
 			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: keyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions)
 		}
 		guard let algs = offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported else { throw WalletError(description: "No client attestation POP signing algorithms found", code: .noClientAttestationAlgorithmFound) }
-		let registrationCertificatePolicy = makeRegistrationCertificatePolicy()
-		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs, registrationCertificatePolicy: registrationCertificatePolicy)
-		if registrationCertificatePolicy != nil {
+		let registrationCertificateEnforcement = makeRegistrationCertificatePolicy()
+		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs, registrationCertificatePolicy: registrationCertificateEnforcement?.policy)
+		if let (_, validator) = registrationCertificateEnforcement {
 			let result = try await Issuer.make(credentialOffer: offer, config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
 			wrpRegistrationWarnings = result.warnings
+			wrpRegistrationPolicy = await validator.wrpVciRegistrationPolicy
 			if !result.warnings.isEmpty { logger.warning("WRP registration certificate warnings: \(result.warnings.mapValues { $0.map(\.value) })") }
 			return result.issuer
 		}
@@ -309,13 +312,15 @@ public actor OpenId4VciService {
 
 	/// Builds the WRPRC enforcement policy for `OpenId4VCIConfig.registrationCertificatePolicy`
 	/// when enabled in the wallet configuration; the WRPRC is validated by ``WrpRegistrationValidator``
-	/// using the wallet trust configuration.
-	func makeRegistrationCertificatePolicy() -> RegistrationCertificatePolicy? {
+	/// using the wallet trust configuration. The validator is returned alongside the policy so the
+	/// decoded registration policy can be read after enforcement.
+	func makeRegistrationCertificatePolicy() -> (policy: RegistrationCertificatePolicy, validator: WrpVciRegistrationValidator)? {
 		guard config.validateRegistrationCertificate else { return nil }
-		let validator = WrpRegistrationValidator(trustConfig: trustConfig)
-		return RegistrationCertificatePolicy { wrpac, wrprc, offeredConfigurations in
+		let validator = WrpVciRegistrationValidator(trustConfig: trustConfig)
+		let policy = RegistrationCertificatePolicy { wrpac, wrprc, offeredConfigurations in
 			await validator.validateCertificate(wrpac: wrpac, wrprc: wrprc, offeredConfigurations: offeredConfigurations)
 		}
+		return (policy, validator)
 	}
 
 	public func getIssuerMetadata() async throws -> CredentialIssuerMetadata {
@@ -499,8 +504,10 @@ public actor OpenId4VciService {
 			try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: docTypeModel.credentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage, offer: offer)
 			openId4VCIServices.append(svc)
 		}
-		let (auth, issuer, credentialInfos, wrpWarnings) = try await openId4VCIServices.first!.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
+		let authService = openId4VCIServices.first!
+		let (auth, issuer, credentialInfos, wrpWarnings) = try await authService.authorizeOffer(offerUri: offerUri, docTypeModels: docTypes, txCodeValue: txCodeValue, authorized: authorized, forceRefreshToken: forceRefreshToken, backgroundOnly: backgroundOnly)
 		wrpRegistrationWarnings = wrpWarnings
+		wrpRegistrationPolicy = await authService.wrpRegistrationPolicy
 		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? issuerIdentifier
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString

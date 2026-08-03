@@ -623,7 +623,7 @@ extension RegistrationCertificatePolicy {
 	///   - certificateTrust: The trust validator for the WRPRC signing certificate
 	///   - policyDcql: A closure that extracts the permitted DCQL scope from the WRPRC
 	/// - Returns: A policy that warns when the request DCQL is a superset of the policy DCQL
-	static func `default`(validator: WrpRegistrationValidator) -> RegistrationCertificatePolicy {
+	static func `default`(validator: WrpVpRegistrationValidator) -> RegistrationCertificatePolicy {
 	  RegistrationCertificatePolicy(
 		validatePolicy: { wrpac, wrprc, dcql in
 			return await validator.validateCertificate(wrpac: wrpac, wrprc: wrprc, dcql: dcql)

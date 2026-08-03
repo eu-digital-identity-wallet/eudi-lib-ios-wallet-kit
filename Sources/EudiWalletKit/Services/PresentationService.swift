@@ -38,8 +38,8 @@ public protocol PresentationService: Sendable {
 	var transactionLog: TransactionLog { get }
 	
 	var zkpDocumentIds: [Document.ID]? { get }
-	var relyingPartyRegistration: WrpRegistrationPolicy?  { get }
-	var allWarnings: [String: [PolicyViolation]]? { get }
+	var wrpRegistrationPolicy: WrpRegistrationPolicy?  { get }
+	var wrpWarnings: [String: [PolicyViolation]]? { get }
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response

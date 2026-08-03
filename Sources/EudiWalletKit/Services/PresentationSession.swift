@@ -47,9 +47,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
 	/// Wallet relying party registration
-	@Published public var relyingPartyRegistration: WrpRegistrationPolicy?
+	@Published public var wrpRegistrationPolicy: WrpRegistrationPolicy?
 	/// Wallet relying party registration warnings
-	@Published public var relyingPartyWarnings: [PolicyViolation]?
+	@Published public var wrpWarnings: [PolicyViolation]?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
@@ -115,12 +115,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerLegalName = request.defaultReaderAuthResult?.legalName
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
-			let warningsKey = if presentationService.flow == .ble { presentationService.allWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
-			let warningSet: [PolicyViolation]? = if let warnings = presentationService.allWarnings, let warningsKey { warnings[warningsKey] } else { nil }
+			let warningsKey = if presentationService.flow == .ble { presentationService.wrpWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
+			let warningSet: [PolicyViolation]? = if let warnings = presentationService.wrpWarnings, let warningsKey { warnings[warningsKey] } else { nil }
 			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
 		} // next request
-		relyingPartyRegistration = presentationService.relyingPartyRegistration
-		relyingPartyWarnings = presentationService.allWarnings?[""]
+		wrpRegistrationPolicy = presentationService.wrpRegistrationPolicy
+		wrpWarnings = presentationService.wrpWarnings?[""]
 		status = .requestReceived
 	}
 

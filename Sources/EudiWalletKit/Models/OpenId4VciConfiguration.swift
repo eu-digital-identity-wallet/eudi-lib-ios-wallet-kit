@@ -172,8 +172,7 @@ extension OpenId4VciConfiguration {
 
 	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm], registrationCertificatePolicy: RegistrationCertificatePolicy? = nil) async throws -> OpenId4VCIConfig {
 		if registrationCertificatePolicy != nil {
-			// The OpenID4VCI library traps at OpenId4VCIConfig construction for this combination:
-			// WRPRC enforcement requires a cryptographically bound issuer metadata signer to supply the WRPAC.
+			// The OpenID4VCI library fails at OpenId4VCIConfig construction if not required signed
 			guard case .requireSigned = issuerMetadataPolicy else {
 				throw WalletError(description: "Registration certificate validation requires issuerMetadataPolicy to be .requireSigned", code: .invalidWrprc)
 			}

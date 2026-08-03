@@ -29,10 +29,14 @@ public struct IssueResponse: Sendable {
 	/// Warnings produced by the WRP registration certificate policy, keyed by credential
 	/// configuration identifier; the empty key holds request-wide warnings.
 	public let wrpRegistrationWarnings: [String: [PolicyViolation]]
+	/// The WRP registration policy decoded from the issuer registration certificate (WRPRC),
+	/// available when ``OpenId4VciConfiguration/validateRegistrationCertificate`` is enabled.
+	public let wrpRegistrationPolicy: WrpRegistrationPolicy?
 
-	public init(documents: [WalletStorage.Document], wrpRegistrationWarnings: [String: [PolicyViolation]] = [:]) {
+	public init(documents: [WalletStorage.Document], wrpRegistrationWarnings: [String: [PolicyViolation]] = [:], wrpRegistrationPolicy: WrpRegistrationPolicy? = nil) {
 		self.documents = documents
 		self.wrpRegistrationWarnings = wrpRegistrationWarnings
+		self.wrpRegistrationPolicy = wrpRegistrationPolicy
 	}
 
 	/// Registration-policy warnings matched to each issued document, keyed by document identifier.

@@ -25,6 +25,7 @@ import OrderedCollections
 import X509
 import OpenID4VP
 import StatiumSwift
+import struct OpenID4VP.OpenId4VPSpec
 
 public actor WrpVpRegistrationValidator {
 	/// Trust configuration used to validate the reader/relying-party registration certificate.
@@ -32,11 +33,10 @@ public actor WrpVpRegistrationValidator {
 	public let date: Date?
 	public var dcqlQueryable: DefaultDcqlQueryable?
 	static let logger = Logger(label: "WrpRegistrationValidator")
-	static let REG_CERT_TYPE_CWT = "rc-wrp+cwt"
 	/// Label of the `ItemsRequest.requestInfo` member carrying the WRPRC in ISO/IEC 18013-5 requests (ETSI TS 119 472-2)
 	static let REG_CERT_REQUEST_INFO_KEY = "euWrprc"
-	public var wrpRegistration: WrpRegistrationPolicy?
-	public var wrpWarnings = [String:[PolicyViolation]]()
+	public var wrpVpRegistrationPolicy: WrpRegistrationPolicy?
+	public var wrpVpWarnings = [String:[PolicyViolation]]()
 
 	public init(date: Date = .now, trustConfig: TrustConfiguration, dcqlQueryable: DefaultDcqlQueryable? = nil) {
 		self.trustConfig = trustConfig
@@ -48,10 +48,10 @@ public actor WrpVpRegistrationValidator {
 	
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
 		guard let wrprcData = wrprc.data(using: .ascii) else {
-			wrpWarnings["", default: []].append(.init("WRPRC cannot be decoded"))
+			wrpVpWarnings["", default: []].append(.init("WRPRC cannot be decoded"))
 			return trustConfig.wrprcTrustPolicy == .enforce ?
 				.notGranted(error: .init("WRPRC cannot be decoded")) :
-				.granted(warnings: wrpWarnings)
+				.granted(warnings: wrpVpWarnings)
 		}
 		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
 	}
@@ -74,70 +74,22 @@ public actor WrpVpRegistrationValidator {
 			wrprcValues.append(Data(bs))
 		}
 		guard let wrprcData = wrprcValues.first else { return nil }
-		if wrprcValues.count < deviceRequest.docRequests.count { wrpWarnings["", default: []].append(.init("WRPRC not repeated in every ItemsRequest.requestInfo")) }
-		if wrprcValues.dropFirst().contains(where: { $0 != wrprcData }) { wrpWarnings["", default: []].append(.init("Different WRPRC values found in ItemsRequest.requestInfo")) }
+		if wrprcValues.count < deviceRequest.docRequests.count { wrpVpWarnings["", default: []].append(.init("WRPRC not repeated in every ItemsRequest.requestInfo")) }
+		if wrprcValues.dropFirst().contains(where: { $0 != wrprcData }) { wrpVpWarnings["", default: []].append(.init("Different WRPRC values found in ItemsRequest.requestInfo")) }
 		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
-	}
-
-	/// Core WRPRC token validation shared by the presentation (DCQL) and issuance (OpenID4VCI) flows.
-	/// Parses the token, checks its type header, decodes the registration policy, and validates
-	/// expiration, access-certificate binding, status and trust chain.
-	/// - Returns: The decoded registration policy; soft failures are appended to ``wrpWarnings``.
-	func validateWrprcCore(wrpac: Certificate?, wrprcData: Data) async throws -> WrpRegistrationPolicy {
-		let wrprcToken = try x5cVerifyJwtOrCwt.parse(attestData: wrprcData, format: nil)
-		let wrprcPayload: Data
-		switch wrprcToken {
-		case .cwt(let readerAuth):
-			let type = readerAuth.coseSign1.protectedHeader.type ?? readerAuth.coseSign1.unprotectedHeader?.type
-			guard let type, type == Self.REG_CERT_TYPE_CWT else { throw WalletError(description: "WRPRC header type must be \(Self.REG_CERT_TYPE_CWT)", code: .wrprcInvalidType, context: ["type": type ?? ""]) }
-			let jsonData: Data? = if let ps = readerAuth.coseSign1.payload.asString(), let jd = ps.data(using: .ascii) { jd } else if let bs = readerAuth.coseSign1.payload.asBytes() { Data(bs) } else { nil }
-			guard let jsonData else { throw WalletError(description: "WRPRC cwt payload cannot be decoded", code: .wrprcPayloadDecodingFailed) }
-			wrprcPayload = jsonData
-		case .jwt(let jws):
-			// The JWT typ header must be rc-wrp+jwt.
-			let type = jws.protectedHeader.type
-			guard let type, type == OpenId4VPSpec.WRPRC_JWT_TYPE else { throw WalletError(description: "WRPRC header type must be \(OpenId4VPSpec.WRPRC_JWT_TYPE)", code: .wrprcInvalidType, context: ["type": jws.protectedHeader.type ?? ""]) }
-			wrprcPayload = jws.payload
-		}
-		let wrpRegistrationPolicy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: wrprcPayload)
-		wrpRegistration = wrpRegistrationPolicy
-		if let exp = wrpRegistrationPolicy.exp, Date.now > Date(timeIntervalSince1970: Double(exp)) { throw WalletError(description: "WRPRC is expired", code: .wrprcExpired) }
-		if let wrpac {
-			if !wrpRegistrationPolicy.isBound(to: wrpac) { wrpWarnings["", default: []].append(.init("WRPRC not bound to requester access certificate")) }
-		} else {
-			wrpWarnings["", default: []].append(.init("Requester access certificate not available to check WRPRC binding"))
-		}
-		guard let status = wrpRegistrationPolicy.status else { throw WalletError(description: "WRPRC does not have status list", code: .wrprcMissingStatus) }
-		let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
-		let credStatus = try? await statusService.getStatus()
-		if let credStatus {
-			if credStatus != .valid { throw WalletError(description: "WRPRC status not valid", code: .wrprcStatusInvalid, context: ["status": credStatus == .invalid ? "Invalid" : credStatus == .suspended ? "suspended" : "\(credStatus)"]) }
-		} else {
-			Self.logger.warning("WRPRC status list could not be retrieved")
-			wrpWarnings["", default: []].append(.init("WRPRC status list could not be retrieved"))
-		}
-		#if canImport(EudiEtsi1196x2)
-		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(wrprcToken, trustValidator: trustConfig.registrationTrustManager)
-		if !isValid {
-			let message = "\(wrprcToken.format.rawValue) status token trust error: \(reason ?? "")"
-			switch trustConfig.wrprcTrustPolicy {
-			case .warning: Self.logger.warning("\(message)"); wrpWarnings["", default: []].append(.init(message))
-			case .enforce: throw WalletError(description: message, code: .wrprcTrustError)
-			}
-		}
-		#endif
-		return wrpRegistrationPolicy
 	}
 
 	public func validateCertificate(wrpac: Certificate?, wrprcData: Data, dcql: DCQL) async -> Authorization {
 		do {
-			let wrpRegistrationPolicy = try await validateWrprcCore(wrpac: wrpac, wrprcData: wrprcData)
+			let (policy, w) = try await WrpVciRegistrationValidator.validateWrprcCore(trustConfig, wrpac: wrpac, wrprcData: wrprcData)
+			wrpVpRegistrationPolicy = policy
+			wrpVpWarnings = w.mapValues { $0.map(PolicyViolation.init) }
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-			wrpWarnings = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: wrpRegistrationPolicy)
-			return .granted(warnings: wrpWarnings)
+			OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &wrpVpWarnings)
+			return .granted(warnings: wrpVpWarnings)
 		} catch {
-			wrpWarnings["", default: []].append(.init("WRP policy could not be created: \(error.localizedDescription)"))
+			wrpVpWarnings["", default: []].append(.init("WRP policy could not be created: \(error.localizedDescription)"))
 			Self.logger.error("Error in validate registration certificate: \(error)")
 			return trustConfig.wrprcTrustPolicy == .enforce ?
 				.notGranted(error: .init(error.localizedDescription)) :
