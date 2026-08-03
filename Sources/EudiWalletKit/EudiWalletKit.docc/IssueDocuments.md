@@ -13,19 +13,21 @@ When the document docType to be issued use the `issueDocuments(issuerName:docTyp
 
 * Currently, only mso_mdoc and sd_jwt formats are supported
 
+The method returns an ``IssuerResponse`` containing the issued documents together with the issuer registration policy and any warnings produced when registration certificate validation is enabled (see <doc:RegistrationCertificate>).
+
 The following example shows how to issue an EUDI Personal ID document using OpenID4VCI:
 
 ```swift
 do {
   let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
   let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-  let docs = try await userWallet.issueDocuments(
+  let response = try await userWallet.issueDocuments(
     issuerName: "eudi_pid_issuer",
     docTypeIdentifiers: [.msoMdoc(docType: EuPidModel.euPidDocType)],
     credentialOptions: credentialOptions,
     keyOptions: keyOptions
   )
-  // documents have been added to wallet storage, you can display them
+  // documents (response.documents) have been added to wallet storage, you can display them
 }
 catch {
   // display error
@@ -40,23 +42,25 @@ let metadata = try await wallet.getIssuerMetadata(issuerName: "eudi_pid_issuer")
 // Use configuration identifier
 let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
 let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-let doc = try await userWallet.issueDocuments(
+let response = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
   docTypeIdentifiers: [.identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: credentialOptions,
   keyOptions: keyOptions
 )
+let doc = response.documents.first
 ```
 
 For SD-JWT credentials, use `.sdJwt(vct:)`:
 
 ```swift
-let doc = try await userWallet.issueDocuments(
+let response = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
   docTypeIdentifiers: [.sdJwt(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
   keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
 )
+let doc = response.documents.first
 ```
 
 ### Issue multiple documents
@@ -67,7 +71,7 @@ You can issue multiple documents in a single operation using the `issueDocuments
 do {
   let credentialOptions = CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1)
   let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-  let documents = try await wallet.issueDocuments(
+  let response = try await wallet.issueDocuments(
     issuerName: "eudi_pid_issuer",
     docTypeIdentifiers: [
        .identifier("eu.europa.ec.eudi.pid_mdoc"),
@@ -76,7 +80,7 @@ do {
     credentialOptions: credentialOptions,
     keyOptions: keyOptions
   )
-  // all documents have been added to wallet storage
+  // all documents (response.documents) have been added to wallet storage
 }
 catch {
   // display error
@@ -130,6 +134,7 @@ The following example shows how to resolve a credential offer:
 
 After user acceptance of the offer, the selected documents can be issued using the `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:configuration:)` method.
 The `txCodeValue` parameter is not used in the case of the authorization code flow.
+The method returns an ``IssuerResponse`` containing the issued documents together with the issuer registration policy and any warnings produced when registration certificate validation is enabled (see <doc:RegistrationCertificate>).
 
 The following example shows how to issue documents by offer URL:
 
@@ -195,7 +200,7 @@ Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digit
 After calling `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)` or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:configuration:)` the wallet application need to check if the doc is pending and has an `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` method should be called with the authorization URL provided by the server.
 
 ```swift
-if let urlString = newDocs.last?.authorizePresentationUrl { 
+if let urlString = newDocs.documents.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 
 	// on success call resumePendingIssuance using the authorization url
 	let resumedDoc = try await wallet.resumePendingIssuance(
