@@ -55,7 +55,7 @@ public actor WrpVciRegistrationValidator {
 				wrpacCertificate = nil
 				wrpVciWarnings["", default: []].append(.init("WRPAC cannot be decoded"))
 			}
-			let wrprcData = wrprc.data(using: .ascii) ?? Data(base64Encoded: wrprc)
+			let wrprcData = Data(base64Encoded: wrprc) ?? wrprc.data(using: .ascii)
 			guard let wrprcData else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
 			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData)
 			wrpVciRegistrationPolicy = policy
