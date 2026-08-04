@@ -13,8 +13,10 @@
 // limitations under the License.
 
 import Foundation
+import MdocSecurity18013
 import X509
 import SwiftASN1
+
 
 extension WrpRegistrationPolicy {
     /// Whether this registration certificate is bound to the relying party that presents it.
@@ -54,3 +56,6 @@ private extension Certificate {
         return nil
     }
 }
+
+let WRPRC_CWT_TYPE = "rc-wrp+cwt"
+let WRPRC_JWT_TYPE: String = "rc-wrp+jwt"

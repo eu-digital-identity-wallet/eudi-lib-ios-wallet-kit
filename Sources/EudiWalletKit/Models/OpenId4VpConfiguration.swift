@@ -101,10 +101,8 @@ public struct OpenId4VpConfiguration: Sendable {
 	///
 	/// When provided all request with transaction data will be validated against the list
 	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
-	/// Optional policy for WRP Registration Certificate (WRPRC) validation.
-	/// If provided, WRPRC validation is performed during request authorization.
-	/// If nil, WRPRC validation is skipped.
-	public let registrationCertificatePolicy: RegistrationCertificatePolicy?
+	///If true WRP Registration Certificate (WRPRC) validationc is performed during request authorization. If nil, WRPRC validation is skipped.
+	public let validateRegistrationCertificate: Bool
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -113,15 +111,15 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.responseEncryptionConfiguration = nil
 		self.supportedTransactionDataTypes = []
 		self.preferredResponseMode = nil
-		self.registrationCertificatePolicy = nil
+		self.validateRegistrationCertificate = true
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], registrationCertificatePolicy: RegistrationCertificatePolicy? = nil) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.preferredResponseMode = preferredResponseMode
 		self.supportedTransactionDataTypes = supportedTransactionDataTypes
-		self.registrationCertificatePolicy = registrationCertificatePolicy
+		self.validateRegistrationCertificate = validateRegistrationCertificate
 	}
 }
 

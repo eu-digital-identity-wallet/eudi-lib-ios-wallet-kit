@@ -1,12 +1,12 @@
 # Registration Certificate
 
-Validate the Wallet-Relying Party Registration Certificate (WRPRC) that a relying party presents with a data-sharing request.
+Validate the Wallet-Relying Party Registration Certificate (WRPRC) that a relying party presents with a data-sharing request, or that a credential issuer publishes with its metadata.
 
 ## Overview
 
-A WRPRC is a signed JWT or CWT issued by a registration-certificate provider (per [ETSI TS 119 475](https://www.etsi.org/standards)). It describes the relying party's registered identity, intended use, and the claims it is registered to request. It is distinct from the access certificate (WRPAC) — the X.509 e-seal that authenticates the request itself — and is bound to it.
+A WRPRC is a signed JWT or CWT issued by a registration-certificate provider (per [ETSI TS 119 475](https://www.etsi.org/standards)). It describes the relying party's registered identity, intended use, and the claims it is registered to request or the attestations it is registered to provide. It is distinct from the access certificate (WRPAC) — the X.509 e-seal that authenticates the request itself — and is bound to it.
 
-The wallet validates the certificate and surfaces the outcome so the application can inform the user before sharing. This satisfies two obligations of ETSI TS 119 472-2 clause 4.4 and Commission Implementing Regulation (EU) 2025/848 Article 8(2):
+The wallet validates the certificate and surfaces the outcome so the application can inform the user before sharing or accepting credentials. This satisfies two obligations of ETSI TS 119 472-2 clause 4.4 and Commission Implementing Regulation (EU) 2025/848 Article 8(2):
 
 - **WRP-VALIDATION-02** — warn the user when the certificate cannot be validated.
 - **WRP-OVERASKING-02** — warn the user when the request asks for attributes outside the registered scope.
@@ -15,23 +15,40 @@ The certificate is carried differently depending on the channel:
 
 | Channel | Carrier |
 |---|---|
-| Proximity (ISO/IEC 18013-5) | `euWrprc` byte string in each `ItemsRequest` `requestInfo` (ETSI TS 119 472-2 §5.3.2) |
-| Remote (OpenID4VP) | `verifier_info` element with `format = "registration_cert"` (ETSI TS 119 472-2 §6.3.2.2) |
+| Proximity presentation (ISO/IEC 18013-5) | `euWrprc` byte string in each `ItemsRequest` `requestInfo` (ETSI TS 119 472-2 §5.3.2) |
+| Remote presentation (OpenID4VP) | `verifier_info` element with `format = "registration_cert"` (ETSI TS 119 472-2 §6.3.2.2) |
+| Issuance (OpenID4VCI) | `registration_cert` entry in the `issuer_info` of the signed issuer metadata (CIR 2024/2082) |
+
+Two validators cover the two directions:
+
+- ``WrpVpRegistrationValidator`` — validates the **verifier** (relying party) WRPRC during presentation (OpenID4VP and BLE proximity).
+- ``WrpVciRegistrationValidator`` — validates the **issuer** WRPRC during OpenID4VCI issuance.
 
 ## Configuration
 
 ### Enabling registration certificate validation
 
-For **OpenID4VP** requests, supply a ``RegistrationCertificatePolicy`` via ``OpenId4VpConfiguration/registrationCertificatePolicy``. When `nil` (the default), a default policy backed by ``WrpRegistrationValidator`` is used automatically.
+For **OpenID4VP** requests, set ``OpenId4VpConfiguration/validateRegistrationCertificate`` (enabled by default). The WRPRC is validated by ``WrpVpRegistrationValidator`` using the wallet trust configuration.
 
 ```swift
 let openId4VpConfig = OpenId4VpConfiguration(
     clientIdSchemes: [.x509SanDns],
-    registrationCertificatePolicy: nil // uses the default validator
+    validateRegistrationCertificate: true // default
 )
 ```
 
-For **BLE proximity** requests, the ``WrpRegistrationValidator`` is created from the wallet's ``TrustConfiguration`` and used internally by ``BlePresentationService``.
+For **BLE proximity** requests, the ``WrpVpRegistrationValidator`` is created from the wallet's ``TrustConfiguration`` and used internally by ``BlePresentationService``.
+
+For **OpenID4VCI issuance**, set ``OpenId4VciConfiguration/validateRegistrationCertificate`` (disabled by default). It requires ``OpenId4VciConfiguration/issuerMetadataPolicy`` to be `.requireSigned`, since WRPRC enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
+
+```swift
+let vciConfig = OpenId4VciConfiguration(
+    credentialIssuerURL: "https://issuer.example.com",
+    keyAttestationsConfig: keyAttestationsConfig,
+    issuerMetadataPolicy: trustConfig.issuerMetadataPolicy, // .requireSigned
+    validateRegistrationCertificate: true
+)
+```
 
 ### Trust anchors
 
@@ -62,7 +79,7 @@ let wallet = try EudiWallet(
 
 ## Validation flow
 
-``WrpRegistrationValidator`` performs validation in two stages:
+Both validators share the same core token validation, followed by a flow-specific scope check:
 
 ### 1. Authentication
 
@@ -70,7 +87,7 @@ Parses the certificate (JWT or CWT), verifies its signature, and checks that the
 
 ### 2. Evaluation
 
-Checks the authenticated registration against the request:
+Checks the authenticated registration against the request or offer:
 
 | Check | Failure | Reference |
 |---|---|---|
@@ -79,24 +96,27 @@ Checks the authenticated registration against the request:
 | **Status reference** — the certificate carries a status-list reference | ``WalletError/Code/wrprcMissingStatus`` | ETSI TS 119 475 §6.2.6.2 |
 | **Revocation** — the status list reports the certificate as valid | ``WalletError/Code/wrprcStatusInvalid`` | ETSI TS 119 475 §6.2.6.2 |
 | **Trust** — the signer chain is trusted | ``WalletError/Code/wrprcTrustError`` | WRP-VALIDATION-02 |
-| **Over-asking** — the requested claims stay within the registered scope | `PolicyViolation` warnings | WRP-OVERASKING-02 |
+| **Scope (presentation)** — the requested claims stay within the registered scope | `PolicyViolation` warnings | WRP-OVERASKING-02 |
+| **Scope (issuance)** — the offered credential configurations are covered by the registered `provides_attestations` | `PolicyViolation` warnings | CIR 2024/2082 |
 
-## Reading the outcome
+Warnings are collected in a dictionary keyed by credential query/configuration identifier; the empty key holds request-wide warnings.
+
+## Reading the outcome — presentation
 
 The result is exposed on ``PresentationSession`` via two `@Published` properties:
 
-- ``PresentationSession/relyingPartyRegistration`` — the parsed ``WrpRegistrationPolicy`` when authentication succeeds. Contains the relying party's name, country, purpose, registered credentials, and other metadata.
-- ``PresentationSession/relyingPartyWarnings`` — an array of `PolicyViolation` values listing any validation warnings, including over-asked claims.
+- ``PresentationSession/wrpVerifierPolicy`` — the parsed ``WrpRegistrationPolicy`` when authentication succeeds. Contains the relying party's name, country, purpose, registered credentials, and other metadata.
+- ``PresentationSession/wrpVerifierWarnings`` — validation warnings keyed by credential query identifier; the empty key holds request-wide warnings, including over-asked claims.
 
 ```swift
 struct ShareView: View {
     @ObservedObject var session: PresentationSession
 
     var body: some View {
-        if let registration = session.relyingPartyRegistration {
+        if let registration = session.wrpVerifierPolicy {
             Text(registration.name ?? registration.sub)
 
-            if let warnings = session.relyingPartyWarnings, !warnings.isEmpty {
+            if let warnings = session.wrpVerifierWarnings?[""], !warnings.isEmpty {
                 ForEach(warnings, id: \.self) { warning in
                     Label(warning.description, systemImage: "exclamationmark.triangle")
                 }
@@ -120,11 +140,29 @@ for option in session.disclosedDocumentSets {
 
 ### Validity and scope are two separate results
 
-A valid certificate can still be over-asking. Check **both** ``PresentationSession/relyingPartyRegistration`` and ``PresentationSession/relyingPartyWarnings`` (for session-level warnings), as well as each ``DisclosedDocumentSet/warnings`` (for per-option warnings):
+A valid certificate can still be over-asking. Check **both** ``PresentationSession/wrpVerifierPolicy`` and ``PresentationSession/wrpVerifierWarnings`` (for session-level warnings), as well as each ``DisclosedDocumentSet/warnings`` (for per-option warnings):
 
-- `relyingPartyRegistration != nil` **and** no warnings → valid and within scope.
-- `relyingPartyRegistration != nil` **and** warnings present → valid but over-asking or has other warnings; warn the user.
-- `relyingPartyRegistration == nil` → no certificate was present, or validation failed (with `.enforce` policy).
+- `wrpVerifierPolicy != nil` **and** no warnings → valid and within scope.
+- `wrpVerifierPolicy != nil` **and** warnings present → valid but over-asking or has other warnings; warn the user.
+- `wrpVerifierPolicy == nil` → no certificate was present, or validation failed (with `.enforce` policy).
+
+## Reading the outcome — issuance
+
+``EudiWallet/issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)`` and ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:configuration:)`` return an ``IssuerResponse`` that pairs the issued documents with the WRPRC outcome:
+
+- ``IssuerResponse/wrpIssuerPolicy`` — the parsed ``WrpRegistrationPolicy`` of the issuer, including the attestations it is registered to provide.
+- ``IssuerResponse/wrpIssuerWarnings`` — warnings keyed by credential configuration identifier; the empty key holds request-wide warnings. `nil` when validation is not enabled.
+- ``IssuerResponse/documentWarnings`` — the same warnings matched to each issued document by its credential configuration identifier, keyed by document identifier.
+
+```swift
+let response = try await wallet.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes)
+if let issuerRegistration = response.wrpIssuerPolicy {
+    // Show issuer info: issuerRegistration.name, issuerRegistration.country
+}
+for (documentId, warnings) in response.documentWarnings {
+    // Warn the user about registration policy violations for this document
+}
+```
 
 ## WrpRegistrationPolicy
 
@@ -136,7 +174,8 @@ The ``WrpRegistrationPolicy`` struct carries the decoded registration certificat
 | `name` | `String?` | Display name |
 | `country` | `String?` | Country of registration |
 | `purpose` | `[PolicyPurpose]?` | Localized purpose descriptions |
-| `credentials` | `[PolicyCredential]` | Attestations and claims the RP is registered to request |
+| `credentials` | `[PolicyCredential]?` | Attestations and claims the RP is registered to request |
+| `providesAttestations` | `[PolicyCredential]?` | Attestations the issuer is registered to provide |
 | `exp` | `Int?` | Expiration timestamp |
 | `status` | `Status?` | Status-list reference for revocation |
 | `intermediary` | `PolicyIntermediary?` | Intermediary details when the RP acts through one |
@@ -148,17 +187,20 @@ The ``WrpRegistrationPolicy`` struct carries the decoded registration certificat
 
 ### Validation
 
-- ``WrpRegistrationValidator``
+- ``WrpVpRegistrationValidator``
+- ``WrpVciRegistrationValidator``
 - ``WrpRegistrationPolicy``
 
 ### Configuration
 
 - ``OpenId4VpConfiguration``
+- ``OpenId4VciConfiguration``
 - ``TrustConfiguration``
 
 ### Result
 
-- ``PresentationSession/relyingPartyRegistration``
-- ``PresentationSession/relyingPartyWarnings``
+- ``PresentationSession/wrpVerifierPolicy``
+- ``PresentationSession/wrpVerifierWarnings``
 - ``DisclosedDocumentSet``
 - ``PresentationSession/disclosedDocumentSets``
+- ``IssuerResponse``

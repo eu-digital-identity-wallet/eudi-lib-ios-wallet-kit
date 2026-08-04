@@ -43,8 +43,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
-	public var relyingPartyRegistration: WrpRegistrationPolicy?
-	public var allWarnings: [String: [PolicyViolation]]?
+	public var wrpVerifierPolicy: WrpRegistrationPolicy?
+	public var wrpVerifierWarnings: [String: [PolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var documentIds: [Document.ID] = []
 	public var zkpDocumentIds: [Document.ID]?
@@ -56,7 +56,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var docMetadata: [String: Data?]!
 	public var trustValidator: any CertificateTrustValidator
 	/// Validator for the relying party registration certificate carried in the device request
-	let wrpRegistrationValidator: WrpRegistrationValidator?
+	let wrpRegistrationValidator: WrpVpRegistrationValidator?
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
 	public var zkSystemRepository: ZkSystemRepository?
@@ -66,7 +66,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var deviceResponseBytes: Data?
 	public var responseMetadata: [Data?]!
 
-	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpRegistrationValidator? = nil) async throws {
+	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpVpRegistrationValidator? = nil) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
@@ -193,7 +193,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 	///
 	/// According to ETSI TS 119 472-2 (clause 5.3.2), the WRPRC is repeated in the `requestInfo` member
 	/// of each `ItemsRequest`, under the "euWrprc" label. On success ``relyingPartyRegistration`` and
-	/// ``allWarnings`` are set; they are surfaced to the UI by the `PresentationSession` caller.
+	/// ``wrpWarnings`` are set; they are surfaced to the UI by the `PresentationSession` caller.
 	/// - Throws: `WalletError` when the certificate is invalid and the trust policy is set to enforce
 	func validateWrpRegistration(deviceRequest: DeviceRequest, userRequestInfo: UserRequestInfo) async throws {
 		guard let wrpRegistrationValidator else { return }
@@ -207,8 +207,8 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		}
 		switch authorization {
 		case .granted(let warnings):
-			allWarnings = warnings
-			relyingPartyRegistration = await wrpRegistrationValidator.wrpRegistration
+			wrpVerifierWarnings = warnings
+			wrpVerifierPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
 			if !warnings.isEmpty { logger.warning("WRP registration policy warnings: \(warnings.mapValues { $0.map(\.violation) })") }
 		case .notGranted(let error):
 			throw WalletError(description: "WRP registration certificate validation failed: \(error.violation)", code: .invalidWrprc)

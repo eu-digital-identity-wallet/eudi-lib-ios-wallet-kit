@@ -390,23 +390,25 @@ let metadata = try await wallet.getIssuerMetadata(issuerName: "eudi_pid_issuer")
 // Use configuration identifier
 let credentialOptions = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 5)
 let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-let doc = try await userWallet.issueDocuments(
+let response = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
   docTypeIdentifiers: [.identifier("eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: credentialOptions,
   keyOptions: keyOptions
 )
+let doc = response.documents.first
 ```
 
 For SD-JWT credentials, use the `.sdJwt` identifier:
 
 ```swift
-let doc = try await userWallet.issueDocuments(
+let response = try await userWallet.issueDocuments(
   issuerName: "eudi_pid_issuer",
   docTypeIdentifiers: [.identifier(vct: "eu.europa.ec.eudi.pid_vc_sd_jwt")],
   credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1),
   keyOptions: KeyOptions(secureAreaName: "SecureEnclave")
 )
+let doc = response.documents.first
 ```
 
 ### Issue multiple documents
@@ -417,7 +419,7 @@ You can issue multiple documents in a single operation using the `issueDocuments
 do {
   let credentialOptions = CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1)
   let keyOptions = KeyOptions(secureAreaName: "SecureEnclave")
-  let documents = try await wallet.issueDocuments(
+  let response = try await wallet.issueDocuments(
     issuerName: "eudi_pid_issuer",
     docTypeIdentifiers: [
        .identifier("eu.europa.ec.eudi.pid_mdoc"),
@@ -426,7 +428,7 @@ do {
     credentialOptions: credentialOptions,
     keyOptions: keyOptions
   )
-  // all documents have been added to wallet storage
+  // all documents (response.documents) have been added to wallet storage
 }
 catch {
   // display error
@@ -550,7 +552,7 @@ Wallet kit supports the Dynamic [PID based issuance](https://github.com/eu-digit
 After calling `issueDocument(issuerName:docTypeIdentifier:credentialOptions:keyOptions:)`, `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:)`, or `issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:configuration:)` the wallet application need to check if the doc is pending and has an `authorizePresentationUrl` property. If the property is present, the application should perform the OpenID4VP presentation using the presentation URL. On success, the `resumePendingIssuance(issuerName:pendingDoc:webUrl:credentialOptions:keyOptions:)` method should be called with the authorization URL provided by the server.
 
 ```swift
-if let urlString = newDocs.last?.authorizePresentationUrl { 
+if let urlString = newDocs.documents.last?.authorizePresentationUrl { 
 	// perform openid4vp presentation using the urlString 
 	// on success call resumePendingIssuance using the authorization url
 	let resumedDoc = try await wallet.resumePendingIssuance(
@@ -632,9 +634,9 @@ let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
 
 ### Registration Certificate (WRPRC)
 
-The wallet validates the Wallet-Relying Party Registration Certificate (WRPRC) that a relying party may present with a data-sharing request, per [ETSI TS 119 475](https://www.etsi.org/standards) and Commission Implementing Regulation (EU) 2025/848 Article 8(2). The outcome is surfaced to the application so the user can be informed before sharing.
+The wallet validates the Wallet-Relying Party Registration Certificate (WRPRC) that a relying party may present with a data-sharing request, per [ETSI TS 119 475](https://www.etsi.org/standards) and Commission Implementing Regulation (EU) 2025/848 Article 8(2). The outcome is surfaced to the application so the user can be informed before sharing. During OpenID4VCI issuance the wallet can also validate the WRPRC published by the credential issuer.
 
-The WRPRC is carried as a `euWrprc` byte string in proximity requests (ETSI TS 119 472-2 §5.3.2) or as a `verifier_info` element in OpenID4VP requests (§6.3.2.2).
+The WRPRC is carried as a `euWrprc` byte string in proximity requests (ETSI TS 119 472-2 §5.3.2), as a `verifier_info` element in OpenID4VP requests (§6.3.2.2), or as a `registration_cert` entry in the `issuer_info` of the signed issuer metadata (OpenID4VCI).
 
 #### Configuration
 
@@ -651,23 +653,44 @@ let trustConfig = TrustConfiguration(
 - `.enforce` — validation failure causes the request to fail.
 - `.warning` — validation failure is added to warnings; the request continues.
 
-For OpenID4VP, a `RegistrationCertificatePolicy` can be supplied via `OpenId4VpConfiguration.registrationCertificatePolicy`. When `nil`, a default policy backed by `WrpRegistrationValidator` is used.
+For OpenID4VP, validation is controlled by `OpenId4VpConfiguration.validateRegistrationCertificate` (enabled by default) and performed by `WrpVpRegistrationValidator`. For BLE proximity requests, the validator is used internally when the request carries a WRPRC.
 
-#### Reading the outcome
+For OpenID4VCI issuance, set `OpenId4VciConfiguration.validateRegistrationCertificate` (disabled by default) to validate the issuer WRPRC with `WrpVciRegistrationValidator`. This requires `issuerMetadataPolicy` to be `.requireSigned`, since WRPRC enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
+
+#### Reading the outcome — presentation
 
 After receiving a request, the result is available on `PresentationSession`:
 
-- `relyingPartyRegistration: WrpRegistrationPolicy?` — the parsed registration (name, country, purpose, registered credentials).
-- `relyingPartyWarnings: [PolicyViolation]?` — validation warnings including over-asked claims.
+- `wrpVerifierPolicy: WrpRegistrationPolicy?` — the parsed registration (name, country, purpose, registered credentials).
+- `wrpVerifierWarnings: [String: [PolicyViolation]]?` — validation warnings keyed by credential query identifier; the empty key holds request-wide warnings, including over-asked claims.
 
 Each `DisclosedDocumentSet` in `disclosedDocumentSets` also carries per-option `warnings` for policy violations specific to that credential combination.
 
 ```swift
-if let registration = presentationSession.relyingPartyRegistration {
+if let registration = presentationSession.wrpVerifierPolicy {
     // Show relying party info: registration.name, registration.country, registration.purpose
 }
-if let warnings = presentationSession.relyingPartyWarnings, !warnings.isEmpty {
+if let warnings = presentationSession.wrpVerifierWarnings?[""], !warnings.isEmpty {
     // Warn the user about validation issues or over-asked claims
+}
+```
+
+#### Reading the outcome — issuance
+
+The `issueDocuments` and `issueDocumentsByOfferUrl` methods return an `IssuerResponse` that pairs the issued documents with the WRPRC outcome:
+
+- `documents: [WalletStorage.Document]` — the issued documents (already saved in storage).
+- `wrpIssuerPolicy: WrpRegistrationPolicy?` — the parsed issuer registration, including the attestations it is registered to provide.
+- `wrpIssuerWarnings: [String: [PolicyViolation]]?` — warnings keyed by credential configuration identifier; the empty key holds request-wide warnings.
+- `documentWarnings` — computed property matching the warnings to each issued document by its credential configuration identifier.
+
+```swift
+let response = try await wallet.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes)
+if let issuerRegistration = response.wrpIssuerPolicy {
+    // Show issuer info: issuerRegistration.name, issuerRegistration.country
+}
+for (documentId, warnings) in response.documentWarnings {
+    // Warn the user about registration policy violations for this document
 }
 ```
 
