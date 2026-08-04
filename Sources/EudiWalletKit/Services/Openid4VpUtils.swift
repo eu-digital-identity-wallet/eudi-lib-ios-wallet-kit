@@ -534,16 +534,11 @@ extension OpenId4VpUtils {
 					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })
 				}
 				if !extraClaims.isEmpty {
-					let extraPaths = extraClaims
-						.map { $0.path.value.map(\.description).joined(separator: "/") }
-						.joined(separator: ", ")
-					violations.append(.init("Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"
-					))
+					let extraPaths = extraClaims.map { $0.path.value.map(\.description).joined(separator: "/") }.joined(separator: ", ")
+					violations.append(.init("Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"))
 				}
 			}
-			if !violations.isEmpty {
-				wrpVpWarnings[key] = violations
-			}
+			if !violations.isEmpty { wrpVpWarnings[key] = violations }
 		}
 	}
 

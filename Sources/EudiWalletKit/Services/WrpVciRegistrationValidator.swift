@@ -103,7 +103,7 @@ extension WrpVciRegistrationValidator {
 		switch wrprcToken {
 		case .cwt(let readerAuth):
 			let type = readerAuth.coseSign1.protectedHeader.type ?? readerAuth.coseSign1.unprotectedHeader?.type
-			guard let type, type == REG_CERT_TYPE_CWT else { throw WalletError(description: "WRPRC header type must be \(REG_CERT_TYPE_CWT)", code: .wrprcInvalidType, context: ["type": type ?? ""]) }
+			guard let type, type == WRPRC_CWT_TYPE else { throw WalletError(description: "WRPRC header type must be \(WRPRC_CWT_TYPE)", code: .wrprcInvalidType, context: ["type": type ?? ""]) }
 			let jsonData: Data? = if let ps = readerAuth.coseSign1.payload.asString(), let jd = ps.data(using: .ascii) { jd } else if let bs = readerAuth.coseSign1.payload.asBytes() { Data(bs) } else { nil }
 			guard let jsonData else { throw WalletError(description: "WRPRC cwt payload cannot be decoded", code: .wrprcPayloadDecodingFailed) }
 			wrprcPayload = jsonData

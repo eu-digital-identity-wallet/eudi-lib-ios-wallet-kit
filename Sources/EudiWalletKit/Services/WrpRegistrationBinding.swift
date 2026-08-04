@@ -57,5 +57,5 @@ private extension Certificate {
     }
 }
 
-let REG_CERT_TYPE_CWT = "rc-wrp+cwt"
+let WRPRC_CWT_TYPE = "rc-wrp+cwt"
 let WRPRC_JWT_TYPE: String = "rc-wrp+jwt"
