@@ -27,15 +27,11 @@ struct FileHandlerOutputStream: TextOutputStream, Sendable {
     let encoding: String.Encoding
 
     init(localFile url: URL, encoding: String.Encoding = .utf8) throws {
-        if !FileManager.default.fileExists(atPath: url.path) {
-            guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: nil) else {
-                throw FileHandlerOutputStream.couldNotCreateFile
-            }
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_APPEND, 0o600)
+        guard descriptor >= 0 else {
+            throw FileHandlerOutputStream.couldNotCreateFile
         }
-
-        let fileHandle = try FileHandle(forWritingTo: url)
-        fileHandle.seekToEndOfFile()
-        self.fileHandle = fileHandle
+        self.fileHandle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         self.encoding = encoding
     }
 
