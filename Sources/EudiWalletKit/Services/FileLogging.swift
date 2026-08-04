@@ -37,7 +37,7 @@ struct FileHandlerOutputStream: TextOutputStream, Sendable {
 
     mutating func write(_ string: String) {
         if let data = string.data(using: encoding) {
-            fileHandle.write(data)
+            try? fileHandle.write(contentsOf: data)
         }
     }
 }
