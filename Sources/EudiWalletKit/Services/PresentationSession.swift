@@ -46,10 +46,10 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public var status: TransferStatus = .initializing
 	/// Device engagement data (QR data for the BLE flow)
 	@Published public var deviceEngagement: String?
-	/// Wallet relying party registration
-	@Published public var relyingPartyRegistration: WrpRegistrationPolicy?
-	/// Wallet relying party registration warnings
-	@Published public var relyingPartyWarnings: [PolicyViolation]?
+	/// The verifier (wallet relying party) registration policy decoded from the WRPRC carried in the request, if any
+	@Published public var wrpVerifierPolicy: WrpRegistrationPolicy?
+	/// Verifier registration warnings, keyed by credential query identifier; the empty key holds request-wide warnings
+	@Published public var wrpVerifierWarnings: [String:[PolicyViolation]]?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
@@ -115,12 +115,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			readerLegalName = request.defaultReaderAuthResult?.legalName
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
-			let warningsKey = if presentationService.flow == .ble { presentationService.allWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
-			let warningSet: [PolicyViolation]? = if let warnings = presentationService.allWarnings, let warningsKey { warnings[warningsKey] } else { nil }
+			let warningsKey = if presentationService.flow == .ble { presentationService.wrpVerifierWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
+			let warningSet: [PolicyViolation]? = if let warnings = presentationService.wrpVerifierWarnings, let warningsKey { warnings[warningsKey] } else { nil }
 			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
 		} // next request
-		relyingPartyRegistration = presentationService.relyingPartyRegistration
-		relyingPartyWarnings = presentationService.allWarnings?[""]
+		wrpVerifierPolicy = presentationService.wrpVerifierPolicy
+		wrpVerifierWarnings = presentationService.wrpVerifierWarnings
 		status = .requestReceived
 	}
 
