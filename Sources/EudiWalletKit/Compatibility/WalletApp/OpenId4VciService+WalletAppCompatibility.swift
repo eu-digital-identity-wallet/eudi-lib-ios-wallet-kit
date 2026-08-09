@@ -331,12 +331,13 @@ extension OpenId4VciService {
 	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, dpopKeyId: String? = nil, useDpop: Bool? = nil, dpopKeyOptions: KeyOptions? = nil) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
 		if useDpop ?? config.requireDpop {
-			dpopConstructor = try await config.makePoPConstructor(
+			let popConstructor = try await config.makePoPConstructor(
 				popUsage: .dpop,
 				privateKeyId: dpopKeyId ?? issueReq.dpopKeyId,
 				algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported,
 				keyOptions: dpopKeyOptions ?? config.dpopKeyOptions
 			)
+			dpopConstructor = await attachKeyAttestation(to: popConstructor)
 		}
 		let vciConfig = try await config.toOpenId4VCIConfig(
 			credentialIssuerId: offer.credentialIssuerIdentifier.url.absoluteString,
