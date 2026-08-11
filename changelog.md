@@ -1,3 +1,19 @@
+## v0.39.2
+
+- `OfferedIssuanceModel`: Add `wrpVciRegistrationPolicy: WrpRegistrationPolicy?` and `wrpVciWarnings: [String: [PolicyViolation]]?` properties to surface the issuer's registration certificate policy and validation warnings at offer-resolution time (before issuance).
+
+## v0.39.1
+
+- Fix log entries overwriting each other.
+
+## v0.39.0
+
+- Add WRP registration certificate validation for OpenID4VCI.
+
+## v0.38.0
+
+- Implement OpenID4VP wallet relying party registration handling.
+
 ## v0.37.6
 
 - Refactor document status handling to use `StatusList` instead of `StatusIdentifier` across services and models.

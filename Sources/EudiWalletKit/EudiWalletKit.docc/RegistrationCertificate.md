@@ -146,6 +146,25 @@ A valid certificate can still be over-asking. Check **both** ``PresentationSessi
 - `wrpVerifierPolicy != nil` **and** warnings present → valid but over-asking or has other warnings; warn the user.
 - `wrpVerifierPolicy == nil` → no certificate was present, or validation failed (with `.enforce` policy).
 
+## Reading the outcome — offer resolution
+
+When registration certificate validation is enabled for issuance, the ``OfferedIssuanceModel`` returned by ``EudiWallet/resolveOfferUrlDocTypes(offerUri:authFlowRedirectionURI:)`` includes the issuer's WRPRC outcome:
+
+- ``OfferedIssuanceModel/wrpVciRegistrationPolicy`` — the parsed ``WrpRegistrationPolicy`` of the issuer. `nil` when validation is not enabled or the certificate is absent.
+- ``OfferedIssuanceModel/wrpVciWarnings`` — warnings keyed by credential configuration identifier; the empty key holds request-wide warnings. `nil` when validation is not enabled.
+
+This allows the application to display issuer registration information and warn the user about policy violations **before** proceeding to issuance.
+
+```swift
+let offer = try await wallet.resolveOfferUrlDocTypes(offerUri: offerUri, authFlowRedirectionURI: nil)
+if let issuerRegistration = offer.wrpVciRegistrationPolicy {
+    // Show issuer info: issuerRegistration.name, issuerRegistration.country
+}
+if let warnings = offer.wrpVciWarnings?[""], !warnings.isEmpty {
+    // Warn the user about registration policy violations
+}
+```
+
 ## Reading the outcome — issuance
 
 ``EudiWallet/issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)`` and ``EudiWallet/issueDocumentsByOfferUrl(offerUri:docTypes:txCodeValue:promptMessage:configuration:)`` return an ``IssuerResponse`` that pairs the issued documents with the WRPRC outcome:
