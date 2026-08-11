@@ -209,7 +209,19 @@ public actor OpenId4VciService {
 		let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
-		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), txCodeSpec:  code?.txCode)
+		// authorize registration certificate policy if enabled in the wallet configuration
+		let warnings: [String: [PolicyViolation]]?
+		let registrationPolicy: WrpRegistrationPolicy?
+		if let enforcement = makeRegistrationCertificatePolicy() {
+			let authorizer = IssuanceAuthorizer(policy: enforcement.policy)
+			_ = try? await authorizer.authorize(credentialOffer: offer)
+			warnings = await enforcement.validator.wrpVciWarnings
+			registrationPolicy = await enforcement.validator.wrpVciRegistrationPolicy
+		} else {
+			warnings = nil
+			registrationPolicy = nil
+		}
+		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), txCodeSpec: code?.txCode, wrpVciRegistrationPolicy: registrationPolicy, wrpVciWarnings: warnings)
 	}
 
 	func resolveCredentialOptions(batchCredentialIssuance: BatchCredentialIssuance?, credentialReusePolicy: CredentialReusePolicy? = nil, userCredentialOptions: CredentialOptions? = nil) throws -> CredentialOptions {
