@@ -1,3 +1,7 @@
+## v0.37.7
+
+- `OfferedIssuanceModel`: Add `wrpVciRegistrationPolicy: WrpRegistrationPolicy?` and `wrpVciWarnings: [String: [PolicyViolation]]?` properties to surface the issuer's registration certificate policy and validation warnings at offer-resolution time (before issuance).
+
 ## v0.37.6
 
 - Refactor document status handling to use `StatusList` instead of `StatusIdentifier` across services and models.

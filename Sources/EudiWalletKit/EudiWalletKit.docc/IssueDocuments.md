@@ -116,10 +116,14 @@ The wallet currently supports these issuer reuse policies:
 ### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(offerUri:authFlowRedirectionURI:)` method that resolves the credential offer URI.
-The method returns the resolved `OfferedIssuanceModel` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). The offer's data can be displayed to the
-user.
+The method returns the resolved ``OfferedIssuanceModel`` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). When registration certificate validation is enabled (``OpenId4VciConfiguration/validateRegistrationCertificate``), the model also includes:
 
-When a pre-registered issuer can be resolved from `offerUri`, the method uses that issuer's `OpenId4VciConfiguration.issuerMetadataPolicy`.
+- ``OfferedIssuanceModel/wrpVciRegistrationPolicy`` — the parsed issuer registration policy decoded from the WRPRC.
+- ``OfferedIssuanceModel/wrpVciWarnings`` — validation warnings keyed by credential configuration identifier; the empty key holds request-wide warnings. `nil` when validation is not enabled.
+
+The offer's data can be displayed to the user, including issuer registration information and any warnings, before proceeding to issuance. See <doc:RegistrationCertificate> for details.
+
+When a pre-registered issuer can be resolved from `offerUri`, the method uses that issuer's ``OpenId4VciConfiguration/issuerMetadataPolicy``.
 
 The following example shows how to resolve a credential offer:
 
