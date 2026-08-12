@@ -27,6 +27,7 @@ import JSONWebSignature
 import protocol JSONWebAlgorithms.JWKRepresentable
 import struct JSONWebAlgorithms.SecKeyExtended
 import struct JSONWebKey.JWK
+import protocol OpenID4VCI.Networking
 import struct eudi_lib_sdjwt_swift.ClaimPath
 import eudi_lib_sdjwt_swift
 import struct OpenID4VP.RegistrationCertificatePolicy
@@ -255,10 +256,10 @@ extension DocMetadata {
 	/// Downloads all remote images referenced in the credential `display` metadata and replaces their
 	/// URLs with inline `data:` URIs. This prevents issuers from learning when a user views a credential
 	/// (privacy) and eliminates network latency at display time. URLs that cannot be fetched are left unchanged.
-	func downloadingDisplayImages() async -> DocMetadata {
+	func downloadingDisplayImages(networking: any Networking) async -> DocMetadata {
 		guard let display, display.contains(where: { $0.backgroundImageURL != nil || $0.logo?.urlString != nil }) else { return self }
 		let downloadedDisplay = await withTaskGroup(of: DisplayMetadata.self) { group in
-			for dm in display { group.addTask { await dm.downloadingImages() } }
+			for dm in display { group.addTask { await dm.downloadingImages(networking: networking) } }
 			var result: [DisplayMetadata] = []
 			for await dm in group { result.append(dm) }
 			return result
@@ -269,9 +270,9 @@ extension DocMetadata {
 
 extension DisplayMetadata {
 	/// Returns a copy of this `DisplayMetadata` with any http(s) image URLs replaced by inline `data:` URIs.
-	func downloadingImages() async -> DisplayMetadata {
-		async let newBgURL = Self.fetchAsDataURI(urlString: backgroundImageURL)
-		async let newLogoURL = Self.fetchAsDataURI(urlString: logo?.urlString)
+	func downloadingImages(networking: any Networking) async -> DisplayMetadata {
+		async let newBgURL = Self.fetchAsDataURI(urlString: backgroundImageURL, networking: networking)
+		async let newLogoURL = Self.fetchAsDataURI(urlString: logo?.urlString, networking: networking)
 		let (fetchedBg, fetchedLogo) = await (newBgURL, newLogoURL)
 		let newLogo = logo.map { LogoMetadata(urlString: fetchedLogo ?? $0.urlString, alternativeText: $0.alternativeText) }
 		let resolvedBackgroundImageURL = fetchedBg ?? backgroundImageURL
@@ -280,13 +281,13 @@ extension DisplayMetadata {
 
 	/// Downloads data from `urlString` (http/https only) and encodes it as a `data:` URI.
 	/// Returns `nil` if the URL is already a data URI, is `nil`, is non-http, or the download fails.
-	private static func fetchAsDataURI(urlString: String?) async -> String? {
+	private static func fetchAsDataURI(urlString: String?, networking: any Networking) async -> String? {
 		guard let urlString else { return nil }
 		// Already a data URI – nothing to do
 		if urlString.lowercased().hasPrefix("data:") { return nil }
 		guard let url = URL(string: urlString), url.scheme == "https" || url.scheme == "http" else { return nil }
 		do {
-			let (data, response) = try await URLSession.shared.data(from: url)
+			let (data, response) = try await networking.data(from: url)
 			let mimeType = (response as? HTTPURLResponse)?.mimeType ?? "application/octet-stream"
 			return "data:\(mimeType);base64,\(data.base64EncodedString())"
 		} catch {
