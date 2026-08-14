@@ -28,7 +28,7 @@ extension WrpRegistrationPolicy {
             return false
         }
         if let intermediary {
-            return intermediary.identifier == presenterId
+			return intermediary.compactMap(\.identifier).contains(presenterId)
         }
         return identifiers.contains { $0.value == presenterId }
     }
