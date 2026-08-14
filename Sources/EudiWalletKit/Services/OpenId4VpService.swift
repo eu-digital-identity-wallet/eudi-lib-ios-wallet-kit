@@ -330,7 +330,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			onSuccess?(url)
 		} else if case let .rejected(reason) = result {
 			logger.info("Dispatch rejected, reason: \(reason)")
-			throw WalletError(description: reason, code: .internalError)
+			// Verifier may return a redirect_uri in a non-2xx body (e.g. access_denied redirect)
+			if let data = reason.data(using: .utf8),
+			   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+			   let redirectString = json["redirect_uri"] as? String,
+			   let redirectURL = URL(string: redirectString) {
+				logger.info("Dispatch rejected with redirect URL: \(redirectString)")
+				onSuccess?(redirectURL)
+			} else {
+				throw WalletError(description: reason, code: .internalError)
+			}
 		}
 		if let vpTokens, dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
 			let data_formats: [DocDataFormat]? = if let dcql, case let .vpToken(vpContent) = consent, case let .dcql(vp) = vpContent { vp.flatMap { (queryId, vps) in Array(repeating: dcql.findQuery(id: queryId.value)!.dataFormat, count: vps.count) } } else { nil }
@@ -408,10 +417,46 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	/// When `preferredResponseMode` is set, overrides the verifier's requested mode while keeping the response URI from the request.
 	/// When not set, delegates to the standard `AuthorizationResponse` init (current behavior).
 	func buildAuthorizationResponse(resolved: ResolvedRequestData, consent: ClientConsent) throws -> AuthorizationResponse {
+		let request = resolved.request
+		// Negative consent: build directly so that missing state (optional in OpenID4VP) does not throw
+		if case .negative(let error) = consent {
+			let payload = AuthorizationResponsePayload.noConsensusResponseData(state: request.state ?? "", error: error)
+			if let preferred = openID4VpConfig.preferredResponseMode {
+				let responseURI: URL? = switch request.responseMode {
+				case .directPost(let uri): uri
+				case .directPostJWT(let uri): uri
+				case .query(let uri): uri
+				case .fragment(let uri): uri
+				case .some(.none), nil: nil
+				}
+				guard let uri = responseURI else {
+					throw WalletError(description: "No response URI for negative consent", code: .internalError)
+				}
+				switch preferred {
+				case .directPost:
+					return .directPost(url: uri, data: payload)
+				case .directPostJWT:
+					guard let spec = request.responseEncryptionSpecification else {
+						throw WalletError(description: "directPostJWT requires response encryption specification from verifier", code: .responseEncryptionMissing)
+					}
+					return .directPostJwt(url: uri, data: payload, responseEncryptionSpecification: spec)
+				}
+			}
+			switch request.responseMode {
+			case .directPost(let uri):
+				return .directPost(url: uri, data: payload)
+			case .directPostJWT(let uri):
+				guard let spec = request.responseEncryptionSpecification else {
+					throw WalletError(description: "directPostJWT requires response encryption specification from verifier", code: .responseEncryptionMissing)
+				}
+				return .directPostJwt(url: uri, data: payload, responseEncryptionSpecification: spec)
+			default:
+				throw WalletError(description: "Unsupported response mode for negative consent", code: .internalError)
+			}
+		}
 		guard let preferred = openID4VpConfig.preferredResponseMode else {
 			return try AuthorizationResponse(resolvedRequest: resolved, consent: consent, walletOpenId4VPConfig: getWalletConf(), encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode))
 		}
-		let request = resolved.request
 		// Extract the response URI from the request's response mode
 		let responseURI: URL? = switch request.responseMode {
 		case .directPost(let uri): uri
@@ -433,9 +478,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				clientId: resolved.client.id,
 				encryptionParameters: .apu(mdocGeneratedNonce.base64urlEncode)
 			)
-		case .negative(let error):
-			guard let state = request.state else { throw WalletError(description: "Missing state in request", code: .internalError) }
-			payload = .noConsensusResponseData(state: state, error: error)
+		case .negative:
+			preconditionFailure("negative consent handled above")
 		}
 		switch preferred {
 		case .directPost:
