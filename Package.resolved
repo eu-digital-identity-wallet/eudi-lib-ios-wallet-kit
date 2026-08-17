@@ -1,5 +1,5 @@
 {
-  "originHash" : "0b6678f6c24bc109ce0adf697568a58fe6f86f3458ffe3d7a919319371185b4c",
+  "originHash" : "c95676c7a862862b392dea193889990b0ab19605acbba47d34bd7733c2261a55",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vci-swift.git",
       "state" : {
-        "revision" : "25fbad4bf627b27c1d609e51c2b670f78771687b",
-        "version" : "0.53.0"
+        "revision" : "37c712ee275a3c01ca6423aaeb0a82288f575828",
+        "version" : "0.53.1"
       }
     },
     {
