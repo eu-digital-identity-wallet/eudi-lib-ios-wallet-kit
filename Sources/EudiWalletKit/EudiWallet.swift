@@ -239,6 +239,22 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
+	/// Resolve the issuer's WRP registration certificate for a set of credential configuration
+	/// identifiers without starting an issuance flow.
+	///
+	/// Use this method to check whether an issuer is registered for a given set of credential
+	/// types before issuing. The returned ``IssuerResponse`` carries the decoded registration
+	/// policy and typed ``RegistrationViolation`` entries for any issues found.
+	/// - Parameters:
+	///   - issuerName: The registered issuer service name or issuer URL.
+	///   - credentialConfigurationIds: The credential configuration identifiers to validate.
+	/// - Returns: An ``IssuerResponse`` with an empty `documents` array, containing the
+	///   decoded ``WrpRegistrationPolicy`` and any registration violations.
+	public func resolveIssuerRegistration(issuerName: String, credentialConfigurationIds: [String]) async throws -> IssuerResponse {
+		let vciService = try await resolveVCIService(issuerName: issuerName)
+		return try await vciService.resolveIssuerRegistration(credentialConfigurationIds: credentialConfigurationIds)
+	}
+
 	/// Create a batch of keys and a matching key attestation using the attestation provider configured for the issuer.
 	///
 	/// - Parameters:
@@ -285,7 +301,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document. If nil, the options from the original issuance metadata are used.
 	///   - promptMessage: Prompt message for biometric authentication (optional).
 	///   - backgroundOnly: When `true`, reissuance proceeds only if stored authorization data is available (no user interaction). Throws if authorization data is absent. Defaults to `false`.
-	/// - Returns: The reissued document, saved in storage.
+	/// - Returns: An ``IssuerResponse`` with the reissued document (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
 	/// - Throws: An error if the document metadata is not found, if `backgroundOnly` is `true` and no stored authorization data exists, or if reissuance fails.
 	@discardableResult public func reissueDocument(
 		documentId: WalletStorage.Document.ID,
@@ -293,7 +309,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		keyOptions: KeyOptions? = nil,
 		promptMessage: String? = nil,
 		backgroundOnly: Bool = false
-	) async throws -> WalletStorage.Document {
+	) async throws -> IssuerResponse {
 		let docMetadata = try await getDocumentMetadata(documentId: documentId)
 		let vciService = try await resolveVCIService(issuerName: docMetadata.credentialIssuerIdentifier)
 		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
@@ -305,7 +321,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let resolvedCredentialOptions = credentialOptions ?? docMetadata.credentialOptions
 		let resolvedKeyOptions = keyOptions ?? docMetadata.keyOptions
 		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: resolvedCredentialOptions, keyOptions: resolvedKeyOptions, promptMessage: promptMessage, backgroundOnly: backgroundOnly)
-		return reissued.first!
+		return IssuerResponse(documents: reissued, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
 	/// Get default credential options (batch-size and credential policy) for a document type

@@ -505,9 +505,9 @@ extension OpenId4VpUtils {
 	///   - dcql: The DCQL from the authorization request
 	///   - policyDcql: The DCQL declared in the WRPRC (permitted scope)
 	/// - Returns: Warnings for each extra claim path found in the request but not in the policy
-	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy, wrpVpWarnings: inout [String: [PolicyViolation]]) {
+	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy, wrpVpWarnings: inout [String: [PresentationPolicyViolation]]) {
 		for (key, selectionSet) in credentialSetOptions {
-			var violations = [PolicyViolation]()
+			var violations = [PresentationPolicyViolation]()
 			for selection in selectionSet {
 				// Find matching policy credential by doctype or vct
 				let policyCredential = policy.credentials?.first { policyCred in
@@ -520,8 +520,8 @@ extension OpenId4VpUtils {
 					return false
 				}
 				guard let policyCredential else {
-					violations.append(.init("Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
-					))
+					let messageViolation = "Credential '\(selection.docType)' (query: \(selection.queryId)) is not declared in the registration certificate policy"
+					violations.append(PresentationPolicyViolation(reason: .overAskedClaims(docType: selection.docType, claims: nil), message: messageViolation))
 					continue
 				}
 				// Compare claims: find claims in request that are not covered by policy
@@ -534,8 +534,8 @@ extension OpenId4VpUtils {
 					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })
 				}
 				if !extraClaims.isEmpty {
-					let extraPaths = extraClaims.map { $0.path.value.map(\.description).joined(separator: "/") }.joined(separator: ", ")
-					violations.append(.init("Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths)]"))
+					let extraPaths = extraClaims.map(\.path)
+					violations.append(PresentationPolicyViolation(reason: .overAskedClaims(docType: selection.docType, claims: extraPaths), message: "Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths.map { $0.value.map(\.description).joined(separator: "/") }.joined(separator: ", "))]"))
 				}
 			}
 			if !violations.isEmpty { wrpVpWarnings[key] = violations }

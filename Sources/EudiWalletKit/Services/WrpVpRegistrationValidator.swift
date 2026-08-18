@@ -38,8 +38,8 @@ public actor WrpVpRegistrationValidator {
 	static let REG_CERT_REQUEST_INFO_KEY = "euWrprc"
 	/// The registration policy decoded from the WRPRC by the last `validateCertificate` call, if any.
 	public var wrpVpRegistrationPolicy: WrpRegistrationPolicy?
-	/// Warnings collected during validation, keyed by credential query identifier; the empty key holds request-wide warnings.
-	public var wrpVpWarnings = [String:[PolicyViolation]]()
+	/// Typed violations collected during validation, keyed by credential query identifier; the empty key holds request-wide violations.
+	public var wrpVpWarnings = [String:[PresentationPolicyViolation]]()
 
 	public init(date: Date = .now, trustConfig: TrustConfiguration, dcqlQueryable: DefaultDcqlQueryable? = nil) {
 		self.trustConfig = trustConfig
@@ -51,10 +51,11 @@ public actor WrpVpRegistrationValidator {
 	
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
 		guard let wrprcData = wrprc.data(using: .ascii) else {
-			wrpVpWarnings["", default: []].append(.init("WRPRC cannot be decoded"))
-			return trustConfig.wrprcTrustPolicy == .enforce ?
+			wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .invalidCertificate, message: "WRPRC cannot be decoded"))
+			let policyViolationWarnings = wrpVpWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
+			return trustConfig.wrprcVpTrustPolicy == .enforce ?
 				.notGranted(error: .init("WRPRC cannot be decoded")) :
-				.granted(warnings: wrpVpWarnings)
+				.granted(warnings: policyViolationWarnings)
 		}
 		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
 	}
@@ -77,8 +78,8 @@ public actor WrpVpRegistrationValidator {
 			wrprcValues.append(Data(bs))
 		}
 		guard let wrprcData = wrprcValues.first else { return nil }
-		if wrprcValues.count < deviceRequest.docRequests.count { wrpVpWarnings["", default: []].append(.init("WRPRC not repeated in every ItemsRequest.requestInfo")) }
-		if wrprcValues.dropFirst().contains(where: { $0 != wrprcData }) { wrpVpWarnings["", default: []].append(.init("Different WRPRC values found in ItemsRequest.requestInfo")) }
+		if wrprcValues.count < deviceRequest.docRequests.count { wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .wrprcNotRepeated, message: "WRPRC not repeated in every ItemsRequest.requestInfo")) }
+		if wrprcValues.dropFirst().contains(where: { $0 != wrprcData }) { wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .wrprcMismatch, message: "Different WRPRC values found in ItemsRequest.requestInfo")) }
 		return await validateCertificate(wrpac: wrpac, wrprcData: wrprcData, dcql: dcql)
 	}
 
@@ -93,15 +94,22 @@ public actor WrpVpRegistrationValidator {
 		do {
 			let (policy, warns) = try await WrpVciRegistrationValidator.validateWrprcCore(trustConfig, wrpac: wrpac, wrprcData: wrprcData)
 			wrpVpRegistrationPolicy = policy
-			wrpVpWarnings[""] = warns.map(PolicyViolation.init) 
+			wrpVpWarnings[""] = warns.map { PresentationPolicyViolation(from: $0) }
+			// Under .enforce, hard failures block presentation.
+			let enforceableReasons: Set<PresentationFailureReason> = [.expired, .statusRevoked, .statusSuspended, .statusApplicationSpecific, .statusMissing, .trustError, .invalidType]
+			if trustConfig.wrprcVpTrustPolicy == .enforce,
+			   let enforceable = wrpVpWarnings[""]?.first(where: { enforceableReasons.contains($0.reason) }) {
+				return .notGranted(error: PolicyViolation(enforceable.message))
+			}
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 			OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &wrpVpWarnings)
-			return .granted(warnings: wrpVpWarnings)
+			let policyViolationWarnings = wrpVpWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
+			return .granted(warnings: policyViolationWarnings)
 		} catch {
-			wrpVpWarnings["", default: []].append(.init("WRP policy could not be created: \(error.localizedDescription)"))
+			wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .other, message: "WRP policy could not be created: \(error.localizedDescription)"))
 			Self.logger.error("Error in validate registration certificate: \(error)")
-			return trustConfig.wrprcTrustPolicy == .enforce ?
+			return trustConfig.wrprcVpTrustPolicy == .enforce ?
 				.notGranted(error: .init(error.localizedDescription)) :
 				.granted(warnings: ["": [.init(error.localizedDescription)]])
 	  }

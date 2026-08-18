@@ -24,7 +24,7 @@ import Copyable
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)``
 public struct OfferedIssuanceModel: Sendable {
 	/// public initializer
-	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], txCodeSpec: TxCode? = nil, wrpVciRegistrationPolicy: WrpRegistrationPolicy? = nil, wrpVciWarnings: [String: [PolicyViolation]]? = nil) {
+	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], txCodeSpec: TxCode? = nil, wrpVciRegistrationPolicy: WrpRegistrationPolicy? = nil, wrpVciWarnings: [String: [RegistrationPolicyViolation]]? = nil) {
 		self.issuerName = issuerName
 		self.issuerLogoUrl = issuerLogoUrl
 		self.docModels = docModels
@@ -45,7 +45,7 @@ public struct OfferedIssuanceModel: Sendable {
 	/// WRP VCI registration policy (if any) decoded from the WRPRC during validation
 	public let wrpVciRegistrationPolicy: WrpRegistrationPolicy?
 	/// Warnings collected during validation, keyed by credential configuration identifier; the empty key holds request-wide warnings.
-	public let wrpVciWarnings: [String: [PolicyViolation]]?
+	public let wrpVciWarnings: [String: [RegistrationPolicyViolation]]?
 }
 
 /// Information about an offered document to issue

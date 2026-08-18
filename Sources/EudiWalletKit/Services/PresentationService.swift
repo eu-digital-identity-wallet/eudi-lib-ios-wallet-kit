@@ -17,7 +17,6 @@ limitations under the License.
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
-import struct OpenID4VP.PolicyViolation
 import struct WalletStorage.Document
 
 /// [Doc Types to [Namespace to Items]] dictionary
@@ -41,7 +40,7 @@ public protocol PresentationService: Sendable {
 	/// The verifier (relying party) registration policy decoded from the WRPRC carried in the request, if any
 	var wrpVerifierPolicy: WrpRegistrationPolicy?  { get }
 	/// Warnings produced during WRPRC validation, keyed by credential query identifier; the empty key holds request-wide warnings
-	var wrpVerifierWarnings: [String: [PolicyViolation]]? { get }
+	var wrpVerifierWarnings: [String: [PresentationPolicyViolation]]? { get }
 	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: True if user accepted to send the response

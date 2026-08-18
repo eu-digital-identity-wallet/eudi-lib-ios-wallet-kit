@@ -71,7 +71,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var verifierInfo: [VerifierInfo]?
 	var docTypeDisplayNames: [DocType: String]
 	public var wrpVerifierPolicy: WrpRegistrationPolicy?
-	public var wrpVerifierWarnings: [String: [PolicyViolation]]?
+	public var wrpVerifierWarnings: [String: [PresentationPolicyViolation]]?
 	public var transactionLog: TransactionLog
 	public var zkpDocumentIds: [WalletStorage.Document.ID]?
 	public var flow: FlowType
@@ -124,7 +124,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case let .notSecured(data: rrd, warnings):
-			self.wrpVerifierWarnings = warnings
+			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
 			if case .redirectUri = rrd.client { return try await handleRequestData(rrd) }
 			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
@@ -133,7 +133,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			if let details { logger.error("Details: \(details)") }
 			throw WalletError(description: "OpenID4VP request error: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: readerCertificateValidationMessage != nil ? .trustError : .invalidQueryResolution, innerError: error)
 		case let .jwt(request: rrd, warnings):
-			self.wrpVerifierWarnings = warnings
+			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
 			return try await handleRequestData(rrd)
 		}

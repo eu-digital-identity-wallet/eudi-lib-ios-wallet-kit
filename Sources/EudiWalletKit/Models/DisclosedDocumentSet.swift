@@ -5,7 +5,6 @@
 //  Created by PHILIP SAKELLAROPOULOS on 7/30/26.
 //
 import Foundation
-import struct OpenID4VP.PolicyViolation
 
 /// A set of documents that can be disclosed in response to a single presentation request.
 ///
@@ -21,13 +20,13 @@ public struct DisclosedDocumentSet {
 	public let docElements: [DocElements]
 	/// Violations of the relying party's registration policy detected for this request.
 	/// The presentation can still proceed; these are surfaced to the user as warnings.
-	public let warnings: [PolicyViolation]?
+	public let warnings: [PresentationPolicyViolation]?
 
 	/// Creates a disclosed document set.
 	/// - Parameters:
 	///   - docElements: The requested elements of each matching document.
 	///   - warnings: Registration-policy violations to surface to the user.
-	public init(docElements: [DocElements], warnings: [PolicyViolation]?) {
+	public init(docElements: [DocElements], warnings: [PresentationPolicyViolation]?) {
 		self.docElements = docElements
 		self.warnings = warnings
 	}
