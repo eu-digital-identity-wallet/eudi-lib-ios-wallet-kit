@@ -55,7 +55,7 @@ public actor OpenId4VciService {
 	/// Warnings produced by the WRP registration certificate policy during the last `getIssuer(offer:)` call.
 	/// Keyed by credential configuration identifier; the empty key holds request-wide warnings.
 	/// `nil` when registration certificate validation is not enabled.
-	public private(set) var wrpIssuerWarnings: [String: [PolicyViolation]]?
+	public private(set) var wrpIssuerWarnings: [String: [RegistrationPolicyViolation]]?
 	/// The WRP registration policy decoded from the WRPRC during the last `getIssuer(offer:)` call, if any.
 	public private(set) var wrpIssuerPolicy: WrpRegistrationPolicy?
 	@MainActor var simpleAuthWebContext: SimpleAuthenticationPresentationContext!
@@ -210,7 +210,7 @@ public actor OpenId4VciService {
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
 		// authorize registration certificate policy if enabled in the wallet configuration
-		let warnings: [String: [PolicyViolation]]?
+		let warnings: [String: [RegistrationPolicyViolation]]?
 		let registrationPolicy: WrpRegistrationPolicy?
 		if let enforcement = makeRegistrationCertificatePolicy() {
 			let authorizer = IssuanceAuthorizer(policy: enforcement.policy)
@@ -222,6 +222,32 @@ public actor OpenId4VciService {
 			registrationPolicy = nil
 		}
 		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), txCodeSpec: code?.txCode, wrpVciRegistrationPolicy: registrationPolicy, wrpVciWarnings: warnings)
+	}
+
+	/// Resolve the issuer's WRP registration certificate for a set of credential configuration identifiers
+	/// without starting an issuance flow.
+	///
+	/// Builds a synthetic credential offer from the issuer metadata, validates the WRPRC against
+	/// the trust configuration, and checks each requested configuration against the issuer's
+	/// `provides_attestations` claim.
+	/// - Parameter credentialConfigurationIds: The credential configuration identifiers to check.
+	/// - Returns: An ``IssuerResponse`` with an empty documents array, containing the decoded
+	///   registration policy and any violations.
+	public func resolveIssuerRegistration(credentialConfigurationIds: [String]) async throws -> IssuerResponse {
+		let docTypeIdentifiers = credentialConfigurationIds.map { DocTypeIdentifier.identifier($0) }
+		let (_, offer) = try await buildCredentialOffer(for: docTypeIdentifiers)
+		let warnings: [String: [RegistrationPolicyViolation]]?
+		let registrationPolicy: WrpRegistrationPolicy?
+		if let enforcement = makeRegistrationCertificatePolicy() {
+			let authorizer = IssuanceAuthorizer(policy: enforcement.policy)
+			_ = try? await authorizer.authorize(credentialOffer: offer)
+			warnings = await enforcement.validator.wrpVciWarnings
+			registrationPolicy = await enforcement.validator.wrpVciRegistrationPolicy
+		} else {
+			warnings = nil
+			registrationPolicy = nil
+		}
+		return IssuerResponse(documents: [], wrpIssuerWarnings: warnings, wrpIssuerPolicy: registrationPolicy)
 	}
 
 	func resolveCredentialOptions(batchCredentialIssuance: BatchCredentialIssuance?, credentialReusePolicy: CredentialReusePolicy? = nil, userCredentialOptions: CredentialOptions? = nil) throws -> CredentialOptions {
@@ -315,7 +341,7 @@ public actor OpenId4VciService {
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: algs, registrationCertificatePolicy: registrationCertificateEnforcement?.policy)
 		if let (_, validator) = registrationCertificateEnforcement {
 			let result = try await Issuer.make(credentialOffer: offer, config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
-			wrpIssuerWarnings = result.warnings
+			wrpIssuerWarnings = await validator.wrpVciWarnings
 			wrpIssuerPolicy = await validator.wrpVciRegistrationPolicy
 			if !result.warnings.isEmpty { logger.warning("WRP registration certificate warnings: \(result.warnings.mapValues { $0.map(\.value) })") }
 			return result.issuer
@@ -360,7 +386,7 @@ public actor OpenId4VciService {
 		return (issuer, dpopConstructor)
 	}
 
-	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration], [String: [PolicyViolation]]?) {
+	func authorizeOffer(offerUri: String, docTypeModels: [OfferedDocModel], txCodeValue: String?, authorized: AuthorizedRequest?, forceRefreshToken: Bool, backgroundOnly: Bool = false) async throws -> (AuthorizeRequestOutcome, Issuer, [CredentialConfiguration], [String: [RegistrationPolicyViolation]]?) {
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw WalletError(description: "offerUri \(offerUri) not resolved. resolveOfferDocTypes must be called first", code: .internalError)
 		}

@@ -1,6 +1,59 @@
+## v0.40.2
+
+### WRP Registration Certificate Improvements
+
+#### Resolve Issuer Registration Without Issuing
+
+New `EudiWallet.resolveIssuerRegistration(issuerName:credentialConfigurationIds:)` method checks whether an issuer is registered for a given set of credential types before starting an issuance flow. Returns an `IssuerResponse` with an empty `documents` array, containing the decoded registration policy and any violations.
+
+```swift
+let result = try await wallet.resolveIssuerRegistration(
+    issuerName: "eudi_pid_issuer",
+    credentialConfigurationIds: ["eu.europa.ec.eudi.pid_mdoc"]
+)
+if let warnings = result.wrpIssuerWarnings, !warnings.isEmpty {
+    // issuer is not registered for this credential type
+}
+```
+
+#### Reissuance Returns `IssuerResponse`
+
+`reissueDocument` now returns `IssuerResponse` instead of `WalletStorage.Document`, surfacing the WRPRC policy and any registration violations during re-issuance.
+
+#### Typed Registration Failure Reasons
+
+New `RegistrationPolicyViolation` struct and `RegistrationFailureReason` enum replace string-based `PolicyViolation` in all VCI registration APIs. `PresentationPolicyViolation` and `PresentationFailureReason` replace `PolicyViolation` in all VP presentation APIs. Switch on `reason` instead of string-matching:
+
+```swift
+for violation in warnings {
+    switch violation.reason {
+    case .expired: // handle expired certificate
+    case .credentialsNotCovered(let ids): // issuer not registered for these doc types
+    case .statusRevoked: // certificate revoked
+    case .statusSuspended: // certificate suspended
+    default: break
+    }
+}
+```
+
+`RegistrationFailureReason` cases: `expired`, `statusRevoked`, `statusSuspended`, `statusApplicationSpecific`, `statusMissing`, `statusRetrievalFailed`, `trustError`, `invalidType`, `payloadDecodingFailed`, `invalidCertificate`, `wrpacDecodingFailed`, `notBoundToAccessCertificate`, `accessCertificateUnavailable`, `credentialsNotCovered(credentialIds:)`, `other`.
+
+`PresentationFailureReason` adds: `overAskedClaims(docType:claims:)`, `wrprcNotRepeated`, `wrprcMismatch`.
+
+#### Decoded Registration Preserved on Failure
+
+`wrpIssuerPolicy` / `wrpVciRegistrationPolicy` is now assigned before validation (expiry, status, trust) runs, so the decoded issuer identity is available even when the certificate fails validation.
+
+### Breaking Changes
+
+- **`reissueDocument` return type changed**: Returns `IssuerResponse` instead of `WalletStorage.Document`. Access the reissued document via `result.documents.first`.
+- **`wrpIssuerWarnings` / `wrpVciWarnings` type changed**: From `[String: [PolicyViolation]]?` to `[String: [RegistrationPolicyViolation]]?` in `IssuerResponse`, `OfferedIssuanceModel`, and `OpenId4VciService`.
+- **`wrpVerifierWarnings` type changed**: From `[String: [PolicyViolation]]?` to `[String: [PresentationPolicyViolation]]?` in `PresentationSession`, `PresentationService`, `DisclosedDocumentSet`, and presentation service implementations.
+- **`TrustConfiguration.wrprcTrustPolicy` split**: Replaced by `wrprcVpTrustPolicy` (presentation) and `wrprcVciTrustPolicy` (issuance), both defaulting to `.enforce`.
+
 ## v0.39.2
 
-- `OfferedIssuanceModel`: Add `wrpVciRegistrationPolicy: WrpRegistrationPolicy?` and `wrpVciWarnings: [String: [PolicyViolation]]?` properties to surface the issuer's registration certificate policy and validation warnings at offer-resolution time (before issuance).
+- `OfferedIssuanceModel`: Add `wrpVciRegistrationPolicy: WrpRegistrationPolicy?` and `wrpVciWarnings: [String: [RegistrationPolicyViolation]]?` properties to surface the issuer's registration certificate policy and validation warnings at offer-resolution time (before issuance).
 
 ## v0.39.1
 
