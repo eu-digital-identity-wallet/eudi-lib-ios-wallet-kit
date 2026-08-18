@@ -62,12 +62,19 @@ public actor WrpVciRegistrationValidator {
 			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData)
 			wrpVciRegistrationPolicy = policy
 			wrpVciWarnings[""] = warns
-			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpVciWarnings: &wrpVciWarnings)
+			var vciNotCoveredWarnings = [String: [RegistrationPolicyViolation]]()
+			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpVciWarnings: &vciNotCoveredWarnings)
+			wrpVciWarnings.merge(vciNotCoveredWarnings, uniquingKeysWith: { (_, new) in new })
 			let policyViolationWarnings = wrpVciWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
 			// Under .enforce, hard failures block issuance.
-			if trustConfig.wrprcVciTrustPolicy == .enforce,
-			   let enforceable = wrpVciWarnings[""]?.first(where: { Self.enforceableReasons.contains($0.reason) }) {
-				return .notGranted(error: PolicyViolation(enforceable.message))
+			if trustConfig.wrprcVciTrustPolicy == .enforce {
+				if let enforceable = wrpVciWarnings[""]?.first(where: { Self.enforceableReasons.contains($0.reason) }) {
+					return .notGranted(error: PolicyViolation(enforceable.message))
+				}
+				let vciNotCoveredViolationWarnings = vciNotCoveredWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
+				if let notCoveredViolation = vciNotCoveredViolationWarnings.first?.value.first {
+					return .notGranted(error: notCoveredViolation)
+				}
 			}
 			return .granted(warnings: policyViolationWarnings)
 		} catch {
@@ -100,7 +107,7 @@ public actor WrpVciRegistrationValidator {
 			default: true
 			}
 			if !isCovered {
-				wrpVciWarnings[identifier.value, default: []].append(RegistrationPolicyViolation(reason: .credentialsNotCovered(credentialIds: [identifier.value]), message: "Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
+				wrpVciWarnings[identifier.value, default: []].append(RegistrationPolicyViolation(reason: .credentialNotCovered(credentialId: identifier.value), message: "Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
 			}
 		}
 	}
