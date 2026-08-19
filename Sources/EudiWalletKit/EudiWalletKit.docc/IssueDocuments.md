@@ -113,6 +113,25 @@ The wallet currently supports these issuer reuse policies:
 - When no issuer reuse policy exists (the issuer metadata contains no `credentialReusePolicy`), the caller's `CredentialOptions` are used as-is.
 
 ```
+### Resolving Issuer Registration
+
+Use ``EudiWallet/resolveIssuerRegistration(issuerName:credentialConfigurationIds:)`` to check whether an issuer is registered for a given set of credential types **before** starting an issuance flow. This avoids issuing a document only to discover afterwards that the issuer's registration certificate does not cover the requested credential type.
+
+The method returns an ``IssuerResponse`` with an empty `documents` array, containing the decoded ``WrpRegistrationPolicy`` and any ``RegistrationPolicyViolation`` entries. See <doc:RegistrationCertificate> for details on interpreting the result.
+
+```swift
+let result = try await wallet.resolveIssuerRegistration(
+    issuerName: "eudi_pid_issuer",
+    credentialConfigurationIds: ["eu.europa.ec.eudi.pid_mdoc"]
+)
+if let policy = result.wrpIssuerPolicy {
+    // Show issuer info: policy.name, policy.country
+}
+if let warnings = result.wrpIssuerWarnings, !warnings.isEmpty {
+    // The issuer registration has issues — inspect violations before proceeding
+}
+```
+
 ### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(offerUri:authFlowRedirectionURI:)` method that resolves the credential offer URI.
@@ -232,7 +251,7 @@ let issuedDoc = try await wallet.requestDeferredIssuance(
 
 ### Document Reissuance
 
-Use the `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:backgroundOnly:)` method to reissue an existing document using previously stored issuance metadata and authorization data.
+Use the `reissueDocument(documentId:credentialOptions:keyOptions:promptMessage:backgroundOnly:)` method to reissue an existing document using previously stored issuance metadata and authorization data. The method returns an ``IssuerResponse`` containing the reissued document along with the WRPRC policy and any registration violations.
 
 - Retrieves the document's metadata from storage and resolves the appropriate OpenID4VCI service via the credential issuer identifier.
 - If persisted authorization data is available, it is forwarded to the service to avoid re-authentication.

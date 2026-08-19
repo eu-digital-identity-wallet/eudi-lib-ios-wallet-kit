@@ -61,7 +61,8 @@ The ``TrustConfiguration`` supplies the trust material for WRPRC validation:
 let trustConfig = TrustConfiguration(
     trustSource: .etsi(.eudiRef),
     fallbackTrustSource: nil,
-    wrprcTrustPolicy: .enforce // default; use .warning to downgrade failures to warnings
+    wrprcVpTrustPolicy: .enforce,  // presentation: .enforce (default) or .warning
+    wrprcVciTrustPolicy: .enforce  // issuance: .enforce (default) or .warning
 )
 let wallet = try EudiWallet(
     eudiWalletConfig: config,
@@ -72,7 +73,7 @@ let wallet = try EudiWallet(
 
 ### Trust policy
 
-``TrustConfiguration/wrprcTrustPolicy`` controls the behaviour when a validation check fails:
+``TrustConfiguration/wrprcVpTrustPolicy`` and ``TrustConfiguration/wrprcVciTrustPolicy`` control the behaviour when a validation check fails:
 
 - **`.enforce`** (default) — a failed check causes the request to fail with ``WalletError/Code/invalidWrprc``.
 - **`.warning`** — a failed check is added to the warnings list and the request continues.
@@ -96,8 +97,8 @@ Checks the authenticated registration against the request or offer:
 | **Status reference** — the certificate carries a status-list reference | ``WalletError/Code/wrprcMissingStatus`` | ETSI TS 119 475 §6.2.6.2 |
 | **Revocation** — the status list reports the certificate as valid | ``WalletError/Code/wrprcStatusInvalid`` | ETSI TS 119 475 §6.2.6.2 |
 | **Trust** — the signer chain is trusted | ``WalletError/Code/wrprcTrustError`` | WRP-VALIDATION-02 |
-| **Scope (presentation)** — the requested claims stay within the registered scope | `PolicyViolation` warnings | WRP-OVERASKING-02 |
-| **Scope (issuance)** — the offered credential configurations are covered by the registered `provides_attestations` | `PolicyViolation` warnings | CIR 2024/2082 |
+| **Scope (presentation)** — the requested claims stay within the registered scope | `PresentationPolicyViolation` warnings | WRP-OVERASKING-02 |
+| **Scope (issuance)** — the offered credential configurations are covered by the registered `provides_attestations` | `RegistrationPolicyViolation` warnings | CIR 2024/2082 |
 
 Warnings are collected in a dictionary keyed by credential query/configuration identifier; the empty key holds request-wide warnings.
 
@@ -118,7 +119,7 @@ struct ShareView: View {
 
             if let warnings = session.wrpVerifierWarnings?[""], !warnings.isEmpty {
                 ForEach(warnings, id: \.self) { warning in
-                    Label(warning.description, systemImage: "exclamationmark.triangle")
+                    Label(warning.message, systemImage: "exclamationmark.triangle")
                 }
             }
         }
@@ -128,7 +129,7 @@ struct ShareView: View {
 
 ### Per-option warnings via DisclosedDocumentSet
 
-When DCQL resolution produces multiple credential selection options, each ``DisclosedDocumentSet`` in ``PresentationSession/disclosedDocumentSets`` carries its own `warnings` array. These per-option `PolicyViolation` values indicate over-asked claims specific to that credential combination — for example, one option may request claims outside the registered scope while another stays within it.
+When DCQL resolution produces multiple credential selection options, each ``DisclosedDocumentSet`` in ``PresentationSession/disclosedDocumentSets`` carries its own `warnings` array. These per-option ``PresentationPolicyViolation`` values indicate over-asked claims specific to that credential combination — for example, one option may request claims outside the registered scope while another stays within it.
 
 ```swift
 for option in session.disclosedDocumentSets {
@@ -145,6 +146,34 @@ A valid certificate can still be over-asking. Check **both** ``PresentationSessi
 - `wrpVerifierPolicy != nil` **and** no warnings → valid and within scope.
 - `wrpVerifierPolicy != nil` **and** warnings present → valid but over-asking or has other warnings; warn the user.
 - `wrpVerifierPolicy == nil` → no certificate was present, or validation failed (with `.enforce` policy).
+
+## Resolving issuer registration without issuing
+
+Use ``EudiWallet/resolveIssuerRegistration(issuerName:credentialConfigurationIds:)`` to validate the issuer's WRPRC for specific credential configuration identifiers **without** starting an issuance flow. This is useful when you want to check whether an issuer is registered for a given document type before presenting the issuance option to the user.
+
+The method returns an ``IssuerResponse`` with an empty `documents` array. The ``IssuerResponse/wrpIssuerPolicy`` and ``IssuerResponse/wrpIssuerWarnings`` fields carry the decoded registration policy and any typed ``RegistrationPolicyViolation`` entries.
+
+```swift
+let result = try await wallet.resolveIssuerRegistration(
+    issuerName: "eudi_pid_issuer",
+    credentialConfigurationIds: ["eu.europa.ec.eudi.pid_mdoc", "eu.europa.ec.eudi.mdl_mdoc"]
+)
+if let policy = result.wrpIssuerPolicy {
+    // Valid certificate decoded — show issuer identity
+}
+if let violations = result.wrpIssuerWarnings?[""] {
+    for v in violations {
+        switch v.reason {
+        case .expired: // certificate expired
+        case .statusRevoked: // certificate revoked
+        case .credentialsNotCovered(let ids): // these config ids are not in provides_attestations
+        default: break
+        }
+    }
+}
+```
+
+When the certificate fails validation under `.enforce` policy, ``IssuerResponse/wrpIssuerPolicy`` still contains the decoded identity (name, country, etc.) so the application can inform the user about the unverified party.
 
 ## Reading the outcome — offer resolution
 

@@ -22,7 +22,6 @@ import MdocDataTransfer18013
 import WalletStorage
 import LocalAuthentication
 import struct WalletStorage.Document
-import struct OpenID4VP.PolicyViolation
 /// Presentation session
 ///
 /// This class wraps the ``PresentationService`` instance, providing bindable fields to a SwifUI view
@@ -49,7 +48,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// The verifier (wallet relying party) registration policy decoded from the WRPRC carried in the request, if any
 	@Published public var wrpVerifierPolicy: WrpRegistrationPolicy?
 	/// Verifier registration warnings, keyed by credential query identifier; the empty key holds request-wide warnings
-	@Published public var wrpVerifierWarnings: [String:[PolicyViolation]]?
+	@Published public var wrpVerifierWarnings: [String:[PresentationPolicyViolation]]?
 	// map of document id to (doc type, format, display name) pairs
 	public var docIdToPresentInfo: [Document.ID: DocPresentInfo]!
 	// map of document id to key index to use
@@ -116,7 +115,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 			let warningsKey = if presentationService.flow == .ble { presentationService.wrpVerifierWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
-			let warningSet: [PolicyViolation]? = if let warnings = presentationService.wrpVerifierWarnings, let warningsKey { warnings[warningsKey] } else { nil }
+			let warningSet: [PresentationPolicyViolation]? = if let warnings = presentationService.wrpVerifierWarnings, let warningsKey { warnings[warningsKey] } else { nil }
 			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
 		} // next request
 		wrpVerifierPolicy = presentationService.wrpVerifierPolicy
