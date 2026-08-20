@@ -70,7 +70,7 @@ class OpenId4VpUtils {
 		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
-			guard let docType = credQuery.docType else { continue }
+			guard let docType = credQuery.docTypeOrVct else { continue }
 			if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
 			inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
 			if let zkSpecs = credQuery.zkSpecs {
@@ -281,7 +281,7 @@ extension ClaimPathElement {
 }
 
 extension CredentialQuery {
-	public var docType: String? {
+	public var docTypeOrVct: String? {
 		let mdocTypeValue = meta.dictionaryObject?["doctype_value"]
 		let vctValues = meta.dictionaryObject?["vct_values"]
 		let metaDocType = mdocTypeValue ?? vctValues ?? meta.dictionaryObject?.first?.value
@@ -367,7 +367,7 @@ extension OpenId4VpUtils {
 		var credentialQueryResults: OrderedDictionary<QueryId, [CredentialSelection]> = [:]
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
-			guard let docType = credQuery.docType else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type", code: .invalidQueryResolution) }
+			guard let docType = credQuery.docTypeOrVct else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type", code: .invalidQueryResolution) }
 			let format = credQuery.dataFormat
 			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
@@ -493,7 +493,7 @@ extension OpenId4VpUtils {
 		}
 		if resultDict.isEmpty {
 			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
-			if let notFoundCred {logger.warning("No credential found matching docType: \(notFoundCred.docType ?? "") with format: \(notFoundCred.format)")}
+			if let notFoundCred {logger.warning("No credential found matching docType/vct: \(notFoundCred.docTypeOrVct ?? "") with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
 		return resultDict
