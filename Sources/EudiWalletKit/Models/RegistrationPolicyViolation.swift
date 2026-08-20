@@ -46,6 +46,8 @@ public enum RegistrationFailureReason: Sendable, Hashable {
 	case accessCertificateUnavailable
 	/// A credential configuration is not covered by the issuer's `provides_attestations` claim.
 	case credentialNotCovered(credentialId: String)
+	/// The required entitlement is missing from the WRPRC.
+	case entitlementMissing(expected: String)
 	/// An unclassified failure.
 	case other
 }

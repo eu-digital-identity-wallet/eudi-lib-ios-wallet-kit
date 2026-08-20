@@ -51,6 +51,8 @@ public enum PresentationFailureReason: Sendable, Hashable {
 	case wrprcNotRepeated
 	/// Different WRPRC values found across ItemsRequest.requestInfo entries.
 	case wrprcMismatch
+	/// The WRPRC entitlements do not include the expected operation.
+	case entitlementMissing(expected: String)
 	/// An unclassified failure.
 	case other
 

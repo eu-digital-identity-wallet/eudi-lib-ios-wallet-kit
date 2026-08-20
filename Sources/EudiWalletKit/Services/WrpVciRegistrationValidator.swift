@@ -65,6 +65,7 @@ public actor WrpVciRegistrationValidator {
 			var vciNotCoveredWarnings = [String: [RegistrationPolicyViolation]]()
 			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpVciWarnings: &vciNotCoveredWarnings)
 			wrpVciWarnings.merge(vciNotCoveredWarnings, uniquingKeysWith: { (_, new) in new })
+			Self.validateEntitlements(offeredConfigurations, policy: policy, wrpVciWarnings: &wrpVciWarnings)
 			let policyViolationWarnings = wrpVciWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
 			// Under .enforce, hard failures block issuance.
 			if trustConfig.wrprcVciTrustPolicy == .enforce {
@@ -98,17 +99,39 @@ public actor WrpVciRegistrationValidator {
 	/// registered to provide (`provides_attestations` claim of the WRPRC).
 	/// Warnings for uncovered configurations are appended to `wrpVciWarnings`, keyed by credential configuration identifier.
 	static func validateOfferedConfigurations(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpVciWarnings: inout [String: [RegistrationPolicyViolation]]) {
-		guard let providedAttestations = policy.providesAttestations else { return }
+		let providedAttestations = policy.providesAttestations ?? []
 		for (identifier, supported) in offeredConfigurations {
 			let isCovered: Bool = switch supported {
 			case .msoMdoc(let msoMdoc): providedAttestations.contains { $0.meta.doctypeValue == msoMdoc.docType }
 			case .sdJwtVc(let sdJwtVc): providedAttestations.contains { attestation in
 				if let vct = sdJwtVc.vct { attestation.meta.vctValues?.contains(vct) ?? false } else { false } }
-			default: true
+			default: false
 			}
 			if !isCovered {
 				wrpVciWarnings[identifier.value, default: []].append(RegistrationPolicyViolation(reason: .credentialNotCovered(credentialId: identifier.value), message: "Credential configuration \(identifier.value) is not covered by the issuer registration certificate"))
 			}
+		}
+	}
+
+	static let pidEntitlement = "https://uri.etsi.org/19475/Entitlement/PID_Provider"
+	static let pubEaaEntitlement = "https://uri.etsi.org/19475/Entitlement/PUB_EAA_Provider"
+	private static let pidMdocDocType = "eu.europa.ec.eudi.pid.1"
+	private static let pidSdJwtVct = "urn:eudi:pid:1"
+
+	/// Validate that the WRPRC entitlements contain the expected entitlement for the offered configurations.
+	/// PID configurations require `PID_Provider`; other configurations require `PUB_EAA_Provider`.
+	static func validateEntitlements(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpVciWarnings: inout [String: [RegistrationPolicyViolation]]) {
+		let entitlements = policy.entitlements ?? []
+		let offeredIncludesPID = offeredConfigurations.values.contains { supported in
+			switch supported {
+			case .msoMdoc(let msoMdoc): return msoMdoc.docType == pidMdocDocType
+			case .sdJwtVc(let sdJwtVc): return sdJwtVc.vct == pidSdJwtVct
+			default: return false
+			}
+		}
+		let expectedEntitlement = offeredIncludesPID ? pidEntitlement : pubEaaEntitlement
+		if !entitlements.contains(expectedEntitlement) {
+			wrpVciWarnings["", default: []].append(RegistrationPolicyViolation(reason: .entitlementMissing(expected: expectedEntitlement), message: "WRPRC is missing required entitlement: \(expectedEntitlement)"))
 		}
 	}
 }
