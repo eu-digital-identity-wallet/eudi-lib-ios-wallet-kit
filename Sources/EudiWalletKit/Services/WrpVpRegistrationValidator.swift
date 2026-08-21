@@ -36,6 +36,7 @@ public actor WrpVpRegistrationValidator {
 	static let logger = Logger(label: "WrpRegistrationValidator")
 	/// Label of the `ItemsRequest.requestInfo` member carrying the WRPRC in ISO/IEC 18013-5 requests (ETSI TS 119 472-2)
 	static let REG_CERT_REQUEST_INFO_KEY = "euWrprc"
+	static let serviceProviderEntitlement = "https://uri.etsi.org/19475/Entitlement/Service_Provider"
 	/// The registration policy decoded from the WRPRC by the last `validateCertificate` call, if any.
 	public var wrpVpRegistrationPolicy: WrpRegistrationPolicy?
 	/// Typed violations collected during validation, keyed by credential query identifier; the empty key holds request-wide violations.
@@ -48,8 +49,15 @@ public actor WrpVpRegistrationValidator {
 	}
 	
 	public func set(dcqlQueryable: DefaultDcqlQueryable?) { self.dcqlQueryable = dcqlQueryable }
-	
+
+	/// Resets state from the previous request so it does not leak into the next one.
+	public func resetValidations() {
+		wrpVpRegistrationPolicy = nil
+		wrpVpWarnings = [:]
+	}
+
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
+		resetValidations()
 		guard let wrprcData = wrprc.data(using: .ascii) else {
 			wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .invalidCertificate, message: "WRPRC cannot be decoded"))
 			let policyViolationWarnings = wrpVpWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
@@ -71,6 +79,7 @@ public actor WrpVpRegistrationValidator {
 	///   - dcql: A DCQL query equivalent to the requested items, used to validate the request scope against the registration policy
 	/// - Returns: The authorization result, or `nil` when the request carries no registration certificate
 	public func validateDeviceRequestCertificate(wrpac: Certificate?, deviceRequest: DeviceRequest, dcql: DCQL) async -> Authorization? {
+		resetValidations()
 		var wrprcValues = [Data]()
 		for docR in deviceRequest.docRequests {
 			guard let extValue = docR.itemsRequest.requestInfo?.extensions?[Self.REG_CERT_REQUEST_INFO_KEY],
@@ -101,6 +110,7 @@ public actor WrpVpRegistrationValidator {
 			   let enforceable = wrpVpWarnings[""]?.first(where: { enforceableReasons.contains($0.reason) }) {
 				return .notGranted(error: PolicyViolation(enforceable.message))
 			}
+			Self.validateEntitlements(policy: policy, expectedEntitlement: Self.serviceProviderEntitlement, wrpVpWarnings: &wrpVpWarnings)
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
 			OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &wrpVpWarnings)
@@ -113,5 +123,13 @@ public actor WrpVpRegistrationValidator {
 				.notGranted(error: .init(error.localizedDescription)) :
 				.granted(warnings: ["": [.init(error.localizedDescription)]])
 	  }
+	}
+
+	/// Warn when the WRPRC `entitlements` claim is present but does not include the expected operation.
+	static func validateEntitlements(policy: WrpRegistrationPolicy, expectedEntitlement: String, wrpVpWarnings: inout [String: [PresentationPolicyViolation]]) {
+		guard let entitlements = policy.entitlements else { return }
+		if !entitlements.contains(expectedEntitlement) {
+			wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .entitlementMissing(expected: expectedEntitlement), message: "Registration certificate entitlements \(entitlements) do not include '\(expectedEntitlement)'"))
+		}
 	}
 }

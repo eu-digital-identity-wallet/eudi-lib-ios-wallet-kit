@@ -1249,8 +1249,9 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [selection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.isEmpty, "Should have no violations when all claims are within policy")
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.isEmpty, "Should have no violations when all claims are within policy")
 	}
 
 	@Test("validateDcqlPolicy - warns on extra claims beyond policy scope")
@@ -1266,11 +1267,12 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [selection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.count == 1, "Should have one option key with violations")
-		let violations = result["option1"]
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.count == 1, "Should have one option key with violations")
+		let violations = warnings["option1"]
 		#expect(violations?.count == 1)
-		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CLAIMS") == true || violations?.first?.violation.contains("portrait") == true)
+		#expect(violations?.first?.message.contains("portrait") == true)
 	}
 
 	@Test("validateDcqlPolicy - warns on credential not declared in policy")
@@ -1286,11 +1288,12 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [selection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.count == 1)
-		let violations = result["option1"]
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.count == 1)
+		let violations = warnings["option1"]
 		#expect(violations?.count == 1)
-		#expect(violations?.first?.violation.contains("DCQL_EXTRA_CREDENTIAL") == true || violations?.first?.violation.contains("not declared") == true)
+		#expect(violations?.first?.message.contains("not declared") == true)
 	}
 
 	@Test("validateDcqlPolicy - no violations when selection has no claim queries")
@@ -1306,8 +1309,9 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [selection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.isEmpty, "Should have no violations when no claims are requested")
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.isEmpty, "Should have no violations when no claims are requested")
 	}
 
 	@Test("validateDcqlPolicy - matches by vct_values for SD-JWT credentials")
@@ -1324,8 +1328,9 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [selection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.isEmpty, "Should match by vct_values and find no violations")
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.isEmpty, "Should match by vct_values and find no violations")
 	}
 
 	@Test("validateDcqlPolicy - multiple selections with mixed violations")
@@ -1345,9 +1350,10 @@ struct DcqlQueryTests {
 		)
 		var options = CredentialSelectionSetOptions()
 		options["option1"] = [validSelection, unknownCredSelection]
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.count == 1)
-		let violations = result["option1"]
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.count == 1)
+		let violations = warnings["option1"]
 		#expect(violations?.count == 1, "Should have one violation for the unknown credential")
 	}
 
@@ -1355,7 +1361,8 @@ struct DcqlQueryTests {
 	func testValidateDcqlPolicyEmptyOptions() {
 		let policy = makePolicy(credentials: [])
 		let options = CredentialSelectionSetOptions()
-		let result = OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy)
-		#expect(result.isEmpty)
+		var warnings = [String: [PresentationPolicyViolation]]()
+		OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &warnings)
+		#expect(warnings.isEmpty)
 	}
 }

@@ -41,13 +41,13 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 	public let status: Status?
 	public let intendedUseID: String?
 	public let providesAttestations: [PolicyCredential]?
-	public let intermediary: [PolicyIntermediary]?
+	public let intermediary: PolicyIntermediary?
 	/// Identifiers of the registered relying party, derived from the `sub` claim.
 	public var identifiers: [RegistrationIdentifier] {
 		[RegistrationIdentifier(value: sub)] 
 	}
 
-	public init(entitlements: [String]? = nil, sub: String, country: String? = nil, policyID: [String]? = nil, credentials: [PolicyCredential], purpose: [PolicyPurpose]? = nil, registryURI: String? = nil, certificatePolicy: String? = nil, srvDescription: [PolicyPurpose]? = nil, supportURI: String? = nil, supervisoryAuthority: SupervisoryAuthority? = nil, privacyPolicy: String? = nil, name: String? = nil, infoURI: String? = nil, subLn: String? = nil, subGn: String? = nil, subFn: String? = nil, iat: Int? = nil, exp: Int? = nil, status: Status? = nil, intendedUseID: String? = nil, providesAttestations: [PolicyCredential]? = nil, intermediary: [PolicyIntermediary]? = nil) {
+	public init(entitlements: [String]? = nil, sub: String, country: String? = nil, policyID: [String]? = nil, credentials: [PolicyCredential], purpose: [PolicyPurpose]? = nil, registryURI: String? = nil, certificatePolicy: String? = nil, srvDescription: [PolicyPurpose]? = nil, supportURI: String? = nil, supervisoryAuthority: SupervisoryAuthority? = nil, privacyPolicy: String? = nil, name: String? = nil, infoURI: String? = nil, subLn: String? = nil, subGn: String? = nil, subFn: String? = nil, iat: Int? = nil, exp: Int? = nil, status: Status? = nil, intendedUseID: String? = nil, providesAttestations: [PolicyCredential]? = nil, intermediary: PolicyIntermediary? = nil) {
 		self.entitlements = entitlements
 		self.sub = sub
 		self.country = country
