@@ -120,13 +120,14 @@ extension OpenId4VciConfiguration {
 			}
 			jwsAlgorithm = jwsAlg
 			let existingKeyInfo: KeyBatchInfo? = try? await secureArea.getKeyBatchInfo(id: privateKeyId)
-			let hasCompatibleExistingKey = existingKeyInfo != nil && keyOptions.secureAreaName == existingKeyInfo?.secureAreaName && keyOptions.curve == ecCurve && existingKeyInfo?.usedCounts.count == 1
-			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
-			if hasCompatibleExistingKey, existingPublicKey == nil { try await secureArea.deleteKeyInfo(id: privateKeyId) }
-			let publicCoseKey: CoseKey =
-				if let existingPublicKey { existingPublicKey } else {
-					(try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first!
-				}
+			let hasCompatibleExistingKey = if let existingKeyInfo = existingKeyInfo, keyOptions == existingKeyInfo.keyOptions, keyOptions.curve == ecCurve, existingKeyInfo.usedCounts.count == 1 { true } else { false }
+			if !hasCompatibleExistingKey {
+				logger.info("Creating new key batch for id: \(privateKeyId) with curve: \(ecCurve.SECGName)")
+				try? await secureArea.deleteKeyInfo(id: privateKeyId)
+				try? await secureArea.deleteKeyBatch(id: privateKeyId, startIndex: 0, batchSize: 1)
+				_ = try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)
+			}
+			var publicCoseKey = try await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) 
 			let publicKeyJwk = try publicCoseKey.jwk
 			let unlockData = try await secureArea.unlockKey(id: privateKeyId)
 			let signer = try SecureAreaSigner(secureArea: secureArea, id: privateKeyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
