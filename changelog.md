@@ -1,3 +1,47 @@
+## v0.50.0
+
+- Fix dPoP key handling in authentication flows. Ensures that it uses the provided keyOptions.
+- Reuse a shared local authentication context across wallet issuance and presentation operations.
+- Pass the shared authentication context through OpenID4VCI, OpenID4VP, BLE presentation, VP token generation, and secure-area signing so biometric/device authentication state is preserved consistently across device-key operations.
+
+### Breaking Changes
+
+- Due to metadata storage changes, existing documents should be deleted.
+- Minimum version of iOS raised to 17.
+
+## v0.40.9
+
+- Support public OpenID4VCI clients.
+- Cache resolved credential offers.
+
+## v0.40.8
+
+- Include WRP VP policy data in transaction logs.
+- Improve relying-party name resolution and fallback handling.
+- Make the VCI client ID optional for attested client IDs.
+
+## v0.40.7
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.3.
+
+## v0.40.6
+
+- Add OAuth grants to `OfferedIssuanceModel`.
+
+## v0.40.5
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.2.
+
+## v0.40.4
+
+- Revert the WRP registration policy intermediary multi-entry change.
+
+## v0.40.3
+
+- Rename `CredentialQuery.docType` to `docTypeOrVct`.
+- Add the missing entitlement failure reason for presentation and registration.
+- Handle absent `provides_attestations` values.
+
 ## v0.40.2
 
 ### WRP Registration Certificate Improvements
