@@ -563,6 +563,10 @@ actor InMemorySecureKeyStorage: SecureKeyStorage {
 		keyDataStorage["\(id)_\(index)"] ?? [:]
 	}
 
+	func readKeyData(id: String, index: Int, authenticationContext: ThreadSafeAuthContext) async throws -> [String : Data] {
+		keyDataStorage["\(id)_\(index)"] ?? [:]
+	}
+
 	func writeKeyInfo(id: String, dict: [String : Data]) async throws {
 		keyInfoStorage[id] = dict
 	}
