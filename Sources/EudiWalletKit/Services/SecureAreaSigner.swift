@@ -15,12 +15,13 @@ limitations under the License.
 */
 
 import Foundation
+@preconcurrency import LocalAuthentication
 import MdocDataModel18013
 @preconcurrency import JOSESwift
 import JSONWebAlgorithms
 import OpenID4VCI
 
-final class SecureAreaSigner: AsyncSignerProtocol {
+final class SecureAreaSigner: AsyncSignerProtocol, @unchecked Sendable {
 	let id: String
 	let index: Int
 	let secureArea: SecureArea
@@ -30,8 +31,9 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	let algorithm: JOSESwift.SignatureAlgorithm
 	let signature: Data?
 	let unlockData: Data?
+	let context: ThreadSafeAuthContext
 
-	init(secureArea: SecureArea, id: String, index: Int, publicKey: any JOSESwift.JWK, curve: CoseEcCurve, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws {
+	init(secureArea: SecureArea, id: String, index: Int, publicKey: any JOSESwift.JWK, curve: CoseEcCurve, ecAlgorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, context: ThreadSafeAuthContext) throws {
 		self.id = id
 		self.index = index
 		self.secureArea = secureArea
@@ -40,6 +42,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 		self.algorithm = try Self.getSignatureAlgorithm(ecAlgorithm)
 		signature = nil
 		self.unlockData = unlockData
+		self.context = context
 		self.publicKey = publicKey
 	}
 
@@ -64,7 +67,7 @@ final class SecureAreaSigner: AsyncSignerProtocol {
 	}
 
 	func sign(_ signingInput: Data) async throws -> Data {
-		let ecdsaSignature = try await secureArea.signature(id: id, index: index, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData)
+		let ecdsaSignature = try await secureArea.signature(id: id, index: index, algorithm: ecAlgorithm, dataToSign: signingInput, unlockData: unlockData, authenticationContext: context)
 		return ecdsaSignature
 	}
 

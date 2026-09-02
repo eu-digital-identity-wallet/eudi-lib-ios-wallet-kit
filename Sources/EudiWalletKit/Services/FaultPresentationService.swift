@@ -49,7 +49,7 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 		throw error
 	}
 
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: ((URL?) -> Void)?) async throws{
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, authenticationContext: ThreadSafeAuthContext = ThreadSafeAuthContext(), onSuccess: ((URL?) -> Void)?) async throws{
 		throw error
 	}
 
