@@ -452,7 +452,8 @@ struct EudiWalletKitTests {
 			networking: networking,
 			storage: storage,
 			storageService: storageService,
-			trustConfig: trustConfig
+			trustConfig: trustConfig,
+			localAuthenticationContext: ThreadSafeAuthContext()
 		)
 	}
 
