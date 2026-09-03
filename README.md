@@ -65,7 +65,7 @@ The library provides the following functionality:
         - [x] DCQL
         - [x] Optional partial claim presentation for DCQL requests
 
-The library is written in Swift and is compatible with iOS 16 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
+The library is written in Swift and is compatible with iOS 17 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
 
 It is based on the following specifications:
 - ISO/IEC 18013-5 – Published

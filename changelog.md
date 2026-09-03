@@ -1,3 +1,46 @@
+## v0.50.0
+This release fixes the multiple authentication prompt issue when EUDI Wallet is accessing the keys that are stored in the secure key storage in order to sign attestations during document issuance or presentation.
+For example, during a single document issuance process user needed to enter the passcode or touch ID 4 times.
+With this release, the wallet now reuses a shared local authentication context, so authentication prompt appears only once.
+
+### Breaking Changes
+
+- Due to metadata storage changes, existing documents should be deleted.
+- Minimum version of iOS raised to 17.
+
+## v0.40.9
+
+- Support public OpenID4VCI clients.
+- Cache resolved credential offers.
+
+## v0.40.8
+
+- Include WRP VP policy data in transaction logs.
+- Improve relying-party name resolution and fallback handling.
+- Make the VCI client ID optional for attested client IDs.
+
+## v0.40.7
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.3.
+
+## v0.40.6
+
+- Add OAuth grants to `OfferedIssuanceModel`.
+
+## v0.40.5
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.2.
+
+## v0.40.4
+
+- Revert the WRP registration policy intermediary multi-entry change.
+
+## v0.40.3
+
+- Rename `CredentialQuery.docType` to `docTypeOrVct`.
+- Add the missing entitlement failure reason for presentation and registration.
+- Handle absent `provides_attestations` values.
+
 ## v0.40.2
 
 ### WRP Registration Certificate Improvements

@@ -54,7 +54,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	// map of document id to key index to use
 	public var documentKeyIndexes: [Document.ID: Int]
 	/// User authentication required
-	var userAuthenticationRequired: Bool
+	public var userAuthenticationRequired: Bool
+	/// Local authentication context owned by the wallet and reused for every device-key operation.
+	public var localAuthenticationContext: ThreadSafeAuthContext
 	/// transaction logger
 	public var transactionLogger: (any TransactionLogger)?
 
@@ -65,6 +67,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		docIdToPresentInfo: [Document.ID: DocPresentInfo],
 		documentKeyIndexes: [Document.ID: Int],
 		userAuthenticationRequired: Bool,
+		localAuthenticationContext: ThreadSafeAuthContext,
 		transactionLogger: (any TransactionLogger)? = nil
 	) {
 		self.presentationService = presentationService
@@ -73,6 +76,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		self.docIdToPresentInfo = docIdToPresentInfo
 		self.documentKeyIndexes = documentKeyIndexes
 		self.userAuthenticationRequired = userAuthenticationRequired
+		self.localAuthenticationContext = localAuthenticationContext
 		self.transactionLogger = transactionLogger
 	}
 
@@ -133,7 +137,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 		if docIdToPresentInfo.count == 0 { await setError(Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable); return }
 		do {
-			let data = try await presentationService.startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256, accessControl: []))
+			let data = try await presentationService.startQrEngagement(secureAreaName: nil, keyOptions: KeyOptions(curve: .P256, accessControl: .empty))
 			await MainActor.run {
 				deviceEngagement = data
 				status = .qrEngagementReady
@@ -209,9 +213,10 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 				userAccepted: userAccepted,
 				itemsToSend: itemsToSend,
 				deviceNameSpacesToSend: deviceNameSpacesToSend,
+				authenticationContext: self?.localAuthenticationContext ?? ThreadSafeAuthContext(),
 				onSuccess: onSuccess)
 			}
-			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: "") )
+			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: ""), authenticationContext: localAuthenticationContext)
 			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys), zkpDocumentIds: presentationService.zkpDocumentIds)
 			await MainActor.run { status = .responseSent; storageManager?.objectWillChange.send() }
 			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }

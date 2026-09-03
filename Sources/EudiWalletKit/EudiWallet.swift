@@ -19,7 +19,7 @@ import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
 import WalletStorage
-import LocalAuthentication
+@preconcurrency import LocalAuthentication
 import CryptoKit
 import StatiumSwift
 import SwiftCBOR
@@ -63,6 +63,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	public var bleTransportFactory: (any BleTransportFactory)?
 	/// Repository for zk system parameters, used in mdoc presentation when zk proofs are required.
 	public var zkSystemRepository: ZkSystemRepository?
+	/// Local authentication context reused by wallet operations.
+	public var localAuthenticationContext = ThreadSafeAuthContext()
 
 	/// Initialize a wallet instance using a configuration object.
 	/// - Parameters:
@@ -203,13 +205,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)", code: .issuerNotRegistered)
 		}
+		
+		await vciService.setLocalAuthenticationContext(localAuthenticationContext: localAuthenticationContext)
 		return vciService
 	}
 
 	/// Register an OpenId4VCI service with a given name and configuration.
 	@discardableResult func registerOpenId4VciService(name: String, config: OpenId4VciConfiguration) throws -> OpenId4VciService {
 		let uiCulture = eudiWalletConfig.uiCulture
-		let vciService = try OpenId4VciService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService, trustConfig: trustConfig, transactionLogger: transactionLogger)
+		let vciService = try OpenId4VciService(uiCulture: uiCulture, config: config, networking: self.networkingVci, storage: storage, storageService: storage.storageService, trustConfig: trustConfig, transactionLogger: transactionLogger, localAuthenticationContext: localAuthenticationContext)
 		OpenId4VCIServiceRegistry.shared.register(name: name, service: vciService)
 		return vciService
 	}
@@ -234,6 +238,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
 	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> IssuerResponse {
 		OpenId4VciService.clearIssuerMetadataCache()
+		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
 		let documents = try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
 		return IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
@@ -417,6 +422,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
 		OpenId4VciService.clearIssuerMetadataCache()
+		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
 		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { trustConfig.issuerMetadataPolicy }
 		let offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
@@ -652,33 +658,34 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: A presentation session instance,
 	public func beginPresentation(flow: FlowType, sessionTransactionLogger: (any TransactionLogger)? = nil) async -> PresentationSession {
 		do {
+			localAuthenticationContext = ThreadSafeAuthContext()
 			let (parameters, documents) = try await prepareServiceDataParameters(format: flow == .ble ? .cbor : nil)
 			let docIdToPresentInfo = try await storage.getDocIdsToPresentInfo(documents: documents)
 			let mergedTransactionLogger = sessionTransactionLogger ?? transactionLogger
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator)
-				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
+				let bleSvc = try await BlePresentationService(parameters: parameters, authenticationContext: localAuthenticationContext, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator)
+				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
 				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in
 					guard let displayName = docIdToPresentInfo[doc.id]?.displayName else { return nil }
 					return (doc.docType, displayName)
 				}, uniquingKeysWith: { first, _ in first })
 				let openIdSvc = try await OpenId4VpService(
-					parameters: parameters, qrCode: qrCode,	openID4VpConfig: self.openID4VpConfig, networking: networkingVp,
+					parameters: parameters, qrCode: qrCode, openID4VpConfig: self.openID4VpConfig, networking: networkingVp,
 					trustConfig: trustConfig, wrpRegistrationValidator: wrpRegistrationValidator, docTypeDisplayNames: docTypeDisplayNames
 				)
-				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
+				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			default:
 				let fallbackError = WalletError(description: "Use beginPresentation(service:)", code: .internalError)
 				let faultService = FaultPresentationService(error: fallbackError)
-				return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: false, transactionLogger: mergedTransactionLogger)
+				return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: false, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			}
 		} catch {
 			let faultService = FaultPresentationService(error: error)
 			let mergedTransactionLogger = sessionTransactionLogger ?? transactionLogger
-			return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: mergedTransactionLogger)
+			return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 		}
 	}
 
@@ -693,11 +700,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let (parameters, documents) = try await prepareServiceDataParameters()
 			let docIdToPresentInfo = try await storage.getDocIdsToPresentInfo(documents: documents)
 			let mergedTransactionLogger = sessionTransactionLogger ?? self.transactionLogger
-			return PresentationSession(presentationService: service, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, transactionLogger: mergedTransactionLogger)
+			return PresentationSession(presentationService: service, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 		} catch {
 			let faultService = FaultPresentationService(error: error)
 			let mergedTransactionLogger = sessionTransactionLogger ?? transactionLogger
-			return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, transactionLogger: mergedTransactionLogger)
+			return PresentationSession(presentationService: faultService, storageManager: storage, storageService: storage.storageService, docIdToPresentInfo: [:], documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 		}
 	}
 
@@ -705,8 +712,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - dismiss: Action to perform if the user cancels authorization
 	///   - action: Action to perform after user authorization
-	public nonisolated static func authorizedAction<T: Sendable>(action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
-		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
+	public nonisolated static func authorizedAction<T: Sendable>(action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
+		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason, authenticationContext: authenticationContext)
 	}
 
 	/// Parse transaction log
@@ -740,16 +747,15 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: An optional result of type `T` if the action is successful, otherwise `nil`.
 	///
 	/// - Throws: An error if the action fails.
-	static nonisolated func authorizedAction<T: Sendable>(isFallBack: Bool = false, action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String) async throws -> T? {
+	static nonisolated func authorizedAction<T: Sendable>(isFallBack: Bool = false, action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
 		guard !disabled else {
 			return try await action()
 		}
-		let context = LAContext()
 		var error: NSError?
 		let policy: LAPolicy = .deviceOwnerAuthentication
-		if context.canEvaluatePolicy(policy, error: &error) {
+		if authenticationContext.canEvaluatePolicy(policy, error: &error) {
 			do {
-				let success = try await context.evaluatePolicy(policy, localizedReason: localizedReason)
+				let success = try await authenticationContext.evaluatePolicy(policy, localizedReason: localizedReason)
 				#if os(iOS)
 				if success, let scene = await UIApplication.shared.connectedScenes.first {
 					let activateState = await scene.activationState
@@ -765,7 +771,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				#endif
 			} catch let laError as LAError {
 				if !isFallBack, laError.code == .userFallback {
-					return try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason)
+					return try await authorizedAction(isFallBack: true, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason, authenticationContext: authenticationContext)
 				} else {
 					dismiss()
 					return nil

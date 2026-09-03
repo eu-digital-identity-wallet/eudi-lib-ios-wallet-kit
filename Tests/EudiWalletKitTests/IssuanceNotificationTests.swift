@@ -54,7 +54,8 @@ struct IssuanceNotificationTests {
 			networking: networking,
 			storage: storage,
 			storageService: storageService,
-			trustConfig: trustConfig
+			trustConfig: trustConfig,
+			localAuthenticationContext: ThreadSafeAuthContext()
 		)
 	}
 

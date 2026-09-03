@@ -17,6 +17,7 @@ Created on 04/10/2023
 */
 
 import Foundation
+@preconcurrency import LocalAuthentication
 import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
@@ -202,7 +203,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		docsCbor = transferInfo.documentObjects.filter { k,v in Self.filterFormat(transferInfo.dataFormats[k]!, fmt: .cbor)} .mapValues { try? IssuerSigned(data: $0.bytes) }.compactMapValues { $0 }
 	}
 
-	func generateCborVpToken(itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
+	func generateCborVpToken(itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?, authenticationContext: ThreadSafeAuthContext) async throws -> (VerifiablePresentation, Data, [Data?], [String]) {
 		let docMetadata = transferInfo.docMetadata
 		let privateKeyObjects = transferInfo.privateKeyObjects
 		let zkSystemRepository = transferInfo.zkSystemRepository
@@ -218,7 +219,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			unlockData: unlockData,
 			zkSpecsRequested: zkSpecsRequested,
 			zkSystemRepository: zkSystemRepository,
-			deviceNameSpacesRequested: deviceNameSpacesToSend)
+			deviceNameSpacesRequested: deviceNameSpacesToSend,
+			authenticationContext: authenticationContext)
 		guard let resp else { throw WalletError(description: "DOCUMENT_ERROR", code: .internalError) }
 		let vpTokenData = Data(resp.deviceResponse.toCBOR(options: CBOROptions()).encode())
 		let vpTokenStr = vpTokenData.base64URLEncodedString()
@@ -258,7 +260,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: ((URL?) -> Void)?) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, authenticationContext: ThreadSafeAuthContext, onSuccess: ((URL?) -> Void)?) async throws {
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw WalletError(description: "Unexpected error", code: .internalError)
 		}
@@ -278,7 +280,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			if transferInfo.dataFormats[docId] == .cbor {
 				if docsCbor == nil { makeCborDocs() }
 				let itemsToSend1 = Dictionary(uniqueKeysWithValues: [(docId, nsItems)])
-				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1, deviceNameSpacesToSend: deviceNameSpacesToSend)
+				let vpToken = try await generateCborVpToken(itemsToSend: itemsToSend1, deviceNameSpacesToSend: deviceNameSpacesToSend, authenticationContext: authenticationContext)
 				zkpDocumentIds!.append(contentsOf: vpToken.3)
 				inputToPresentations.append((inputDescrId, docId, vpToken.0))
 			} else if transferInfo.dataFormats[docId] == .sdjwt {
@@ -288,8 +290,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				guard let holderPublicJwk = try SdJwtUtils.parseCnfBindingKeys(fromDocumentData: docData).first else { continue }
 				let unlockData = try await dpk.secureArea.unlockKey(id: docId)
 				let keyInfo = try await dpk.secureArea.getKeyBatchInfo(id: docId)
-				let dsa = keyInfo.crv.defaultSigningAlgorithm
-				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, publicKey: holderPublicJwk, curve: keyInfo.crv, ecAlgorithm: dsa, unlockData: unlockData)
+				let keyInfoCrv = keyInfo.keyOptions?.curve ?? .P256
+				let dsa = keyInfoCrv.defaultSigningAlgorithm
+				let signer = try SecureAreaSigner(secureArea: dpk.secureArea, id: docId, index: dpk.index, publicKey: holderPublicJwk, curve: keyInfoCrv, ecAlgorithm: dsa, unlockData: unlockData, context: authenticationContext)
 				let signAlg = try SecureAreaSigner.getSigningAlgorithm(dsa)
 				let hai = HashingAlgorithmIdentifier(rawValue: transferInfo.hashingAlgs[docId] ?? "") ?? .SHA3256
 				guard let presented = try await OpenId4VpUtils.getSdJwtPresentation(docSigned, hashingAlg: hai.hashingAlgorithm(), signer: signer, signAlg: signAlg, requestItems: items, nonce: vpNonce, aud: vpClientId, transactionData: transactionData) else {

@@ -35,7 +35,7 @@ public protocol PresentationService: Sendable {
 	func receiveRequest() async throws -> [UserRequestInfo]
 
 	var transactionLog: TransactionLog { get }
-	
+
 	var zkpDocumentIds: [Document.ID]? { get }
 	/// The verifier (relying party) registration policy decoded from the WRPRC carried in the request, if any
 	var wrpVerifierPolicy: WrpRegistrationPolicy?  { get }
@@ -46,9 +46,10 @@ public protocol PresentationService: Sendable {
 	///   - userAccepted: True if user accepted to send the response
 	///   - itemsToSend: The selected items to send organized in document types and namespaces (see ``RequestItems``)
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
+	///   - authenticationContext: Local authentication context reused for the device-key operations (signature / key-agreement)
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
-	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?, onSuccess: ( @Sendable (URL?) -> Void)?) async throws
-	
+	func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces?, authenticationContext: ThreadSafeAuthContext, onSuccess: ( @Sendable (URL?) -> Void)?) async throws
+
 	/// wait for disconnect
 	func waitForDisconnect() async throws
 }

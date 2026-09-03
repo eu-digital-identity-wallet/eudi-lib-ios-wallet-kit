@@ -452,7 +452,8 @@ struct EudiWalletKitTests {
 			networking: networking,
 			storage: storage,
 			storageService: storageService,
-			trustConfig: trustConfig
+			trustConfig: trustConfig,
+			localAuthenticationContext: ThreadSafeAuthContext()
 		)
 	}
 
@@ -560,6 +561,10 @@ actor InMemorySecureKeyStorage: SecureKeyStorage {
 	}
 
 	func readKeyData(id: String, index: Int) async throws -> [String : Data] {
+		keyDataStorage["\(id)_\(index)"] ?? [:]
+	}
+
+	func readKeyData(id: String, index: Int, authenticationContext: ThreadSafeAuthContext) async throws -> [String : Data] {
 		keyDataStorage["\(id)_\(index)"] ?? [:]
 	}
 

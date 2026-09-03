@@ -39,7 +39,6 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var continuationDisconnect: CheckedContinuation<Void, Error>?
     /// Continuation for awaiting L2CAP PSM publication
     var psm: UInt16?
-	var handleSelected: ((Bool, RequestItems?, RequestDeviceNameSpaces?) async -> Void)?
 	var request: UserRequestInfo?
 	var readBuffer = Data()
 	public var wrpVerifierPolicy: WrpRegistrationPolicy?
@@ -64,8 +63,10 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var unlockData: [String: Data]!
 	public var deviceResponseBytes: Data?
 	public var responseMetadata: [Data?]!
+	/// Local authentication context reused for the device-key operations of the response
+	var authenticationContext: ThreadSafeAuthContext
 
-	public init(parameters: InitializeTransferData, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpVpRegistrationValidator? = nil) async throws {
+	public init(parameters: InitializeTransferData, authenticationContext: ThreadSafeAuthContext, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpVpRegistrationValidator? = nil) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
@@ -75,6 +76,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		self.dauthMethod = objs.deviceAuthMethod
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
+		self.authenticationContext = authenticationContext
 		let factory = transportFactory ?? DefaultBleTransportFactory()
 		bleTranport = bleTransferMode == .server ? factory.createServer() : factory.createClient()
 		if bleTransferMode == .both { bleServer = factory.createServer() }
@@ -82,7 +84,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		bleTranport.delegate = self
 		bleServer?.delegate = self
 	}
-	
+
 	var isInErrorState: Bool { status == .error }
 	// Create a new device engagement object and start the device engagement process.
 	///
@@ -151,7 +153,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
 			let compactDocMetadata = docMetadata.compactMapValues { $0 }
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, authenticationContext: authenticationContext)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
@@ -163,7 +165,6 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 						didFinishedWithError(error)
 						return
 					}
-					self.handleSelected = userSelected
 					continuationRequest?.resume(returning: decoded.userRequestInfo)
 					continuationRequest = nil
 				} else {
@@ -187,7 +188,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		default: break
 		}
 	}
-	
+
 	/// Validate the relying party registration certificate (WRPRC) carried in the BLE device request.
 	///
 	/// According to ETSI TS 119 472-2 (clause 5.3.2), the WRPRC is repeated in the `requestInfo` member
@@ -270,7 +271,8 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 					dauthMethod: dauthMethod,
 					unlockData: unlockData,
 					zkSystemRepository: zkSystemRepository,
-					deviceNameSpacesRequested: deviceNameSpaces) else {
+					deviceNameSpacesRequested: deviceNameSpaces,
+					authenticationContext: authenticationContext) else {
 					errorToSend = MdocHelpers.getErrorNoDocuments(docTypeReq)
 					return
 				}
@@ -323,16 +325,16 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 	///   - itemsToSend: The selected items to send organized in document types and namespaces
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
-		await handleSelected?(userAccepted, itemsToSend, deviceNameSpacesToSend)
-		handleSelected = nil
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, authenticationContext: ThreadSafeAuthContext, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
+		self.authenticationContext = authenticationContext
+		await userSelected(userAccepted, itemsToSend, deviceNameSpacesToSend)
 		// documentIds is populated by userSelected after a successful response build.
 		// docType and displayName are not available on this service; they are populated by the PresentationSession caller which has access to docIdToPresentInfo.
 		let firstDocId = documentIds.first
 		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
 		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
 	}
-	
+
 	public func waitForDisconnect() async throws {
 		if status == .disconnected { return }
 		try await withCheckedThrowingContinuation { c in
@@ -378,7 +380,7 @@ public func didPoweredOn(isPeripheralManager: Bool) {
 	}
 
 	/// BLE device connected
-	/// - Parameters:	
+	/// - Parameters:
 	///  - isPeripheral: True if the device connected is a peripheral
 	/// - deviceName: The name of the connected device if available
 	public func didConnected(isPeripheral: Bool, deviceName: String?) {

@@ -18,6 +18,7 @@ limitations under the License.
 import Foundation
 import Copyable
 import CryptoKit
+@preconcurrency import LocalAuthentication
 import JOSESwift
 import MdocDataModel18013
 import MdocSecurity18013
@@ -103,7 +104,7 @@ extension OpenId4VciConfiguration {
 	}
 
 	/// Creates a PoP constructor based on the provided parameters and configuration.
-	func makePoPConstructor(popUsage: PopUsage, privateKeyId: String, algorithms: [JWSAlgorithm]?, keyOptions: KeyOptions?) async throws -> DPoPConstructor? {
+	func makePoPConstructor(popUsage: PopUsage, privateKeyId: String, algorithms: [JWSAlgorithm]?, keyOptions: KeyOptions?, context: ThreadSafeAuthContext) async throws -> DPoPConstructor? {
 		guard let algorithms = algorithms, !algorithms.isEmpty else { return nil }
 		let signingKeyProxy: SigningKeyProxy
 		let publicKey: SecKey
@@ -120,16 +121,17 @@ extension OpenId4VciConfiguration {
 			}
 			jwsAlgorithm = jwsAlg
 			let existingKeyInfo: KeyBatchInfo? = try? await secureArea.getKeyBatchInfo(id: privateKeyId)
-			let hasCompatibleExistingKey = existingKeyInfo != nil && keyOptions.secureAreaName == existingKeyInfo?.secureAreaName && keyOptions.curve == ecCurve && existingKeyInfo?.usedCounts.count == 1
-			let existingPublicKey: CoseKey? = if hasCompatibleExistingKey { try? await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) } else { nil }
-			if hasCompatibleExistingKey, existingPublicKey == nil { try await secureArea.deleteKeyInfo(id: privateKeyId) }
-			let publicCoseKey: CoseKey =
-				if let existingPublicKey { existingPublicKey } else {
-					(try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)).first!
-				}
+			let hasCompatibleExistingKey = if let existingKeyInfo = existingKeyInfo, keyOptions == existingKeyInfo.keyOptions, keyOptions.curve == ecCurve, existingKeyInfo.usedCounts.count == 1 { true } else { false }
+			if !hasCompatibleExistingKey {
+				logger.info("Creating new key batch for id: \(privateKeyId) with curve: \(ecCurve.SECGName)")
+				try? await secureArea.deleteKeyInfo(id: privateKeyId)
+				try? await secureArea.deleteKeyBatch(id: privateKeyId, startIndex: 0, batchSize: 1)
+				_ = try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)
+			}
+			let publicCoseKey = try await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) 
 			let publicKeyJwk = try publicCoseKey.jwk
 			let unlockData = try await secureArea.unlockKey(id: privateKeyId)
-			let signer = try SecureAreaSigner(secureArea: secureArea, id: privateKeyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData)
+			let signer = try SecureAreaSigner(secureArea: secureArea, id: privateKeyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData, context: context)
 			signingKeyProxy = .custom(signer)
 			publicKey = try publicCoseKey.toSecKey()
 		} else {
@@ -169,7 +171,7 @@ extension OpenId4VciConfiguration {
 
 	static let supportedCredentialReusePolicies: SupportedCredentialReusePolicies = .supported([.limitedTime, .onceOnly, .rotatingBatch])
 
-	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]?, registrationCertificatePolicy: RegistrationCertificatePolicy? = nil) async throws -> OpenId4VCIConfig {
+	func toOpenId4VCIConfig(credentialIssuerId: String, clientAttestationPopSigningAlgValuesSupported: [JWSAlgorithm]?, registrationCertificatePolicy: RegistrationCertificatePolicy? = nil, context: ThreadSafeAuthContext) async throws -> OpenId4VCIConfig {
 		if registrationCertificatePolicy != nil {
 			// The OpenID4VCI library fails at OpenId4VCIConfig construction if not required signed
 			guard case .requireSigned = issuerMetadataPolicy else {
@@ -177,7 +179,7 @@ extension OpenId4VciConfiguration {
 			}
 		}
 		let client: Client = if let clientAttestationPopSigningAlgValuesSupported {
-			try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported)
+			try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported, context: context)
 		} else {
 			try makePublicClient()
 		}
@@ -192,9 +194,9 @@ extension OpenId4VciConfiguration {
 		return .public(id: clientId)
 	}
 
-	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?) async throws -> Client {
+	private func makeAttestationClient(config: KeyAttestationConfiguration, credentialIssuerId: String, algorithms: [JWSAlgorithm]?, context: ThreadSafeAuthContext) async throws -> Client {
 		let keyId = Self.generatePopKeyId(popUsage: .clientAttestation, credentialIssuerId: credentialIssuerId)
-		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions) else {
+		guard let popConstructor = try await makePoPConstructor(popUsage: .clientAttestation, privateKeyId: keyId, algorithms: algorithms, keyOptions: config.popKeyOptions, context: context) else {
 			throw WalletError(description: "Failed to create DPoP constructor for client attestation", code: .internalError)
 		}
 		let signingKey = popConstructor.privateKey
