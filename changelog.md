@@ -1,7 +1,25 @@
+## v0.51.0
+
+### Swift Data Storage
+
+Add SwiftData storage as an alternative to the existing keychain storage service. Wallet storage can now be initialized with the primary app group container:
+
+```swift
+let storageService = try! SwiftDataStorageService(usePrimaryGroupContainer: true)
+```
+
+Or configure the SwiftData model container directly:
+
+```swift
+let modelConfiguration = ModelConfiguration(groupContainer: .identifier(Self.appGroup))
+let modelContainer = try! ModelContainer(for: SwiftDataStoredDocument.self, configurations: modelConfiguration)
+```
+
 ## v0.50.0
 This release fixes the multiple authentication prompt issue when EUDI Wallet is accessing the keys that are stored in the secure key storage in order to sign attestations during document issuance or presentation.
 For example, during a single document issuance process user needed to enter the passcode or touch ID 4 times.
 With this release, the wallet now reuses a shared local authentication context, so authentication prompt appears only once.
+
 
 ### Breaking Changes
 
