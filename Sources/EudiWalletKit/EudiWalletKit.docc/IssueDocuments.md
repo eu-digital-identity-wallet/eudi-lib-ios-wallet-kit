@@ -7,6 +7,20 @@ using this functionality, EudiWallet must be property initialized.
 If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
+### Credential proof policy
+
+By default, ``OpenId4VciConfiguration`` uses the HAIP-compliant credential proof policy and accepts only attested proofs. To interoperate with an issuer that requires a plain JWT proof without key attestation, set ``OpenId4VciConfiguration/allowPlainJwtProof`` to `true` for that issuer:
+
+```swift
+let config = OpenId4VciConfiguration(
+  credentialIssuerURL: "https://issuer.example.com",
+  clientId: "my-wallet",
+  allowPlainJwtProof: true
+)
+```
+
+Enabling this flag accepts all supported proof types using ES256, ES384, or ES512. Leave it disabled unless plain JWT proof support is required.
+
 ### Issue document by docType or credential configuration identifier
 
 When the document docType to be issued use the `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)` method.

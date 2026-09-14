@@ -33,13 +33,15 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// The client identifier used for OpenID4VCI flows
 	public let clientId: String?
 	/// Configuration for key attestation, if supported by the issuer
-	public let keyAttestationsConfig: KeyAttestationConfiguration
+	public let keyAttestationsConfig: KeyAttestationConfiguration?
 	/// The redirect URI used after authorization flow completion
 	public let authFlowRedirectionURI: URL
 	/// Configuration that determines how authorization issuance should be handled
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
 	/// Whether to use Pushed Authorization Request (PAR) for enhanced security
 	public let parUsage: ParUsage
+	/// Whether to accept plain JWT proofs without key attestation; otherwise only attested proofs are accepted
+	public let allowPlainJwtProof: Bool
 	/// Whether to require DPoP (Demonstrating Proof-of-Possession)
 	public let requireDpop: Bool
 	/// Policy for handling signed issuer metadata fetched from `/.well-known/openid-credential-issuer`.
@@ -62,10 +64,11 @@ public struct OpenId4VciConfiguration: Sendable {
 	public init(
 		credentialIssuerURL: String?,
 		clientId: String? = nil,
-		keyAttestationsConfig: KeyAttestationConfiguration,
+		keyAttestationsConfig: KeyAttestationConfiguration? = nil,
 		authFlowRedirectionURI: URL? = nil,
 		authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes,
 		parUsage: ParUsage = .required(authorizationCodeDPoPBinding: true),
+		allowPlainJwtProof: Bool = false,
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
 		validateRegistrationCertificate: Bool = false,
@@ -80,6 +83,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
 		self.parUsage = parUsage
+		self.allowPlainJwtProof = allowPlainJwtProof
 		self.requireDpop = requireDpop
 		self.issuerMetadataPolicy = issuerMetadataPolicy
 		self.validateRegistrationCertificate = validateRegistrationCertificate
@@ -87,6 +91,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.dpopKeyOptions = dpopKeyOptions
 	}
 }
+
 extension CoseEcCurve {
 	var jwsAlgorithm: JWSAlgorithm? {
 		switch self {
@@ -128,7 +133,7 @@ extension OpenId4VciConfiguration {
 				try? await secureArea.deleteKeyBatch(id: privateKeyId, startIndex: 0, batchSize: 1)
 				_ = try await secureArea.createKeyBatch(id: privateKeyId, credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: keyOptions)
 			}
-			let publicCoseKey = try await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve) 
+			let publicCoseKey = try await secureArea.getPublicKey(id: privateKeyId, index: 0, curve: ecCurve)
 			let publicKeyJwk = try publicCoseKey.jwk
 			let unlockData = try await secureArea.unlockKey(id: privateKeyId)
 			let signer = try SecureAreaSigner(secureArea: secureArea, id: privateKeyId, index: 0, publicKey: publicKeyJwk.toJoseSwiftJWK(), curve: ecCurve, ecAlgorithm: ecAlgorithm, unlockData: unlockData, context: context)
@@ -178,18 +183,20 @@ extension OpenId4VciConfiguration {
 				throw WalletError(description: "Registration certificate validation requires issuerMetadataPolicy to be .requireSigned", code: .invalidWrprc)
 			}
 		}
-		let client: Client = if let clientAttestationPopSigningAlgValuesSupported {
+		let client: Client = if let keyAttestationsConfig, let clientAttestationPopSigningAlgValuesSupported {
 			try await makeAttestationClient(config: keyAttestationsConfig, credentialIssuerId: credentialIssuerId, algorithms: clientAttestationPopSigningAlgValuesSupported, context: context)
 		} else {
 			try makePublicClient()
 		}
 		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder()
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy)
+		let jwsAlgorithms = [CoseEcCurve.P256, .P384, .P521].compactMap { $0.jwsAlgorithm }
+		let proofTypesPolicy: ProofTypesPolicy = allowPlainJwtProof ? .acceptAll(supportedAlgorithms: jwsAlgorithms) : .haipCompliant(algorithms: jwsAlgorithms)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, proofTypesPolicy: proofTypesPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy)
 	}
 
 	private func makePublicClient() throws -> Client {
 		guard let clientId else {
-			throw WalletError(description: "clientId must be set when the authorization server does not support client attestation", code: .internalError)
+			throw WalletError(description: "clientId must be set when client attestation is unavailable or not configured", code: .internalError)
 		}
 		return .public(id: clientId)
 	}

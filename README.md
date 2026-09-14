@@ -191,8 +191,9 @@ let issuerConfigurations: [String: OpenId4VciConfiguration] = [
     ),
     "mdl_issuer": OpenId4VciConfiguration(
         credentialIssuerURL: "https://mdl.issuer.example.com",
-    requireDpop: false,
-    issuerMetadataPolicy: .ignoreSigned
+        allowPlainJwtProof: true,
+        requireDpop: false,
+        issuerMetadataPolicy: .ignoreSigned
     )
 ]
 
@@ -209,6 +210,8 @@ try wallet.registerOpenId4VciServices([
     "new_issuer": OpenId4VciConfiguration(credentialIssuerURL: "https://new.issuer.com")
 ])
 ```
+
+The `allowPlainJwtProof` property controls which credential proof types the wallet accepts. It defaults to `false`, which uses the HAIP-compliant proof policy and accepts only attested proofs. Set it to `true` only when interoperability with an issuer requires plain JWT proofs without key attestation; the wallet then accepts all supported proof types using ES256, ES384, or ES512.
 
 The `requireDpop` property controls whether issuance should halt when DPoP is not available. The `issuerMetadataPolicy` property controls signed metadata handling per issuer (`.ignoreSigned` or `.requireSigned`). The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.
 

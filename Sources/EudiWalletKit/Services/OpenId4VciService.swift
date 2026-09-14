@@ -113,11 +113,16 @@ public actor OpenId4VciService {
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
 		let funcKeyAttestationJWT: FuncKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
 		let bindingKey: BindingKey
-		if configuration.supportsAttestationProofType {
+		if config.keyAttestationsConfig != nil, configuration.supportsAttestationProofType {
 			// Send a single `attestation` proof for the whole batch. The key attestation JWT already attests every key
 			bindingKey = .attestation(keyAttestationJWT: funcKeyAttestationJWT)
-		} else if configuration.supportsJwtProofTypeWithAttestation, let pk = publicKeys.first {
+		} else if config.keyAttestationsConfig != nil, configuration.supportsJwtProofTypeWithAttestation, let pk = publicKeys.first {
 			bindingKey = try createBindingKey(pk, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: 0, funcKeyAttestationJWT: funcKeyAttestationJWT, issuer: issuer)
+		} else if config.allowPlainJwtProof, !configuration.supportsJwtProofTypeWithAttestation {
+			let bindingKeys = try publicKeys.enumerated().map {
+				try createBindingKey($0.element, secureAreaSigningAlg: selectedAlgorithm, unlockData: unlockData, index: $0.offset, funcKeyAttestationJWT: nil, issuer: issuer)
+			}
+			return (bindingKeys, publicCoseKeys.map { Data($0.toCBOR(options: CBOROptions()).encode()) })
 		} else {
 			throw WalletError(description: "Unsupported credential configuration", code: .unsupportedCredentialConfiguration)
 		}
@@ -125,7 +130,9 @@ public actor OpenId4VciService {
 	}
 
 	func createKeyBatchWithAttestation(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, nonce: String?) async throws -> BatchCreateKeyResult {
-		let attestationProvider = config.keyAttestationsConfig.walletAttestationsProvider
+		guard let attestationProvider = config.keyAttestationsConfig?.walletAttestationsProvider else {
+			throw WalletError(description: "Key attestation configuration is required to create key attestations", code: .unsupportedCredentialConfiguration)
+		}
 		let request = try IssueRequest(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		let publicCoseKeys = try await request.createKeyBatch()
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys)
@@ -142,7 +149,10 @@ public actor OpenId4VciService {
 	}
 
 	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], nonce: String?) async throws -> KeyAttestationJWT {
-		let jwt = try await self.config.keyAttestationsConfig.walletAttestationsProvider.getKeysAttestation(keys: publicKeys, nonce: nonce)
+		guard let attestationProvider = config.keyAttestationsConfig?.walletAttestationsProvider else {
+			throw WalletError(description: "Key attestation configuration is required to create key attestations", code: .unsupportedCredentialConfiguration)
+		}
+		let jwt = try await attestationProvider.getKeysAttestation(keys: publicKeys, nonce: nonce)
 		let keyAttestationJwt: KeyAttestationJWT = try .init(jws: .init(compactSerialization: jwt))
 		return keyAttestationJwt
 	}
@@ -155,11 +165,15 @@ public actor OpenId4VciService {
 		self.localAuthenticationContext = localAuthenticationContext
 	}
 
-	func createBindingKey(_ publicKeyJWK: ECPublicKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int, funcKeyAttestationJWT: @escaping FuncKeyAttestationJWT, issuer: String) throws -> BindingKey {
+	func createBindingKey(_ publicKeyJWK: ECPublicKey, secureAreaSigningAlg: MdocDataModel18013.SigningAlgorithm, unlockData: Data?, index: Int, funcKeyAttestationJWT: FuncKeyAttestationJWT?, issuer: String) throws -> BindingKey {
 		let algType = Self.mapToJWSAlgorithmType(secureAreaSigningAlg)!
 		let signer = try SecureAreaSigner(secureArea: issueReq.secureArea, id: issueReq.id, index: index, publicKey: publicKeyJWK, curve: publicKeyJWK.crv.coseEcCurve, ecAlgorithm: secureAreaSigningAlg, unlockData: unlockData, context: localAuthenticationContext)
 		let bindingKey: BindingKey
-		bindingKey = try .jwtKeyAttestation(algorithm: JWSAlgorithm(algType), keyAttestationJWT: funcKeyAttestationJWT, keyIndex: UInt(index), privateKey: .custom(signer), issuer: issuer)
+		if let funcKeyAttestationJWT {
+			bindingKey = try .jwtKeyAttestation(algorithm: JWSAlgorithm(algType), keyAttestationJWT: funcKeyAttestationJWT, keyIndex: UInt(index), privateKey: .custom(signer), issuer: issuer)
+		} else {
+			bindingKey = .jwt(algorithm: JWSAlgorithm(algType), jwk: publicKeyJWK, privateKey: .custom(signer), issuer: issuer)
+		}
 		return bindingKey
 	}
 

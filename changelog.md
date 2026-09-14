@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add the `OpenId4VciConfiguration.allowPlainJwtProof` flag. It defaults to `false` (HAIP-compliant attested proofs only); when enabled, issuance also accepts plain JWT proofs without key attestation using ES256, ES384, or ES512.
+
 ## v0.51.0
 
 ### Swift Data Storage
@@ -13,6 +17,7 @@ Or configure the SwiftData model container directly:
 ```swift
 let modelConfiguration = ModelConfiguration(groupContainer: .identifier(Self.appGroup))
 let modelContainer = try! ModelContainer(for: SwiftDataStoredDocument.self, configurations: modelConfiguration)
+let storageService = SwiftDataStorageService(modelContainer: modelContainer)
 ```
 
 ## v0.50.0
