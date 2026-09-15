@@ -331,17 +331,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .accepted(url) = result {
 			logger.info("Dispatch accepted, return url: \(url?.absoluteString ?? "")")
 			onSuccess?(url)
-		} else if case let .rejected(reason) = result {
-			logger.info("Dispatch rejected, reason: \(reason)")
-			// Verifier may return a redirect_uri in a non-2xx body (e.g. access_denied redirect)
-			if let data = reason.data(using: .utf8),
-			   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-			   let redirectString = json["redirect_uri"] as? String,
-			   let redirectURL = URL(string: redirectString) {
-				logger.info("Dispatch rejected with redirect URL: \(redirectString)")
-				onSuccess?(redirectURL)
+		} else if case let .rejected(redirectURI) = result {
+			if let redirectURI {
+				logger.info("Dispatch rejected with redirect URL: \(redirectURI.absoluteString)")
+				onSuccess?(redirectURI)
 			} else {
-				throw WalletError(description: reason, code: .internalError)
+				throw WalletError(description: "Dispatch rejected", code: .internalError)
 			}
 		}
 		if let vpTokens, dcql != nil, vpTokens.allSatisfy({ $0.1 != nil }) {
