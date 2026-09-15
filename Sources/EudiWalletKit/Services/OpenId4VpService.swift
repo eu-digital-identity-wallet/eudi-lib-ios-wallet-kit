@@ -357,18 +357,16 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				TransactionLogUtils.withResult(.notCompleted, reason: message, presented: [], transactionLog: &transactionLog)
 			} else {
 				presentedDocumentIds = preparedIds
-				TransactionLogUtils.withResult(.completed, reason: nil,	presented: presentedClaims, transactionLog: &transactionLog)
+				TransactionLogUtils.withResult(.completed, reason: nil, presented: presentedClaims, transactionLog: &transactionLog)
 			}
 			await persistTransactionLog()
 			onSuccess?(url)
 		case .rejected(let redirectURI):
 			presentedDocumentIds = preparedIds
-			TransactionLogUtils.withResult(.notCompleted, reason: reason, presented: presentedClaims, transactionLog: &transactionLog)
+			TransactionLogUtils.withResult(.notCompleted, reason: "Rejected", presented: presentedClaims, transactionLog: &transactionLog)
 			await persistTransactionLog()
-			if let redirectURI {
-				onSuccess?(redirectURI)
-			}
-			throw WalletError(description: "Dispatch rejected", code: .internalError)
+			if let redirectURI { onSuccess?(redirectURI) }
+			else { throw WalletError(description: "Dispatch rejected", code: .internalError) }
 		}
 	}
 
