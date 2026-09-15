@@ -8,7 +8,7 @@ struct IssuerEntitlementsTests {
     ])
     func eaaAlternatives(entitlement: String) {
         let policy = WrpRegistrationPolicy(entitlements: [entitlement], sub: "issuer", credentials: [])
-        #expect(policy.findUnmetEntitlements(offered: [.init(doctypeValue: "eaa")]).isEmpty)
+        #expect(policy.findUnmetEntitlements(offered: [.init(doctypeValue: "eaa")], isPid: { _ in false }).isEmpty)
     }
 
     @Test("Mixed offers require both roles and deduplicate unmet requirements")
@@ -30,9 +30,9 @@ struct IssuerEntitlementsTests {
         let offered = [PolicyCredentialMeta(vctValues: ["other", "custom-pid"], doctypeValue: "mdoc")]
         #expect(policy.findUnmetEntitlements(offered: offered, isPid: { $0 == "custom-pid" }) == [.pidProvider])
         #expect(policy.findUnmetEntitlements(offered: offered, isPid: { $0 == "mdoc" }) == [.pidProvider])
-        #expect(policy.findUnmetEntitlements(offered: offered) == [.eaaProvider])
+        #expect(policy.findUnmetEntitlements(offered: offered, isPid: { _ in false }) == [.eaaProvider])
         #expect(policy.findUnmetEntitlements(offered: [.init()], isPid: { _ in true }) == [.eaaProvider])
-        #expect(policy.findUnmetEntitlements(offered: []).isEmpty)
+        #expect(policy.findUnmetEntitlements(offered: [], isPid: { _ in false }).isEmpty)
     }
 
     @Test("Logging recognizes the case-sensitive non-qualified EAA entitlement")

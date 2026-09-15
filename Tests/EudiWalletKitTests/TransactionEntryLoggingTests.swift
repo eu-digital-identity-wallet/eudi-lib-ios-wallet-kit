@@ -56,7 +56,7 @@ struct TransactionEntryLoggingTests {
         let identifier = log.transactionIdentifier
         let time = log.time
         let requested = [ClaimInfo(credentialIdentifier: "pid", claims: [.claim("name"), .claim("age")])]
-        let policy = WrpRegistrationPolicy(sub: "LEI:123", credentials: [], purpose: [.init(lang: "en", value: "Age check")],
+        let policy = WrpRegistrationPolicy(sub: "LEIXG-123", credentials: [], purpose: [.init(lang: "en", value: "Age check")],
             registryURI: "https://registry.example", privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
         TransactionLogUtils.withRequest(requested, policy: policy, name: "Certificate CN", transactionLog: &log)
         TransactionLogUtils.withResult(.notCompleted, reason: "User declined", transactionLog: &log)
