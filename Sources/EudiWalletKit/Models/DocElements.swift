@@ -19,6 +19,7 @@ import OrderedCollections
 import MdocDataModel18013
 import MdocDataTransfer18013
 import eudi_lib_sdjwt_swift
+import struct eudi_lib_sdjwt_swift.ClaimPath
 
 public struct DocPresentInfo: Sendable {
 	public let docType: String

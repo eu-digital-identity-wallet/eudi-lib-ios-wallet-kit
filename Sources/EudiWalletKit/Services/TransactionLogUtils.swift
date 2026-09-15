@@ -17,100 +17,212 @@
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
-import WalletStorage
-import SwiftCBOR
+import struct OpenID4VP.DCQL
+import struct eudi_lib_sdjwt_swift.SignedSDJWT
 
-class TransactionLogUtils {
-
-	static func getTimestamp() -> Int64 {
-		return Int64(Date.now.timeIntervalSince1970.rounded())
+/// Builds TS10 presentation entries from requests and responses.
+/// Records credential identifiers and claim paths without credential values or response tokens.
+enum TransactionLogUtils {
+	/// Creates a pending presentation entry with a new identifier, the current time and no claims.
+	static func createEmptyPresentationLog() -> TransactionEntry {
+		.presentation(.init(
+			transactionIdentifier: UUID().uuidString,
+			time: Date(),
+			transactionResult: .notCompleted,
+			listOfClaimsRequested: [],
+			listOfClaimsPresented: []))
 	}
+	private static let defaultLang = "en"
 
-	static func initializeTransactionLog(type: TransactionLog.LogType, dataFormat: TransactionLog.DataFormat) -> TransactionLog {
-		let transactionLog = TransactionLog(timestamp: getTimestamp(), status: .incomplete, type: type, dataFormat: dataFormat)
-		return transactionLog
-	}
-
-	static func setCborTransactionLogRequestInfo(_ requestInfo: UserRequestInfo, wrpVpPolicy: WrpRegistrationPolicy? = nil, transactionLog: inout TransactionLog) {
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), rawRequest: requestInfo.deviceRequestBytes, relyingParty: TransactionLogUtils.getRelyingParty(requestInfo, wrpVpPolicy: wrpVpPolicy), dataFormat: .cbor)
-	}
-
-	static func setCborTransactionLogResponseInfo(_ bleService: BlePresentationService, documentId: String?, docType: String?, displayName: String?, transactionLog: inout TransactionLog) {
-		let sessionTranscript: Data? = if let stb = bleService.sessionEncryption?.sessionTranscriptBytes { Data(stb) } else { nil }
-		let rawResponse = bleService.deviceResponseBytes
-		let responseMetadata = bleService.responseMetadata
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: rawResponse, dataFormat: .cbor, sessionTranscript: sessionTranscript, docMetadata: responseMetadata, documentId: documentId, docType: docType, displayName: displayName)
-	}
-
-	static func setTransactionLogResponseInfo(deviceResponseBytes: Data?, dataFormat: TransactionLog.DataFormat, sessionTranscript: Data?, responseMetadata: [Data?]?, documentId: String?, docType: String?, displayName: String?, transactionLog: inout TransactionLog) {
-		transactionLog = transactionLog.copy(timestamp: getTimestamp(), status: .completed, rawResponse: deviceResponseBytes, dataFormat: dataFormat, sessionTranscript: sessionTranscript, docMetadata: responseMetadata, documentId: documentId, docType: docType, displayName: displayName)
-	}
-
-	static func setErrorTransactionLog(type: TransactionLog.LogType, error: Error, transactionLog: inout TransactionLog) {
-		transactionLog = TransactionLog(timestamp: getTimestamp(), status: .failed, errorMessage: error.localizedDescription, type: type, dataFormat: transactionLog.dataFormat)
-	}
-
-	static func getRelyingParty(_ requestInfo: UserRequestInfo, wrpVpPolicy: WrpRegistrationPolicy?) -> TransactionLog.RelyingParty? {
-		let defaultReaderAuthResult = requestInfo.defaultReaderAuthResult
-		guard let name = wrpVpPolicy?.name ?? defaultReaderAuthResult?.certificateIssuer else { return nil }
-		let isVerified = defaultReaderAuthResult?.isValidated ?? false
-		let certificateChain = defaultReaderAuthResult?.certificateChain ?? []
-		let readerAuth = defaultReaderAuthResult?.authBytes
-		return TransactionLog.RelyingParty(name: name, isVerified: isVerified, certificateChain: certificateChain, readerAuth: readerAuth)
-	}
-
-	static func parseDocClaimsDecodables(_ transactionLog: TransactionLog, uiCulture: String?) -> [DocClaimsModel] {
-		guard let raw = transactionLog.rawResponse else { return [] }
-		var res = [DocClaimsModel]()
-		if transactionLog.dataFormat == .cbor {
-			guard let dr = try? DeviceResponse(data: raw.bytes) else { return [] }
-			for (index, doc) in (dr.documents ?? []).enumerated() {
-				let docMetadata = transactionLog.docMetadata?[index]
-				if let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: doc.docType, issuerSigned: doc.issuerSigned, metadata: docMetadata, uiCulture: uiCulture) {
-					res.append(docDecodable)
-				}
+	/// Parses requested claims from every DCQL credential and claim alternative, including unmatched types.
+	/// When claims are omitted, expands the paths from all matching wallet credentials if available.
+	static func parseRequestedClaims(_ dcql: DCQL, queryable: (any DcqlQueryable)? = nil) -> [ClaimInfo] {
+		var result = [ClaimInfo]()
+		for credential in dcql.credentials {
+			let identifiers: [String]
+			if let docType = credential.meta["doctype_value"].string {
+				identifiers = [docType]
+			} else {
+				identifiers = credential.meta["vct_values"].arrayValue.compactMap { $0.string }
 			}
-		} else if transactionLog.dataFormat == .json {
-			let decoder = JSONDecoder()
-			do {
-				let vpResponse = try decoder.decode(VpResponsePayload.self, from: raw)
-				if let df = vpResponse.data_formats {
-					for m in df.enumerated() {
-						let presentedStr = vpResponse.verifiable_presentations[m.offset]
-						let metadata = transactionLog.docMetadata?[m.offset]
-						if let dcc = parseDocClaimDecodable(presentedStr, dataFormat: m.element, metadata: metadata, uiCulture: uiCulture) {  res.append(dcc) }
+			for identifier in identifiers {
+				var paths = credential.claims?.map { $0.path.mdocClaimPath } ?? []
+				if credential.claims?.isEmpty != false, let queryable {
+					paths = queryable.getCredentials(docOrVctType: identifier, docDataFormat: credential.dataFormat).sorted().flatMap {
+						queryable.getAllClaimPaths(id: $0).map { $0.mdocClaimPath }
 					}
 				}
-			} catch {
-				logger.error("Error decoding transaction log JSON: \(error)")
-				return []
+				result.append(ClaimInfo(credentialIdentifier: identifier, claims: paths))
 			}
 		}
-		return res
+		return mergeClaims(result)
 	}
 
-	static func parseDocClaimDecodable(_ presentedStr: String, dataFormat: DocDataFormat, metadata: Data?, uiCulture: String?) -> DocClaimsModel? {
-		if dataFormat == .cbor {
-			guard let isd = Data(base64urlEncoded: presentedStr) ?? Data(base64Encoded: presentedStr) else { return nil }
-			let iss = if let dr = try? DeviceResponse(data: isd.bytes) { dr.documents?.first?.issuerSigned } else { try? IssuerSigned(data: isd.bytes) }
-			guard let iss else { return nil}
-			if let docDecodable = parseCBORDocClaimsDecodable(id: UUID().uuidString, docType: iss.issuerAuth.mso.docType, issuerSigned: iss, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
-		} else if dataFormat == .sdjwt {
-			if let docDecodable = parseSdJwtDocClaimsDecodable(id: UUID().uuidString, docType: "", sdJwtSerialized: presentedStr, metadata: metadata, uiCulture: uiCulture) { return docDecodable }
+	/// Parses requested mdoc claims as namespace and element paths, grouped by document type.
+	static func parseRequestedClaims(_ request: DeviceRequest) -> [ClaimInfo] {
+		mergeClaims(request.docRequests.map { document in
+			let namespaces = document.itemsRequest.requestNameSpaces.nameSpaces
+			let paths: [MdocDataModel18013.ClaimPath] = namespaces.keys.sorted().flatMap { namespace in
+				namespaces[namespace]!.elementIdentifiers.sorted().map { name in
+					.init([.claim(name: namespace), .claim(name: name)])
+				}
+			}
+			return .init(credentialIdentifier: document.itemsRequest.docType, claims: paths)
+		})
+	}
+
+	/// Parses request items into claim paths, grouped by credential type.
+	/// Uses namespace and element names for mdoc, and typed claim-path segments for SD-JWT VC.
+	/// Document identifiers fall back to the item keys; unspecified formats default to mdoc.
+	static func parseCborClaims(_ items: RequestItems, idsToDocTypes: [String: String] = [:]) -> [ClaimInfo] {
+		var result = [ClaimInfo]()
+		for id in items.keys.sorted() {
+			let identifier = idsToDocTypes[id] ?? id
+			var paths = [MdocDataModel18013.ClaimPath]()
+			for namespace in items[id]!.keys.sorted() {
+				for item in items[id]![namespace]! {
+					let elements: [MdocDataModel18013.ClaimPathElement]
+					elements = [.claim(name: namespace), .claim(name: item.elementIdentifier)]
+					paths.append(.init(elements))
+				}
+			}
+			result.append(.init(credentialIdentifier: identifier, claims: paths))
 		}
-		return nil
+		return mergeClaims(result)
 	}
 
-	static func parseCBORDocClaimsDecodable(id: String, docType: String, issuerSigned: IssuerSigned, metadata: Data?, uiCulture: String?) -> DocClaimsModel? {
-		let encodedIssuerSigned = Data(issuerSigned.encode(options: CBOROptions()))
-		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .cbor, data: encodedIssuerSigned, docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
-		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil)
+	/// Parses the disclosed SD-JWT claim paths in description order, without their values.
+	/// Returns no claims when disclosure paths are unavailable.
+	/// - Throws: An error if the SD-JWT claims cannot be reconstructed.
+	static func parsePresentedClaims(_ sdJwt: SignedSDJWT, docType: String) throws -> [ClaimInfo] {
+		guard let disclosures = try sdJwt.recreateClaims().disclosuresPerClaimPath else { return [] }
+		let paths = disclosures.keys.map { path in
+			MdocDataModel18013.ClaimPath(path.value.map { element in
+				switch element {
+				case .claim(let name): return .claim(name: name)
+				case .arrayElement(let index): return .arrayElement(index: index)
+				case .allArrayElements: return .allArrayElements
+				}
+			})
+		}.sorted { $0.description < $1.description }
+		return [.init(credentialIdentifier: docType, claims: paths)]
 	}
 
-	static func parseSdJwtDocClaimsDecodable(id: String, docType: String, sdJwtSerialized: String, metadata: Data?, uiCulture: String?) -> (DocClaimsModel)? {
-		guard let sdJwtData = sdJwtSerialized.data(using: .utf8) else { return nil }
-		let document = WalletStorage.Document(id: id, docType: docType, docDataFormat: .sdjwt, data: sdJwtData, docKeyInfo: DocKeyInfo.default.toData(), createdAt: .now, modifiedAt: .now, metadata: metadata, displayName: docType, status: .issued)
-		return StorageManager.toClaimsModel(doc: document, uiCulture: uiCulture, modelFactory: nil)
+	/// Groups claims by credential identifier and removes duplicate paths.
+	/// Sorts credentials by identifier and preserves the first occurrence of each path.
+	static func mergeClaims(_ claims: [ClaimInfo]) -> [ClaimInfo] {
+		var pathsByCredential = [String: [MdocDataModel18013.ClaimPath]]()
+		for info in claims {
+			var paths = pathsByCredential[info.credentialIdentifier] ?? []
+			for path in info.claims where !paths.contains(path) { paths.append(path) }
+			pathsByCredential[info.credentialIdentifier] = paths
+		}
+		return pathsByCredential.keys.sorted().map { .init(credentialIdentifier: $0, claims: pathsByCredential[$0]!) }
 	}
 
+	/// Adds requested claims and the relying party's registration details to a presentation entry.
+	/// Falls back to the supplied name and identifier when registration details are unavailable.
+	/// Preserves the transaction identifier and time, resets the result and presented claims,
+	/// and leaves other transaction types unchanged.
+	static func withRequest(_ claims: [ClaimInfo],
+		policy: WrpRegistrationPolicy?, name: String?, identifier: String? = nil, transactionLog: inout TransactionEntry) {
+		guard case let .presentation(previous) = transactionLog else { return }
+		let dpa = policy?.supervisoryAuthority
+		transactionLog = .presentation(.init(
+			transactionIdentifier: previous.transactionIdentifier,
+			time: previous.time,
+			transactionResult: .notCompleted,
+			listOfClaimsRequested: mergeClaims(claims),
+			listOfClaimsPresented: [],
+			interactingPartyName: (policy.flatMap { interactingPartyName($0) } ?? name).map { .init(lang: defaultLang, content: $0) },
+			interactingPartyIdentifier: (policy?.sub ?? identifier).flatMap { toQualifiedIdentifier($0) },
+			interactingPartyContact: policy.flatMap { interactingPartyContact($0) },
+			isIntermediary: policy?.intermediary == nil ? nil : true,
+			intermediaryIdentifier: policy?.intermediary?.identifier.flatMap { toQualifiedIdentifier($0) },
+			intermediaryName: policy?.intermediary?.name.map { .init(lang: defaultLang, content: $0) },
+			registrarURL: policy?.registryURI,
+			purpose: policy?.purpose?.map { .init(lang: $0.lang, content: $0.value) },
+			privacyPolicy: policy?.privacyPolicy.map { [.init(type: Policy.privacyPolicy, policyURI: $0)] },
+			dpaName: dpa?.name.map { .init(lang: defaultLang, content: $0) },
+			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } }
+		))
+	}
+
+	/// Returns the registered legal name, or the given and family names of a natural person.
+	/// Falls back to the registration's display name when neither is available.
+	static func interactingPartyName(_ policy: WrpRegistrationPolicy) -> String? {
+		if let legalName = policy.subLn, !legalName.isEmpty { return legalName }
+		let personalName = [policy.subGn, policy.subFn].compactMap { $0 }.joined(separator: " ")
+		return personalName.isEmpty ? policy.name : personalName
+	}
+
+	/// Returns the registered country and contact URLs, or nil when none are available.
+	static func interactingPartyContact(_ policy: WrpRegistrationPolicy) -> [String]? {
+		let contact = [policy.country, policy.supportURI, policy.infoURI].compactMap { $0 }
+		return contact.isEmpty ? nil : contact
+	}
+
+	/// Maps the issuer's registration entitlements to its TS10 interacting-party type.
+	/// Uses the first recognized entitlement in PID, QEAA, public EAA and non-qualified EAA order.
+	static func interactingPartyType(_ policy: WrpRegistrationPolicy?) -> String? {
+		let types: [(String, IssuerProviderType)] = [
+			(IssuerEntitlements.pid, .pidProvider),
+			(IssuerEntitlements.qeaa, .qeaaProvider),
+			(IssuerEntitlements.pubEaa, .pubEaaProvider),
+			(IssuerEntitlements.nonQEaa, .nonQEaaProvider)
+		]
+		return types.first { entitlement, _ in
+			policy?.entitlements?.contains(entitlement) == true
+		}?.1.rawValue
+	}
+
+	/// Parses a an ETSI EN 319 412-1 semantic identifier.
+	static func toQualifiedIdentifier(_ value: String) -> QualifiedIdentifier? {
+       let prefix = String(value.prefix(3)).uppercased()
+        let type: String
+
+        switch prefix {
+        case "LEI": type = QualifiedIdentifier.lei
+        case "VAT": type = QualifiedIdentifier.vatin
+        case "NTR": type = QualifiedIdentifier.euid
+        case "EOR": type = QualifiedIdentifier.eori
+        case "EXC": type = QualifiedIdentifier.excise
+        default: return nil
+        }
+        guard let hyphenIndex = value.firstIndex(of: "-") else {
+            return nil
+        }
+        let identifierValue = String(value[hyphenIndex...].dropFirst())
+        guard !identifierValue.isEmpty else { return nil }
+        return QualifiedIdentifier(type: type, value: identifierValue)
+	}
+
+	/// Sets the presentation result and optional reason of non-completion.
+	/// Replaces presented claims when supplied; otherwise keeps the recorded claims.
+	/// Preserves request and party details, and leaves other transaction types unchanged.
+	static func withResult(_ result: TransactionResult,
+		reason: String? = nil, presented: [ClaimInfo]? = nil, transactionLog: inout TransactionEntry) {
+		guard case let .presentation(previous) = transactionLog else { return }
+		transactionLog = .presentation(.init(
+			transactionIdentifier: previous.transactionIdentifier,
+			time: previous.time,
+			transactionResult: result,
+			reasonOfNoncompletion: reason,
+			listOfClaimsRequested: previous.listOfClaimsRequested,
+			listOfClaimsPresented: presented ?? previous.listOfClaimsPresented,
+			interactingPartyType: previous.interactingPartyType,
+			interactingPartyName: previous.interactingPartyName,
+			interactingPartyIdentifier: previous.interactingPartyIdentifier,
+			interactingPartyContact: previous.interactingPartyContact,
+			isIntermediary: previous.isIntermediary,
+			intermediaryIdentifier: previous.intermediaryIdentifier,
+			intermediaryName: previous.intermediaryName,
+			intermediaryContact: previous.intermediaryContact,
+			registrarURL: previous.registrarURL,
+			purpose: previous.purpose,
+			privacyPolicy: previous.privacyPolicy,
+			dpaName: previous.dpaName,
+			dpaCountry: previous.dpaCountry,
+			dpaContact: previous.dpaContact))
+	}
 }

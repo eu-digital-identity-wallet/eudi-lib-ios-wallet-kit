@@ -15,7 +15,7 @@
  */
 
 import Foundation
-import struct OpenID4VP.ClaimPath
+import struct MdocDataModel18013.ClaimPath
 import struct MdocDataModel18013.Status
 
 public struct WrpRegistrationPolicy: Decodable, Sendable {

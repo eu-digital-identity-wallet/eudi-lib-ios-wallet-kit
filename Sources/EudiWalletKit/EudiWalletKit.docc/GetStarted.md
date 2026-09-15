@@ -30,6 +30,19 @@ wallet.transactionLogger = MyFileTransactionLogger(wallet: wallet)
 wallet.loadAllDocuments()
 ```
 
+### Transaction logging
+
+Implement `TransactionLogger.log(transaction:)` with `TransactionEntry`. Persist entries by
+`transactionIdentifier`: subsequent calls update the same transaction. A request is saved with
+`transactionResult == .notCompleted` before credential selection, and updated after successful
+response delivery. Cancellation, failures, and interrupted sessions remain `NotCompleted`.
+`reasonOfNoncompletion` records a known reason.
+
+Presentation `listOfClaimsRequested` includes the union of every DCQL credential/claim alternative,
+including unavailable credential types and all `vct_values`. When claims are omitted, known paths
+from all matching wallet credentials are included. `listOfClaimsPresented` contains the disclosed
+claim paths. Entries do not store claim values.
+
 ### BLE Transfer Mode
 
 The ``EudiWallet/bleTransferMode`` property controls the Bluetooth Low Energy role used during proximity (ISO 18013-5) presentation.

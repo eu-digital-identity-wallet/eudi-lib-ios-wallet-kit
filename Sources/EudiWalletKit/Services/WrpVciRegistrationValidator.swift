@@ -31,7 +31,7 @@ public actor WrpVciRegistrationValidator {
 	public var wrpVciRegistrationPolicy: WrpRegistrationPolicy?
 	/// Typed violations collected during validation, keyed by credential configuration identifier; the empty key holds request-wide violations.
 	public var wrpVciWarnings = [String: [RegistrationPolicyViolation]]()
-	
+
 	public init(date: Date = .now, trustConfig: TrustConfiguration) {
 		self.trustConfig = trustConfig
 		self.date = date
@@ -65,7 +65,7 @@ public actor WrpVciRegistrationValidator {
 			var vciNotCoveredWarnings = [String: [RegistrationPolicyViolation]]()
 			Self.validateOfferedConfigurations(offeredConfigurations, policy: policy, wrpVciWarnings: &vciNotCoveredWarnings)
 			wrpVciWarnings.merge(vciNotCoveredWarnings, uniquingKeysWith: { (_, new) in new })
-			Self.validateEntitlements(offeredConfigurations, policy: policy, wrpVciWarnings: &wrpVciWarnings)
+			Self.validateEntitlements(offeredConfigurations, policy: policy, isPid: { trustConfig.pidAttestationTypes.contains($0) }, wrpVciWarnings: &wrpVciWarnings)
 			let policyViolationWarnings = wrpVciWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
 			// Under .enforce, hard failures block issuance.
 			if trustConfig.wrprcVciTrustPolicy == .enforce {
@@ -113,31 +113,35 @@ public actor WrpVciRegistrationValidator {
 		}
 	}
 
-	static let pidEntitlement = "https://uri.etsi.org/19475/Entitlement/PID_Provider"
-	static let pubEaaEntitlement = "https://uri.etsi.org/19475/Entitlement/PUB_EAA_Provider"
-	private static let pidMdocDocType = "eu.europa.ec.eudi.pid.1"
-	private static let pidSdJwtVct = "urn:eudi:pid:1"
-
-	/// Validate that the WRPRC entitlements contain the expected entitlement for the offered configurations.
-	/// PID configurations require `PID_Provider`; other configurations require `PUB_EAA_Provider`.
-	static func validateEntitlements(_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported], policy: WrpRegistrationPolicy, wrpVciWarnings: inout [String: [RegistrationPolicyViolation]]) {
-		let entitlements = policy.entitlements ?? []
-		let offeredIncludesPID = offeredConfigurations.values.contains { supported in
+	/// Records each unmet provider role. Non-PID offers accept any registered EAA role;
+	/// mixed offers require both PID and EAA registration.
+	static func validateEntitlements(
+		_ offeredConfigurations: [CredentialConfigurationIdentifier: CredentialSupported],
+		policy: WrpRegistrationPolicy,
+		isPid: (String) -> Bool,
+		wrpVciWarnings: inout [String: [RegistrationPolicyViolation]]
+	) {
+		let offered = offeredConfigurations.values.map { supported -> PolicyCredentialMeta in
 			switch supported {
-			case .msoMdoc(let msoMdoc): return msoMdoc.docType == pidMdocDocType
-			case .sdJwtVc(let sdJwtVc): return sdJwtVc.vct == pidSdJwtVct
-			default: return false
+			case .msoMdoc(let mdoc): return .init(doctypeValue: mdoc.docType)
+			case .sdJwtVc(let sdJwt): return .init(vctValues: sdJwt.vct.map { [$0] })
+			default: return .init()
 			}
 		}
-		let expectedEntitlement = offeredIncludesPID ? pidEntitlement : pubEaaEntitlement
-		if !entitlements.contains(expectedEntitlement) {
-			wrpVciWarnings["", default: []].append(RegistrationPolicyViolation(reason: .entitlementMissing(expected: expectedEntitlement), message: "WRPRC is missing required entitlement: \(expectedEntitlement)"))
+		let unmet = policy.findUnmetEntitlements(offered: offered, isPid: isPid)
+		for requirement in EntitlementRequirement.allCases where unmet.contains(requirement) {
+			let expected = requirement.acceptedEntitlements.joined(separator: " or ")
+			wrpVciWarnings["", default: []].append(RegistrationPolicyViolation(
+				reason: .entitlementMissing(expected: expected),
+				message: "WRPRC is missing required entitlement: \(expected)"
+			))
 		}
 	}
+
 }
 
 extension WrpVciRegistrationValidator {
-	
+
 	/// Decode the WRPRC token payload into a ``WrpRegistrationPolicy`` without performing any validation.
 	/// Used to preserve the decoded identity even when subsequent validation fails.
 	static func decodeWrprc(_ wrprcData: Data) throws -> WrpRegistrationPolicy {

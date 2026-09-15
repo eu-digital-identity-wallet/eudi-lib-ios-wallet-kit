@@ -58,7 +58,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// Local authentication context owned by the wallet and reused for every device-key operation.
 	public var localAuthenticationContext: ThreadSafeAuthContext
 	/// transaction logger
-	public var transactionLogger: (any TransactionLogger)?
+	public var transactionLogger: (any TransactionLogger)? {
+		didSet { presentationService.transactionLogger = transactionLogger }
+	}
 
 	public init(
 		presentationService: any PresentationService,
@@ -78,6 +80,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.localAuthenticationContext = localAuthenticationContext
 		self.transactionLogger = transactionLogger
+		self.presentationService.transactionLogger = transactionLogger
 	}
 
 	@MainActor
@@ -172,11 +175,15 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request object
 	public func receiveRequest() async -> [UserRequestInfo]? {
+		await presentationService.persistTransactionLog()
 		do {
 			let request = try await presentationService.receiveRequest()
+			await presentationService.persistTransactionLog()
 			try await decodeRequest(request)
 			return request
 		} catch {
+			TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &presentationService.transactionLog)
+			await presentationService.persistTransactionLog()
 			let walletError = error as? WalletError
 			await setError(error.localizedDescription, localizationKey: walletError?.localizationKey, code: walletError?.code ?? .internalError, innerError: error)
 			return nil
@@ -199,7 +206,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		}
 	}
 
-/// Send response to verifier
+	/// Send response to verifier
 	/// - Parameters:
 	///   - userAccepted: Whether user confirmed to send the response
 	///   - itemsToSend: Data to send organized into a hierarchy of doc.types and namespaces
@@ -209,22 +216,40 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }
-			let action = { [ weak self] in _ = try await self?.presentationService.sendResponse(
-				userAccepted: userAccepted,
-				itemsToSend: itemsToSend,
-				deviceNameSpacesToSend: deviceNameSpacesToSend,
-				authenticationContext: self?.localAuthenticationContext ?? ThreadSafeAuthContext(),
-				onSuccess: onSuccess)
+			let action = { [self] in
+				try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend,
+					deviceNameSpacesToSend: deviceNameSpacesToSend, authenticationContext: localAuthenticationContext, onSuccess: onSuccess)
+				return true
 			}
-			try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired, dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: ""), authenticationContext: localAuthenticationContext)
-			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: Array(itemsToSend.keys), zkpDocumentIds: presentationService.zkpDocumentIds)
+			let didSend = try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired || !userAccepted,
+				dismiss: { onCancel?() }, localizedReason: NSLocalizedString("authenticate_to_share_data", comment: ""), authenticationContext: localAuthenticationContext)
+			guard didSend == true else {
+				TransactionLogUtils.withResult(.notCompleted, reason: "User cancelled authentication", transactionLog: &presentationService.transactionLog)
+				await presentationService.persistTransactionLog()
+				return
+			}
+			await presentationService.persistTransactionLog()
+			let completed = presentationService.transactionLog.transactionResult == .completed
+			let presentedIds: [String]
+			if let bleService = presentationService as? BlePresentationService {
+				presentedIds = bleService.documentIds + (bleService.zkpDocumentIds ?? [])
+			} else if let openIdService = presentationService as? OpenId4VpService {
+				presentedIds = openIdService.presentedDocumentIds
+			} else {
+				presentedIds = completed ? Array(itemsToSend.keys) : []
+			}
+			try await updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: presentedIds, zkpDocumentIds: presentationService.zkpDocumentIds)
+			guard completed else { return }
 			await MainActor.run { status = .responseSent; storageManager?.objectWillChange.send() }
-			if let transactionLogger { do { try await transactionLogger.log(transaction: presentationService.transactionLog) } catch { logger.error("Failed to log transaction: \(error)") } }
+			await presentationService.persistTransactionLog()
 		} catch {
 			let walletError = error as? WalletError
 			await setError(error.localizedDescription, code: walletError?.code ?? .internalError, innerError: error)
-			let setErrorTransactionLog = presentationService.transactionLog.copy(status: .failed, errorMessage: error.localizedDescription)
-			if let transactionLogger { do { try await transactionLogger.log(transaction: setErrorTransactionLog) } catch { logger.error("Failed to log transaction") } }
+			// A storage/usage-counter error after successful dispatch does not undo the presentation.
+			if presentationService.transactionLog.transactionResult != .completed {
+				TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &presentationService.transactionLog)
+			}
+			await presentationService.persistTransactionLog()
 			throw error
 		}
 	}

@@ -1221,7 +1221,7 @@ struct DcqlQueryTests {
 		PolicyCredential(
 			format: doctype != nil ? "mso_mdoc" : "dc+sd-jwt",
 			meta: PolicyCredentialMeta(vctValues: vctValues, doctypeValue: doctype),
-			claim: claimPaths.map { PolicyClaim(path: ClaimPath($0.map { ClaimPathElement.claim(name: $0) })) }
+			claim: claimPaths.map { PolicyClaim(path: MdocDataModel18013.ClaimPath($0.map { .claim(name: $0) })) }
 		)
 	}
 

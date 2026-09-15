@@ -17,6 +17,7 @@ Created on 09/11/2023
 */
 import Foundation
 import OpenID4VCI
+import struct OpenID4VP.ClaimPath
 import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage
@@ -495,10 +496,10 @@ class PrecomputedSigner: JOSESwift.SignerProtocol {
 
 
 extension DocClaim {
-	var claimPath: ClaimPath {
-		ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
+	var claimPath: eudi_lib_sdjwt_swift.ClaimPath {
+		eudi_lib_sdjwt_swift.ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
 	}
-	var claimPaths: [ClaimPath] {
+	var claimPaths: [eudi_lib_sdjwt_swift.ClaimPath] {
 		if let children { children.map(\.claimPath) } else { [claimPath] }
 	}
 }
@@ -611,6 +612,31 @@ extension EudiWallet {
 			return nil
 		}
 		return credentialIssuer
+	}
+}
+
+extension OpenID4VP.ClaimPath {
+	var mdocClaimPath: MdocDataModel18013.ClaimPath {
+		MdocDataModel18013.ClaimPath(value.map { element in
+			switch element {
+			case .claim(let name): return .claim(name: name)
+			case .arrayElement(let index): return .arrayElement(index: index)
+			case .allArrayElements: return .allArrayElements
+			}
+		})
+	}
+}
+
+extension MdocDataModel18013.ClaimPath {
+	/// Converts a model claim path while preserving names, array indices, and wildcards.
+	var openID4VPClaimPath: OpenID4VP.ClaimPath {
+		OpenID4VP.ClaimPath(value.map { element in
+			switch element {
+			case .claim(let name): return .claim(name: name)
+			case .arrayElement(let index): return .arrayElement(index: index)
+			case .allArrayElements: return .allArrayElements
+			}
+		})
 	}
 }
 

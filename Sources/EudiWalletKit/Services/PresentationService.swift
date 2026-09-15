@@ -34,7 +34,8 @@ public protocol PresentationService: Sendable {
 	/// Receive request.
 	func receiveRequest() async throws -> [UserRequestInfo]
 
-	var transactionLog: TransactionLog { get }
+	var transactionLog: TransactionEntry { get set }
+	var transactionLogger: (any TransactionLogger)? { get set }
 
 	var zkpDocumentIds: [Document.ID]? { get }
 	/// The verifier (relying party) registration policy decoded from the WRPRC carried in the request, if any
@@ -60,3 +61,11 @@ public protocol NetworkingProtocol: Sendable {
 }
 
 extension URLSession: NetworkingProtocol {}
+
+
+extension PresentationService {
+	func persistTransactionLog() async {
+		do { try await transactionLogger?.log(transaction: transactionLog) }
+		catch { logger.error("Failed to log transaction: \(error)") }
+	}
+}

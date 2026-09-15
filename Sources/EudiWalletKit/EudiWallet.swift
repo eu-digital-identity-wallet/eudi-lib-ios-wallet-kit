@@ -205,7 +205,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		guard let vciService else {
 			throw WalletError(description: "No OpenId4VCI service registered for name \(issuerName)", code: .issuerNotRegistered)
 		}
-		
+
 		await vciService.setLocalAuthenticationContext(localAuthenticationContext: localAuthenticationContext)
 		return vciService
 	}
@@ -512,11 +512,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameter status: Status of documents to delete
 	public func deleteDocuments(status: WalletStorage.DocumentStatus) async throws  {
 		let docInfos = getDocumentInfos(for: status)
+		for info in docInfos { await logDeletionTransaction(info: info, status: .notCompleted) }
 		do {
 			try await storage.deleteDocuments(status: status)
 			for info in docInfos { await logDeletionTransaction(info: info, status: .completed) }
 		} catch {
-			for info in docInfos { await logDeletionTransaction(info: info, status: .failed, errorMessage: error.localizedDescription) }
+			for info in docInfos { await logDeletionTransaction(info: info, status: .notCompleted, errorMessage: error.localizedDescription) }
 			throw error
 		}
 	}
@@ -538,11 +539,12 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Throws: An error if the document could not be deleted.
 	public func deleteDocument(id: String, status: DocumentStatus) async throws {
 		let info = getDocumentInfos(for: status).first(where: { $0.id == id })
+		await logDeletionTransaction(info: info, status: .notCompleted)
 		do {
 			try await storage.deleteDocument(id: id, status: status)
 			await logDeletionTransaction(info: info, status: .completed)
 		} catch {
-			await logDeletionTransaction(info: info, status: .failed, errorMessage: error.localizedDescription)
+			await logDeletionTransaction(info: info, status: .notCompleted, errorMessage: error.localizedDescription)
 			throw error
 		}
 	}
@@ -552,6 +554,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let docType: String?
 		let displayName: String?
 		let dataFormat: DocDataFormat
+		let transactionIdentifier = UUID().uuidString
+		let time = Date()
 	}
 
 	private func getDocumentInfos(for status: DocumentStatus) -> [DocumentInfo] {
@@ -565,12 +569,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 	}
 
-	private func logDeletionTransaction(info: DocumentInfo?, status: TransactionLog.Status, errorMessage: String? = nil) async {
+	private func logDeletionTransaction(info: DocumentInfo?, status: TransactionResult, errorMessage: String? = nil) async {
 		// TODO: Should we log the deletion event even if the document info is not found?
 		guard let transactionLogger, let info else { return }
-		let transactionLog = TransactionLog(timestamp: TransactionLogUtils.getTimestamp(),
-			status: status, errorMessage: errorMessage, type: .deletion,
-			dataFormat: TransactionLog.DataFormat(info.dataFormat), documentId: info.id, docType: info.docType, displayName: info.displayName)
+		let transactionLog = TransactionEntry.credentialDeletion(.init(
+			transactionIdentifier: info.transactionIdentifier, time: info.time,
+			transactionResult: status, reasonOfNoncompletion: errorMessage,
+			credentialIdentifier: info.docType ?? info.id))
 		do {
 			try await transactionLogger.log(transaction: transactionLog)
 		} catch {
@@ -712,18 +717,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Parameters:
 	///   - dismiss: Action to perform if the user cancels authorization
 	///   - action: Action to perform after user authorization
-	public nonisolated static func authorizedAction<T: Sendable>(action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
+	public nonisolated static func authorizedAction<T>(action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
 		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason, authenticationContext: authenticationContext)
-	}
-
-	/// Parse transaction log
-	public func parseTransactionLog(_ transactionLog: TransactionLog) -> TransactionLogData {
-		switch transactionLog.type {
-			case .presentation: .presentation(log: PresentationLogData(transactionLog, uiCulture: eudiWalletConfig.uiCulture))
-			case .issuance: .issuance(log: IssuanceLogData(transactionLog))
-			case .deletion: .deletion(log: DeletionLogData(transactionLog))
-			case .signing: .signing
-		}
 	}
 
 	/// Get document status
@@ -747,7 +742,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// - Returns: An optional result of type `T` if the action is successful, otherwise `nil`.
 	///
 	/// - Throws: An error if the action fails.
-	static nonisolated func authorizedAction<T: Sendable>(isFallBack: Bool = false, action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
+	static nonisolated func authorizedAction<T>(isFallBack: Bool = false, action: sending () async throws -> T, disabled: Bool, dismiss: () -> Void, localizedReason: String, authenticationContext: ThreadSafeAuthContext) async throws -> T? {
 		guard !disabled else {
 			return try await action()
 		}

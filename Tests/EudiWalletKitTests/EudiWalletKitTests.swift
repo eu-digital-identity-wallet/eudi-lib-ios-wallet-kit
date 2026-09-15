@@ -385,7 +385,8 @@ struct EudiWalletKitTests {
 		try await service.validateIssuedDocuments(document, batch: nil, publicKeys: [publicKeyData])
 	}
 
-	@Test("Issued SD-JWT PID credential validation")
+	// Re-enable after replacing sjwt-pid-python.txt; it expired on 2026-09-09 at 23:00 UTC.
+	@Test("Issued SD-JWT PID credential validation", .disabled("SD-JWT PID fixture expired on 2026-09-09"))
 	func testValidateIssuedSdJwtCredential() async throws {
 		let storageService = TestDataStorageService()
 		let service = try makeVciService(storageService: storageService)

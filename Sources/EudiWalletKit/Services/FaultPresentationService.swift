@@ -27,18 +27,19 @@ public final class FaultPresentationService: @unchecked Sendable, PresentationSe
 	var error: Error
 	public var wrpVerifierPolicy: WrpRegistrationPolicy?
 	public var wrpVerifierWarnings: [String: [PresentationPolicyViolation]]?
-	public var transactionLog: TransactionLog
+	public var transactionLogger: (any TransactionLogger)?
+	public var transactionLog: TransactionEntry
 
 	public init(msg: String) {
 		self.error = WalletError(description: msg, code: .internalError)
-		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, errorMessage: msg, type: .presentation, dataFormat: .cbor)
-		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
+		self.transactionLog = TransactionLogUtils.createEmptyPresentationLog()
+		TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &transactionLog)
 	}
 
 	public init(error: Error) {
 		self.error = error
-		self.transactionLog = TransactionLog(timestamp: Int64(Date.now.timeIntervalSince1970.rounded()), status: .failed, type: .presentation, dataFormat: .cbor)
-		TransactionLogUtils.setErrorTransactionLog(type: .presentation, error: error, transactionLog: &transactionLog)
+		self.transactionLog = TransactionLogUtils.createEmptyPresentationLog()
+		TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &transactionLog)
 	}
 
 	public func startQrEngagement(secureAreaName: String?, keyOptions: KeyOptions) async throws -> String {

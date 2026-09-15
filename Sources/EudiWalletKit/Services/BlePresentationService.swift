@@ -36,6 +36,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var isCentralManagerPoweredOn = false
 	var continuationPowerOn: CheckedContinuation<Void, Error>?
 	var continuationRequest: CheckedContinuation<UserRequestInfo, Error>?
+	var responsePreparationError: Error?
+	var preparedClaims: [ClaimInfo] = []
+	var responseIncludesAllSelectedClaims = false
 	var continuationDisconnect: CheckedContinuation<Void, Error>?
     /// Continuation for awaiting L2CAP PSM publication
     var psm: UInt16?
@@ -43,7 +46,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	var readBuffer = Data()
 	public var wrpVerifierPolicy: WrpRegistrationPolicy?
 	public var wrpVerifierWarnings: [String: [PresentationPolicyViolation]]?
-	public var transactionLog: TransactionLog
+	public var transactionLogger: (any TransactionLogger)?
+	public var transactionLog: TransactionEntry
 	public var documentIds: [Document.ID] = []
 	public var zkpDocumentIds: [Document.ID]?
 	public var flow: FlowType { .ble }
@@ -80,7 +84,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		let factory = transportFactory ?? DefaultBleTransportFactory()
 		bleTranport = bleTransferMode == .server ? factory.createServer() : factory.createClient()
 		if bleTransferMode == .both { bleServer = factory.createServer() }
-		transactionLog = TransactionLogUtils.initializeTransactionLog(type: .presentation, dataFormat: .cbor)
+		transactionLog = TransactionLogUtils.createEmptyPresentationLog()
 		bleTranport.delegate = self
 		bleServer?.delegate = self
 	}
@@ -157,6 +161,9 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
+				TransactionLogUtils.withRequest(TransactionLogUtils.parseRequestedClaims(decoded.deviceRequest), policy: nil,
+					name: decoded.userRequestInfo.defaultReaderAuthResult?.legalName ?? decoded.userRequestInfo.defaultReaderAuthResult?.certificateIssuer,
+					transactionLog: &transactionLog)
 				sessionEncryption = decoded.sessionEncryption
 				if decoded.isValidRequest {
 					do {
@@ -244,23 +251,32 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 
 	public func userSelected(_ b: Bool, _ items: RequestItems?, _ deviceNameSpaces: RequestDeviceNameSpaces? = nil) async {
 		status = .userSelected
+		responsePreparationError = nil
+		documentIds = []
+		zkpDocumentIds = []
+		preparedClaims = []
+		responseIncludesAllSelectedClaims = false
 		let resError = await MdocHelpers.getSessionDataToSend(sessionEncryption: sessionEncryption, status: .error, docToSend: DeviceResponse(status: 0))
 		var bytesToSend = try! resError.get()
 		deviceResponseBytes = bytesToSend.1
 		var errorToSend: Error?
 		defer {
-			logger.info("Prepare \(bytesToSend.0.count) bytes to send")
-			bleTranport.sendData(bytesToSend.0)
+			responsePreparationError = Task.isCancelled ? CancellationError() : errorToSend
+			if !Task.isCancelled {
+				logger.info("Prepare \(bytesToSend.0.count) bytes to send")
+				bleTranport.sendData(bytesToSend.0)
+			}
 		}
 		if !b {
 			errorToSend = MdocHelpers.makeError(code: .userRejected)
+			return
 		}
 		if let items {
 			do {
 				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
 				let compactDocMetadata = docMetadata.compactMapValues { $0 }
 				let eReaderKey = sessionEncryption!.sessionKeys.publicKey
-				guard let (drToSend, _, _, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(
+				guard let (drToSend, validItems, errorItems, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(
 					deviceRequest: deviceRequest!,
 					issuerSigned: docs,
 					docMetadata: compactDocMetadata,
@@ -288,6 +304,8 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 					responseMetadata = resMetadata
 					documentIds = resDocIds
 					zkpDocumentIds = resZkpDocIds
+					preparedClaims = TransactionLogUtils.parseCborClaims(validItems)
+					responseIncludesAllSelectedClaims = !errorItems.values.contains { $0.values.contains { !$0.isEmpty } }
 				case .failure(let err):
 					errorToSend = err
 					return
@@ -305,11 +323,20 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 	///
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> [UserRequestInfo] {
-		let userRequestInfo = try await withCheckedThrowingContinuation { c in
-			continuationRequest = c
+		do {
+			let userRequestInfo = try await withCheckedThrowingContinuation { c in
+				continuationRequest = c
+			}
+			TransactionLogUtils.withRequest(deviceRequest.map { TransactionLogUtils.parseRequestedClaims($0) } ?? TransactionLogUtils.parseCborClaims(userRequestInfo.itemsRequested), policy: wrpVerifierPolicy,
+				name: userRequestInfo.defaultReaderAuthResult?.legalName ?? userRequestInfo.defaultReaderAuthResult?.certificateIssuer,
+				transactionLog: &transactionLog)
+			await persistTransactionLog()
+			return [userRequestInfo]
+		} catch {
+			TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &transactionLog)
+			await persistTransactionLog()
+			throw error
 		}
-		TransactionLogUtils.setCborTransactionLogRequestInfo(userRequestInfo, wrpVpPolicy: wrpVerifierPolicy, transactionLog: &transactionLog)
-		return [userRequestInfo]
 	}
 
 	public func unlockKey(id: String) async throws -> Data? {
@@ -326,13 +353,23 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, authenticationContext: ThreadSafeAuthContext, onSuccess: (@Sendable (URL?) -> Void)?) async throws  {
-		self.authenticationContext = authenticationContext
-		await userSelected(userAccepted, itemsToSend, deviceNameSpacesToSend)
-		// documentIds is populated by userSelected after a successful response build.
-		// docType and displayName are not available on this service; they are populated by the PresentationSession caller which has access to docIdToPresentInfo.
-		let firstDocId = documentIds.first
-		let firstDocType = firstDocId.flatMap { docs[$0]?.issuerAuth.mso.docType }
-		TransactionLogUtils.setCborTransactionLogResponseInfo(self, documentId: firstDocId, docType: firstDocType, displayName: nil, transactionLog: &transactionLog)
+		do {
+			self.authenticationContext = authenticationContext
+			try Task.checkCancellation()
+			await userSelected(userAccepted, itemsToSend, deviceNameSpacesToSend)
+			if let error = responsePreparationError { throw error }
+			let sentIds = Set(documentIds + (zkpDocumentIds ?? []))
+			let selectedIds = Set(itemsToSend.keys)
+			let completed = userAccepted && !sentIds.isEmpty && sentIds == selectedIds && responseIncludesAllSelectedClaims
+			TransactionLogUtils.withResult(completed ? .completed : .notCompleted,
+				reason: completed ? nil : "Not all selected credentials were sent", presented: preparedClaims, transactionLog: &transactionLog)
+			await persistTransactionLog()
+			if completed { onSuccess?(nil) }
+		} catch {
+			TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &transactionLog)
+			await persistTransactionLog()
+			throw error
+		}
 	}
 
 	public func waitForDisconnect() async throws {
