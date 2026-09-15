@@ -1,3 +1,9 @@
+- Update `eudi-lib-ios-openid4vp-swift` to version 0.42.0.
+
+## v0.52.0
+
+- Add the `OpenId4VciConfiguration.allowPlainJwtProof` flag. It defaults to `false` (HAIP-compliant attested proofs only); when enabled, issuance also accepts plain JWT proofs without key attestation using ES256, ES384, or ES512.
+
 ## v0.51.0
 
 ### Swift Data Storage
