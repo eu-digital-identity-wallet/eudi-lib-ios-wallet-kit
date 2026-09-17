@@ -36,6 +36,7 @@ import class eudi_lib_sdjwt_swift.SdJwtVcIssuerMetaDataFetcher
 import class eudi_lib_sdjwt_swift.SignatureVerifier
 import protocol eudi_lib_sdjwt_swift.KeyExpressible
 import struct eudi_lib_sdjwt_swift.SignedSDJWT
+import JSONWebAlgorithms
 
 public actor OpenId4VciService {
 	var issueReq: IssueRequest!
@@ -1113,6 +1114,7 @@ public actor OpenId4VciService {
 		try validateSdJwtBindingKeys(serialized, publicCoseKeys: &publicCoseKeys)
 		let expectedIssuer = try expectedSdJwtIssuerURL()
 		let signedSdJwt = try CompactParser().getSignedSdJwt(serialisedString: serialized)
+		try Self.validateSdJwtIssuerSignatureAlgorithm(signedSdJwt.jwt.protectedHeader.algorithm)
 		let hasX5c = !(signedSdJwt.jwt.protectedHeader.x509CertificateChain ?? []).isEmpty
 		try validateSdJwtIssuer(serialized, expectedIssuer: expectedIssuer, requireIssuer: !hasX5c)
 		let verifier = SDJWTVerifier(sdJwt: signedSdJwt)
@@ -1137,6 +1139,28 @@ public actor OpenId4VciService {
 			claimVerifier: { nbf, exp in ClaimsVerifier(nbf: nbf, exp: exp) }
 		)
 		try validateVerificationResult(result)
+	}
+
+	static func validateSdJwtIssuerSignatureAlgorithm(_ algorithm: JSONWebAlgorithms.SigningAlgorithm?) throws {
+		guard let algorithm else {
+			throw WalletError(
+				description: "Issued SD-JWT is missing an issuer signature algorithm",
+				code: .unsupportedAlgorithm
+			)
+		}
+		switch algorithm {
+		case .RS256, .RS384, .RS512,
+			 .ES256, .ES384, .ES512, .ES256K,
+			 .PS256, .PS384, .PS512,
+			 .EdDSA:
+			return
+		case .HS256, .HS384, .HS512, .none, .invalid:
+			throw WalletError(
+				description: "Unsupported issued SD-JWT issuer signature algorithm: \(algorithm.rawValue)",
+				code: .unsupportedAlgorithm,
+				context: ["algorithm": algorithm.rawValue]
+			)
+		}
 	}
 
 	private func validateSdJwtBindingKeys(_ serialized: String, publicCoseKeys: inout [CoseKey]) throws {
