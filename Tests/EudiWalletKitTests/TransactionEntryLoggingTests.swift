@@ -102,6 +102,26 @@ struct TransactionEntryLoggingTests {
         #expect(TransactionLogUtils.interactingPartyName(policy) == "Legal name")
     }
 
+    @Test("Credential issuer fields retain the issuer name and qualified identifier")
+    func credentialIssuerFields() {
+        let qualified = TransactionLogUtils.credentialIssuer(name: "Example Issuer", identifier: "LEI-123")
+        #expect(qualified.name?.content == "Example Issuer")
+        #expect(qualified.identifier == .init(type: QualifiedIdentifier.lei, value: "123"))
+
+        let url = TransactionLogUtils.credentialIssuer(name: nil, identifier: "https://issuer.example")
+        #expect(url.name?.content == "https://issuer.example")
+        #expect(url.identifier == nil)
+    }
+
+    @Test("Verifier certificate subject takes precedence over its CA-derived legal name")
+    func verifierCertificateName() {
+        let name = TransactionLogUtils.verifierName(
+            legalName: "Example CA",
+            certificateSubject: "C=CY, O=Example Verifier, CN=verifier.example")
+        #expect(name == "verifier.example")
+        #expect(TransactionLogUtils.verifierName(legalName: "Pre-registered verifier", certificateSubject: nil) == "Pre-registered verifier")
+    }
+
     @Test("Request failure is persisted under the original transaction identifier")
     func requestFailure() async {
         let recorder = RecordingTransactionLogger()

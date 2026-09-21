@@ -176,6 +176,24 @@ enum TransactionLogUtils {
 		}?.1.rawValue
 	}
 
+	/// Builds the issuer fields used by credential lifecycle entries.
+	/// The issuer URL is retained as a display fallback when it is not an ETSI qualified identifier.
+	static func credentialIssuer(name: String?, identifier: String?) -> (identifier: QualifiedIdentifier?, name: MultiLangString?) {
+		let issuerName = [name, identifier]
+			.compactMap { $0?.isEmpty == false ? $0 : nil }
+			.first
+		return (
+			identifier.flatMap { toQualifiedIdentifier($0) },
+			issuerName.map { .init(lang: defaultLang, content: $0) }
+		)
+	}
+
+	/// Prefers the verifier identity from the leaf access certificate over a legal name
+	/// derived from the certificate issuer.
+	static func verifierName(legalName: String?, certificateSubject: String?) -> String? {
+		certificateSubject.map(MdocHelpers.getCN(from:)) ?? legalName
+	}
+
 	/// Parses a an ETSI EN 319 412-1 semantic identifier.
 	static func toQualifiedIdentifier(_ value: String) -> QualifiedIdentifier? {
        let prefix = String(value.prefix(3)).uppercased()
