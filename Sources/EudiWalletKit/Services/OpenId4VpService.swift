@@ -167,7 +167,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		if case let .byDigitalCredentialsQuery(dcql) = vp.presentationQuery {
 			self.dcql = dcql
 			TransactionLogUtils.withRequest(TransactionLogUtils.parseRequestedClaims(dcql, queryable: dcqlQueryable ?? decodeDocuments()), policy: wrpVerifierPolicy,
-				name: rrd.legalName ?? readerCertificateIssuer, identifier: resolvedClientId, transactionLog: &transactionLog)
+				name: TransactionLogUtils.verifierName(legalName: rrd.legalName, certificateSubject: readerCertificateIssuer), identifier: resolvedClientId, transactionLog: &transactionLog)
 			await persistTransactionLog()
 			let deviceRequestBytes = try? JSONEncoder().encode(dcql)
 			let (fmtsReq, imap, zkSpecMap) = try OpenId4VpUtils.parseDcqlFormats(dcql, idsToDocTypes: transferInfo.idsToDocTypes, logger: logger)
@@ -374,7 +374,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard let self else { return false }
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
 		guard certsData.count > 0, certsData.count == b64certs.count else { return false }
-		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData.last!)) else { return false }
+		// x5c is leaf-first. The leaf identifies the verifier; the last certificate is normally a CA.
+		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData[0])) else { return false }
 		self.readerCertificateIssuer = x509.subject.description
 		// Validate the reader access certificate chain against the configured trust anchors (WRPAC context).
 		let (isValid, failureReason) = await self.trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)

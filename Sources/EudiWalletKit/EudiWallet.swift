@@ -552,8 +552,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	private struct DocumentInfo {
 		let id: String
 		let docType: String?
-		let displayName: String?
-		let dataFormat: DocDataFormat
+		let issuerName: String?
+		let issuerIdentifier: String?
 		let transactionIdentifier = UUID().uuidString
 		let time = Date()
 	}
@@ -561,21 +561,36 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	private func getDocumentInfos(for status: DocumentStatus) -> [DocumentInfo] {
 		switch status {
 		case .issued:
-			return storage.docModels.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+			return storage.docModels.map {
+				let issuerName = $0.issuerDisplay?.getName(eudiWalletConfig.uiCulture)
+				return DocumentInfo(id: $0.id, docType: $0.docType, issuerName: issuerName, issuerIdentifier: $0.credentialIssuerIdentifier)
+			}
 		case .pending:
-			return storage.pendingDocuments.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+			return storage.pendingDocuments.map(documentInfo)
 		case .deferred:
-			return storage.deferredDocuments.map { DocumentInfo(id: $0.id, docType: $0.docType, displayName: $0.displayName, dataFormat: $0.docDataFormat) }
+			return storage.deferredDocuments.map(documentInfo)
 		}
+	}
+
+	private func documentInfo(_ document: WalletStorage.Document) -> DocumentInfo {
+		let metadata = DocMetadata(from: document.metadata)
+		return DocumentInfo(
+			id: document.id,
+			docType: document.docType,
+			issuerName: metadata?.getIssuerDisplayName(eudiWalletConfig.uiCulture),
+			issuerIdentifier: metadata?.credentialIssuerIdentifier)
 	}
 
 	private func logDeletionTransaction(info: DocumentInfo?, status: TransactionResult, errorMessage: String? = nil) async {
 		// TODO: Should we log the deletion event even if the document info is not found?
 		guard let transactionLogger, let info else { return }
+		let issuer = TransactionLogUtils.credentialIssuer(name: info.issuerName, identifier: info.issuerIdentifier)
 		let transactionLog = TransactionEntry.credentialDeletion(.init(
 			transactionIdentifier: info.transactionIdentifier, time: info.time,
 			transactionResult: status, reasonOfNoncompletion: errorMessage,
-			credentialIdentifier: info.docType ?? info.id))
+			credentialIdentifier: info.docType ?? info.id,
+			credentialIssuerIdentifier: issuer.identifier,
+			credentialIssuerName: issuer.name))
 		do {
 			try await transactionLogger.log(transaction: transactionLog)
 		} catch {
