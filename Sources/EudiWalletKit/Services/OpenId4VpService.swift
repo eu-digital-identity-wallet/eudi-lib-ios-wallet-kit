@@ -133,7 +133,13 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
-			if let details { logger.error("Details: \(details)") }
+			if let details {
+				logger.error("Details: \(details)")
+				do {
+					let outcome = try await openId4Vp.dispatch(error: error, details: details)
+					if case .rejected = outcome { logger.warning("Verifier rejected error response") }
+				} catch { logger.error("Failed to dispatch error response: \(error.localizedDescription)") }
+			}
 			throw WalletError(description: "OpenID4VP request error: \(readerCertificateValidationMessage ?? error.errorDescription ?? error.localizedDescription)", code: readerCertificateValidationMessage != nil ? .trustError : .invalidQueryResolution, innerError: error)
 		case let .jwt(request: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
@@ -406,7 +412,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			vpFormatsSupported: [],
 			jarConfiguration: .encryptionOption,
 			vpConfiguration: try! .init(vpFormatsSupported: .default(), supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
-			errorDispatchPolicy: .allClients,
+			errorDispatchPolicy: openID4VpConfig.errorDispatchPolicy,
 			session: networking,
 			responseEncryptionConfiguration: openID4VpConfig.responseEncryptionConfiguration ?? .default(),
 			registrationCertificatePolicy: openID4VpConfig.validateRegistrationCertificate ? .default(validator: wrpRegistrationValidator) : nil
