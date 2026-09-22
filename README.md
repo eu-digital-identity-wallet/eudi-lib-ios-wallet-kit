@@ -137,6 +137,8 @@ let wallet = try! EudiWallet(
 
 Set `preferredResponseMode` to override the response mode requested by the verifier. When set to `.directPost`, the authorization response is sent as a plain POST. When set to `.directPostJWT`, the response is sent as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode specified by the verifier.
 
+`OpenId4VpConfiguration.errorDispatchPolicy` controls which verifiers may receive protocol-level errors when a request fails validation. The default is `.allClients`, retaining the existing configuration and allowing notifications even when verifier authentication fails. Set `errorDispatchPolicy: .onlyAuthenticatedClients` to restrict notifications to authenticated verifiers. Errors are sent only when the OpenID4VP library supplies dispatch details.
+
 ### Trust configuration
 
 `EudiWallet` requires a `TrustConfiguration` that describes where trust anchors come from and how trust failures are handled. A single `TrustConfiguration` drives certificate-chain validation across the wallet:

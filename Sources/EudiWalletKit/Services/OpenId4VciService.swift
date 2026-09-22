@@ -502,8 +502,10 @@ public actor OpenId4VciService {
 		let offerUri = UUID().uuidString
 		Self.credentialOfferCache[offerUri] = offer
 		let docTypes = [makeOfferedDocModel(from: credentialConfiguration, credentialOptions: credentialOptions, keyOptions: keyOptions)]
+		// One transaction spans the initial attempt and any token-refresh retry.
+		let transactionId = UUID().uuidString
 		let reissueAction: (Bool) async throws -> [WalletStorage.Document] = { forceRefreshToken in
-			return try await self.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, forceRefreshToken: forceRefreshToken, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage, backgroundOnly: backgroundOnly)
+			return try await self.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, forceRefreshToken: forceRefreshToken, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage, backgroundOnly: backgroundOnly, issuanceTransactionIds: [transactionId])
 		}
 		do {
 			return try await reissueAction(false)
@@ -546,8 +548,12 @@ public actor OpenId4VciService {
 	///   - docTypes: offered doc models available to be issued. Contains key options (secure are name and other options)
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - promptMessage: prompt message for biometric authentication (optional)
+	///   - issuanceTransactionIds: Stable log IDs per offered document, shared across retries. When omitted, each attempt uses its document IDs.
 	/// - Returns: Array of issued and stored documents
-	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, forceRefreshToken: Bool = false, documentId: String?, txCodeValue: String? = nil, promptMessage: String? = nil, backgroundOnly: Bool = false) async throws -> [WalletStorage.Document] {
+	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, forceRefreshToken: Bool = false, documentId: String?, txCodeValue: String? = nil, promptMessage: String? = nil, backgroundOnly: Bool = false, issuanceTransactionIds: [String]? = nil) async throws -> [WalletStorage.Document] {
+		if let issuanceTransactionIds, issuanceTransactionIds.count != docTypes.count {
+			throw WalletError(description: "Expected one issuance transaction ID per offered document", code: .internalError)
+		}
 		if docTypes.isEmpty { return [] }
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw WalletError(description: "Offer URI not resolved: \(offerUri)", code: .offerResolutionFailed)
@@ -559,9 +565,10 @@ public actor OpenId4VciService {
 				guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
 				let svc = try OpenId4VciService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService, trustConfig: trustConfig, localAuthenticationContext: localAuthenticationContext)
 				if let documentId { logger.info("Resolve offer to update document with id \(documentId)") }
-				let id = UUID().uuidString //(i == 0 ? documentId : nil) ?? UUID().uuidString
-				transactionIds.append(id)
-				await logIssuanceTransaction(id: id, status: .notCompleted, requested: docTypeModel.credentialOptions.batchSize,
+				let id = UUID().uuidString
+				let transactionId = issuanceTransactionIds?[i] ?? id
+				transactionIds.append(transactionId)
+				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: docTypeModel.credentialOptions.batchSize,
 					docType: docTypeModel.docTypeOrVct, issuerName: offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture),
 					issuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString, reissuance: documentId != nil, isUserTriggered: !backgroundOnly)
 				try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: docTypeModel.credentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage, offer: offer)
@@ -576,10 +583,11 @@ public actor OpenId4VciService {
 			let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
 			let documents = try await withThrowingTaskGroup(of: WalletStorage.Document.self) { group in
 				for (i, openId4VCIService) in openId4VCIServices.enumerated() {
+					let transactionId = transactionIds[i]
 					group.addTask {
 						let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(credentialInfos[i], issuer: issuerIdentifier)
 						let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage)
-						return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, issuer: issuer, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl)
+						return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, issuer: issuer, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, transactionId: transactionId)
 					}
 				}
 				var result =  [WalletStorage.Document]()
@@ -1025,11 +1033,12 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, issuer: (any IssuerType)? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil) async throws -> WalletStorage.Document  {
+	func finalizeIssuing(issueOutcome: IssuanceOutcome, docType: String?, format: DocDataFormat, issueReq: IssueRequest, deleteId: String?, issuer: (any IssuerType)? = nil, issuerName: String? = nil, issuerIdentifier: String? = nil, issuerLogoUrl: String? = nil, transactionId: String? = nil) async throws -> WalletStorage.Document  {
+		let transactionId = transactionId ?? issueReq.id
 		var issuedNotificationId: String? = nil
 		var issuedAuthorizedRequest: AuthorizedRequest? = nil
-		if issuanceLogs[issueReq.id] == nil {
-			await logIssuanceTransaction(id: issueReq.id, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+		if issuanceLogs[transactionId] == nil {
+			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
 				docType: docType, issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil)
 		}
 		do {
@@ -1071,7 +1080,7 @@ public actor OpenId4VciService {
 			let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
 			let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata.toData(), displayName: displayName, status: newDocStatus)
 			if newDocStatus == .pending {
-				await logIssuanceTransaction(id: issueReq.id, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
 					docType: docType, issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil, errorMessage: "Issuance pending")
 				await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 				return newDocument
@@ -1084,7 +1093,7 @@ public actor OpenId4VciService {
 			if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
 			let issuedCount = newDocStatus == .issued ? (batch?.count ?? 1) : 0
 			let complete = newDocStatus == .issued && issuedCount == issueReq.credentialOptions.batchSize
-			await logIssuanceTransaction(id: issueReq.id, status: complete ? .completed : .notCompleted,
+			await logIssuanceTransaction(id: transactionId, status: complete ? .completed : .notCompleted,
 				requested: issueReq.credentialOptions.batchSize, issued: issuedCount, docType: newDocument.docType,
 				issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil,
 				errorMessage: complete ? nil : (newDocStatus == .deferred ? "Issuance deferred" : "Not all requested credentials were issued"))
@@ -1098,7 +1107,7 @@ public actor OpenId4VciService {
 			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
 				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialFailure, eventDescription: error.localizedDescription)
 			}
-			await logIssuanceTransaction(id: issueReq.id, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
 				docType: docType, issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil, errorMessage: error.localizedDescription)
 			throw error
 		}
