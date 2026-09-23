@@ -1,5 +1,5 @@
 {
-  "originHash" : "094c680320c3c7153f73918c30115ad5ae2d4038eb6611aa41f7973405a3d284",
+  "originHash" : "66bce9ae7c2ad550ec80921c31da74caf16f2a8d58e5486ac684632a7a91cdbd",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-statium-swift.git",
       "state" : {
-        "revision" : "d3cb29f978b7c5f839351e56bc9b433c105a5737",
-        "version" : "0.5.0"
+        "revision" : "da66b71423a5b8a27799d105449d3c0e154230dc",
+        "version" : "0.6.0"
       }
     },
     {
