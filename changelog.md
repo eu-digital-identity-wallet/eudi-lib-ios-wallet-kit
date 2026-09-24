@@ -1,4 +1,5 @@
 - Update `eudi-lib-ios-openid4vp-swift` to version 0.42.0.
+- Preserve credential issuer metadata failures when credential-offer resolution fails, including unsigned metadata, invalid content types, untrusted signed metadata, and network errors.
 
 ## v0.52.0
 

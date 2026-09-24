@@ -591,6 +591,77 @@ extension JOSESwift.JWK {
 	}
 }
 
+extension CredentialOfferRequest {
+	func recoverMetadataError(
+		from resolverError: Error,
+		policy: IssuerMetadataPolicy,
+		fetcher: Fetcher<CredentialOfferRequestObject>,
+		metadataResolver: CredentialIssuerMetadataResolver
+	) async -> Error {
+		guard Self.isFlattenedMetadataError(resolverError) else { return resolverError }
+
+		do {
+			let requestObject: CredentialOfferRequestObject
+			switch self {
+			case .passByValue(let metadata):
+				guard let parsed = CredentialOfferRequestObject(jsonString: metadata) else {
+					return resolverError
+				}
+				requestObject = parsed
+
+			case .fetchByReference(let url):
+				switch await fetcher.fetch(url: url) {
+				case .success(let fetched):
+					requestObject = fetched
+				case .failure:
+					return resolverError
+				}
+			}
+
+			let issuerId = try CredentialIssuerId(requestObject.credentialIssuer)
+			switch try await metadataResolver.resolve(
+				source: .credentialIssuer(issuerId),
+				policy: policy
+			) {
+			case .success:
+				return resolverError
+			case .failure(let error):
+				return error
+			}
+		} catch {
+			return error
+		}
+	}
+
+	static func metadataErrorDescription(for error: Error) -> String {
+		guard let error = error as? CredentialIssuerMetadataError else {
+			return error.localizedDescription
+		}
+
+		switch error {
+		case .unableToFetchCredentialIssuerMetadata(let cause):
+			return "Unable to fetch credential issuer metadata: \(cause.localizedDescription)"
+		case .missingSignedMetadata:
+			return "Credential issuer metadata is not signed"
+		case .missingContentType(let reason):
+			return reason
+		case .missingRightContentTypeHeader:
+			return "Credential issuer metadata has an invalid Content-Type"
+		case .invalidSignedMetadata(let reason):
+			return "Invalid signed credential issuer metadata: \(reason)"
+		case .invalidIssuerTrust:
+			return "Credential issuer metadata is not issued by a trusted issuer"
+		default:
+			return String(describing: error)
+		}
+	}
+
+	private static func isFlattenedMetadataError(_ error: Error) -> Bool {
+		guard case .error(let reason) = error as? ValidationError else { return false }
+		return reason == "Invalid credential metadata"
+	}
+}
+
 extension EudiWallet {
 	/// Try to resolve a pre-registered VCI service directly from credential offer URL parameters.
 	func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {

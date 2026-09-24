@@ -162,7 +162,7 @@ public actor OpenId4VciService {
 	func setConfiguration(_ config: OpenId4VciConfiguration) {
 		self.config = config
 	}
-	
+
 	func setLocalAuthenticationContext(localAuthenticationContext: ThreadSafeAuthContext = ThreadSafeAuthContext()) {
 		self.localAuthenticationContext = localAuthenticationContext
 	}
@@ -211,12 +211,15 @@ public actor OpenId4VciService {
 		let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networking)
 		let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
 		let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
-		let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: config.issuerMetadataPolicy)
+		let result = await resolver.resolve(source: try CredentialOfferRequest(urlString: offerUri), policy: config.issuerMetadataPolicy)
 		switch result {
 		case .success(let offer):
 			return try await resolveOfferDocTypes(offerUri: offerUri, offer: offer)
 		case .failure(let error):
-			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)", code: .offerResolutionFailed, innerError: error)
+			let recoverySource = try CredentialOfferRequest(urlString: offerUri)
+			let recoveredError = await recoverySource.recoverMetadataError(
+				from: error, policy: config.issuerMetadataPolicy, fetcher: fetcher, metadataResolver: metadataResolver)
+			throw WalletError(description: "Unable to resolve credential offer: \(CredentialOfferRequest.metadataErrorDescription(for: recoveredError))", code: .offerResolutionFailed, innerError: recoveredError)
 		}
 	}
 

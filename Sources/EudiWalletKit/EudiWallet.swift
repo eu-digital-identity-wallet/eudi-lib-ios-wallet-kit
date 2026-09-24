@@ -405,13 +405,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let oauthFetcher = Fetcher<AuthorizationServerMetadata>(session: networkingVci)
 		let authorizationResolver = AuthorizationServerMetadataResolver(oidcFetcher: oidcFetcher, oauthFetcher: oauthFetcher)
 		let resolver = CredentialOfferRequestResolver(fetcher: fetcher, credentialIssuerMetadataResolver: metadataResolver, authorizationServerMetadataResolver: authorizationResolver)
-		let result = await resolver.resolve(source: try .init(urlString: offerUri), policy: policy)
+		let result = await resolver.resolve(source: try CredentialOfferRequest(urlString: offerUri), policy: policy)
 		switch result {
 		case .success(let offer):
 			Self.credentialOfferCache[offerUri] = offer
 			return offer
 		case .failure(let error):
-			throw WalletError(description: "Unable to resolve credential offer: \(error.localizedDescription)", code: .offerResolutionFailed, innerError: error)
+			let recoverySource = try CredentialOfferRequest(urlString: offerUri)
+			let recoveredError = await recoverySource.recoverMetadataError(
+				from: error,
+				policy: policy,
+				fetcher: fetcher,
+				metadataResolver: metadataResolver
+			)
+			throw WalletError(description: "Unable to resolve credential offer: \(CredentialOfferRequest.metadataErrorDescription(for: recoveredError))", code: .offerResolutionFailed, innerError: recoveredError)
 		}
 	}
 
