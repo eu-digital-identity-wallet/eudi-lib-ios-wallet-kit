@@ -688,16 +688,16 @@ public actor OpenId4VciService {
 		let authResult = try await loginUserAndGetAuthCode(authorizationCodeURL: parPlaced.authorizationCodeURL.url)
 		logger.info("--> [AUTHORIZATION] Authorization code retrieved")
 		switch authResult {
-		case .code(let authorizationCode, let serverState):
-			return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: parPlaced, authorizationCode: authorizationCode, serverState: serverState))
+		case .code(let authorizationCode, let serverState, let iss):
+			return .authorized(try await handleAuthorizationCode(issuer: issuer, offer: offer, request: parPlaced, authorizationCode: authorizationCode, serverState: serverState, iss: iss))
 		case .presentation_request(let url):
 			return .presentation_request(url)
 		}
 	}
 
-	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String, serverState: String?) async throws -> AuthorizedRequest {
+	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String, serverState: String?, iss: String?) async throws -> AuthorizedRequest {
 		let typedAuthorizationCode = try AuthorizationCode(value: authorizationCode)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: serverState ?? request.state, request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)))
+		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: serverState ?? request.state, request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)), issuerFromRedirect: iss.flatMap(URL.init(string:)))
 		let at = authorized.accessToken
 		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
@@ -865,7 +865,7 @@ public actor OpenId4VciService {
 			throw WalletError(description: "Web URL not specified", code: .authorizationFailed)
 		}
 		let asWeb = try await loginUserAndGetAuthCode(authorizationCodeURL: webUrl)
-		guard case .code(let authorizationCode, let serverState) = asWeb else {
+		guard case .code(let authorizationCode, let serverState, let iss) = asWeb else {
 			throw WalletError(description: "Pending issuance not authorized", code: .authorizationFailed)
 		}
 		guard let offer = Self.credentialOfferCache[model.metadataKey] else {
@@ -887,12 +887,15 @@ public actor OpenId4VciService {
 		let request = AuthorizationRequested(
 			credentials: [try .init(value: model.configuration.configurationIdentifier.value)],
 			authorizationCodeURL: authorizationCodeURL, pkceVerifier: pkceVerifier, state: model.state,
-			configurationIds: [model.configuration.configurationIdentifier]
+			configurationIds: [model.configuration.configurationIdentifier],
+			expectedIssuer: offer.authorizationServerMetadata.issuerURL,
+			issParameterRequired: offer.authorizationServerMetadata.issParameterSupported
 		)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(
 			serverState: serverState ?? request.state, request: request,
 			authorizationCode: try AuthorizationCode(value: authorizationCode),
-			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil))
+			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)),
+			issuerFromRedirect: iss.flatMap(URL.init(string:))
 		)
 		let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration, issuer: issuerIdentifier)
@@ -971,7 +974,8 @@ public actor OpenId4VciService {
 				} else if let code = url.getQueryStringParameter("code") {
 					self.logger.info("Authorization code: \(code)")
 					let state = url.getQueryStringParameter("state")
-					nillableContinuation?.resume(returning: .code(code, state: state))
+					let iss = url.getQueryStringParameter("iss")
+					nillableContinuation?.resume(returning: .code(code, state: state, iss: iss))
 					nillableContinuation = nil
 				} else {
 					nillableContinuation?.resume(throwing: WalletError(description: "Authorization response does not include a code", code: .authorizationFailed))
@@ -1352,6 +1356,23 @@ fileprivate extension URL {
 	func getQueryStringParameter(_ parameter: String) -> String? {
 		guard let url = URLComponents(string: self.absoluteString) else { return nil }
 		return url.queryItems?.first(where: { $0.name == parameter })?.value
+	}
+}
+
+// RFC 9207: OpenID4VCI keeps these accessors internal, so mirror them for requests the kit builds itself
+fileprivate extension IdentityAndAccessManagementMetadata {
+	var issuerURL: URL? {
+		switch self {
+		case .oidc(let metaData): metaData.issuer.flatMap(URL.init(string:))
+		case .oauth(let metaData): metaData.issuer.flatMap(URL.init(string:))
+		}
+	}
+
+	var issParameterSupported: Bool {
+		switch self {
+		case .oidc(let metaData): metaData.authorizationResponseIssParameterSupported ?? false
+		case .oauth(let metaData): metaData.authorizationResponseIssParameterSupported ?? false
+		}
 	}
 }
 

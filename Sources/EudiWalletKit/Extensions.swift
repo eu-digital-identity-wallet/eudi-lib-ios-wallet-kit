@@ -559,7 +559,7 @@ extension SigningKeyProxy: @retroactive JWKRepresentable {
 			return try! signer.publicKey.toJsonWebKeyJWK()
 		}
 	}
-	
+
 	/// get the public JWK key
 	public func getPublicJWK() throws -> any JOSESwift.JWK {
 		switch self {
@@ -598,8 +598,7 @@ extension CredentialOfferRequest {
 		fetcher: Fetcher<CredentialOfferRequestObject>,
 		metadataResolver: CredentialIssuerMetadataResolver
 	) async -> Error {
-		guard Self.isFlattenedMetadataError(resolverError) else { return resolverError }
-
+		guard Self.isDiscardedMetadataError(resolverError) else { return resolverError }
 		do {
 			let requestObject: CredentialOfferRequestObject
 			switch self {
@@ -608,7 +607,6 @@ extension CredentialOfferRequest {
 					return resolverError
 				}
 				requestObject = parsed
-
 			case .fetchByReference(let url):
 				switch await fetcher.fetch(url: url) {
 				case .success(let fetched):
@@ -617,12 +615,8 @@ extension CredentialOfferRequest {
 					return resolverError
 				}
 			}
-
 			let issuerId = try CredentialIssuerId(requestObject.credentialIssuer)
-			switch try await metadataResolver.resolve(
-				source: .credentialIssuer(issuerId),
-				policy: policy
-			) {
+			switch try await metadataResolver.resolve(source: .credentialIssuer(issuerId), policy: policy) {
 			case .success:
 				return resolverError
 			case .failure(let error):
@@ -637,7 +631,6 @@ extension CredentialOfferRequest {
 		guard let error = error as? CredentialIssuerMetadataError else {
 			return error.localizedDescription
 		}
-
 		switch error {
 		case .unableToFetchCredentialIssuerMetadata(let cause):
 			return "Unable to fetch credential issuer metadata: \(cause.localizedDescription)"
@@ -656,7 +649,8 @@ extension CredentialOfferRequest {
 		}
 	}
 
-	private static func isFlattenedMetadataError(_ error: Error) -> Bool {
+	private static func isDiscardedMetadataError(_ error: Error) -> Bool {
+		// In eudi-lib-ios-openid4vci-swift, CredentialOfferRequestResolver.resolve(source:policy:) discards the resolver's error:
 		guard case .error(let reason) = error as? ValidationError else { return false }
 		return reason == "Invalid credential metadata"
 	}
@@ -714,7 +708,7 @@ extension MdocDataModel18013.ClaimPath {
 // MARK: - DCQL Policy Validation
 
 extension RegistrationCertificatePolicy {
-	
+
 	/// Creates a default policy that validates certificate trust and checks
 	/// that the request DCQL does not exceed the scope declared in the WRPRC.
 	/// - Parameters:
@@ -728,5 +722,5 @@ extension RegistrationCertificatePolicy {
 		}
 	  )
 	}
-	
+
 }
