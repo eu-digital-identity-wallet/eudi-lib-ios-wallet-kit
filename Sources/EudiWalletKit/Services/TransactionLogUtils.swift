@@ -141,7 +141,7 @@ enum TransactionLogUtils {
 			intermediaryIdentifier: policy?.intermediary?.identifier.flatMap { toQualifiedIdentifier($0) },
 			intermediaryName: policy?.intermediary?.name.map { .init(lang: defaultLang, content: $0) },
 			registrarURL: policy?.registryURI,
-			purpose: policy?.purpose?.map { .init(lang: $0.lang, content: $0.value) },
+			purpose: policy.flatMap { transactionPurposes($0) },
 			privacyPolicy: policy?.privacyPolicy.map { [.init(type: Policy.privacyPolicy, policyURI: $0)] },
 			dpaName: dpa?.name.map { .init(lang: defaultLang, content: $0) },
 			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } }
@@ -160,6 +160,12 @@ enum TransactionLogUtils {
 	static func interactingPartyContact(_ policy: WrpRegistrationPolicy) -> [String]? {
 		let contact = [policy.country, policy.supportURI, policy.infoURI].compactMap { $0 }
 		return contact.isEmpty ? nil : contact
+	}
+
+	/// Combines the WRPRC purpose and service-description claims for the TS10 purpose field.
+	static func transactionPurposes(_ policy: WrpRegistrationPolicy) -> [MultiLangString]? {
+		let purposes = (policy.purpose ?? []) + (policy.srvDescription ?? [])
+		return purposes.isEmpty ? nil : purposes.map { .init(lang: $0.lang, content: $0.value) }
 	}
 
 	/// Maps the issuer's registration entitlements to its TS10 interacting-party type.

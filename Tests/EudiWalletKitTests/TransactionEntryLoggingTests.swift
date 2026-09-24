@@ -57,7 +57,9 @@ struct TransactionEntryLoggingTests {
         let time = log.time
         let requested = [ClaimInfo(credentialIdentifier: "pid", claims: [.claim("name"), .claim("age")])]
         let policy = WrpRegistrationPolicy(sub: "LEIXG-123", credentials: [], purpose: [.init(lang: "en", value: "Age check")],
-            registryURI: "https://registry.example", privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
+            registryURI: "https://registry.example",
+            srvDescription: [.init(lang: "en", value: "Identity verification service")],
+            privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
         TransactionLogUtils.withRequest(requested, policy: policy, name: "Certificate CN", transactionLog: &log)
         TransactionLogUtils.withResult(.notCompleted, reason: "User declined", transactionLog: &log)
         guard case .presentation(let incomplete) = log else { Issue.record("Expected presentation"); return }
@@ -75,6 +77,7 @@ struct TransactionEntryLoggingTests {
         #expect(completed.listOfClaimsPresented == presented)
         #expect(completed.listOfClaimsRequested == requested)
         #expect(completed.purpose == incomplete.purpose)
+        #expect(completed.purpose?.map(\.content) == ["Age check", "Identity verification service"])
         #expect(completed.privacyPolicy == incomplete.privacyPolicy)
         let encoded = try JSONEncoder().encode(log)
         let decoded = try JSONDecoder().decode(TransactionEntry.self, from: encoded)
