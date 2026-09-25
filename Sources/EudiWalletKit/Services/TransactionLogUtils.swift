@@ -223,7 +223,7 @@ enum TransactionLogUtils {
 
 	/// Sets the presentation result and optional reason of non-completion.
 	/// Replaces presented claims when supplied; otherwise keeps the recorded claims.
-	/// Preserves request and party details, and leaves other transaction types unchanged.
+	/// Clears requested claims on non-completion; preserves party details and other transaction types.
 	static func withResult(_ result: TransactionResult,
 		reason: String? = nil, presented: [ClaimInfo]? = nil, transactionLog: inout TransactionEntry) {
 		guard case let .presentation(previous) = transactionLog else { return }
@@ -232,7 +232,7 @@ enum TransactionLogUtils {
 			time: previous.time,
 			transactionResult: result,
 			reasonOfNoncompletion: reason,
-			listOfClaimsRequested: previous.listOfClaimsRequested,
+			listOfClaimsRequested: result == .notCompleted ? [] : previous.listOfClaimsRequested,
 			listOfClaimsPresented: presented ?? previous.listOfClaimsPresented,
 			interactingPartyType: previous.interactingPartyType,
 			interactingPartyName: previous.interactingPartyName,

@@ -50,7 +50,7 @@ struct TransactionEntryLoggingTests {
         #expect(path.mdocClaimPath.openID4VPClaimPath == path)
     }
 
-    @Test("Request metadata and identity survive incomplete and completed snapshots")
+    @Test("Failed presentations clear requested claims while successful presentations retain them")
     func lifecycle() throws {
         var log = TransactionLogUtils.createEmptyPresentationLog()
         let identifier = log.transactionIdentifier
@@ -61,13 +61,17 @@ struct TransactionEntryLoggingTests {
             srvDescription: [.init(lang: "en", value: "Identity verification service")],
             privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
         TransactionLogUtils.withRequest(requested, policy: policy, name: "Certificate CN", transactionLog: &log)
+        let requestLog = log
         TransactionLogUtils.withResult(.notCompleted, reason: "User declined", transactionLog: &log)
         guard case .presentation(let incomplete) = log else { Issue.record("Expected presentation"); return }
-        #expect(incomplete.listOfClaimsRequested == requested)
+        #expect(incomplete.listOfClaimsRequested.isEmpty)
+        let failedJSON = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(log)) as? [String: Any])
+        #expect((failedJSON["listOfClaimsRequested"] as? [Any])?.isEmpty == true)
         #expect(incomplete.listOfClaimsPresented.isEmpty)
         #expect(incomplete.interactingPartyName?.content == "Registered RP")
         #expect(incomplete.interactingPartyIdentifier == .init(type: QualifiedIdentifier.lei, value: "123"))
         #expect(incomplete.reasonOfNoncompletion == "User declined")
+        log = requestLog
         let presented = [ClaimInfo(credentialIdentifier: "pid", claims: [.claim("age")])]
         TransactionLogUtils.withResult(.completed, presented: presented, transactionLog: &log)
         #expect(log.transactionIdentifier == identifier)
@@ -141,7 +145,7 @@ struct TransactionEntryLoggingTests {
         #expect(snapshots.last?.transactionResult == .notCompleted)
         #expect(snapshots.last?.reasonOfNoncompletion == "Invalid request")
         if case .presentation(let last)? = snapshots.last {
-            #expect(last.listOfClaimsRequested == requested)
+            #expect(last.listOfClaimsRequested.isEmpty)
             #expect(last.listOfClaimsPresented.isEmpty)
         } else { Issue.record("Missing presentation entry") }
     }
