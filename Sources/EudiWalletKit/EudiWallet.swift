@@ -299,6 +299,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// This method retrieves the document's metadata from storage and uses its credential issuer identifier
 	/// to resolve the appropriate OpenID4VCI service. If the document's metadata contains persisted authorization
 	/// data, it is forwarded to the service to avoid re-authentication when possible.
+	/// Background retries for the same document reuse a transaction log identifier.
 	///
 	/// - Parameters:
 	///   - documentId: The unique identifier of the previously issued document to reissue.
