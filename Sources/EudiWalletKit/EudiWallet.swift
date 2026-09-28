@@ -40,6 +40,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Storage manager instance
 	public private(set) var storage: StorageManager!
+	/// Trust Mark manager, available when a Trust Mark source is configured.
+	public let trustMarkManager: TrustMarkManager?
 	/// Wallet configuration
 	public var eudiWalletConfig: EudiWalletConfiguration { didSet { try? initializeLogging() } }
 	/// Trust configuration describing where trust anchors come from and how trust failures are handled.
@@ -78,6 +80,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - transactionLogger: Transaction logger for logging wallet operations. Optional.
 	///   - modelFactory: The factory for creating Mdoc models. Optional.
 	///   - zkSystemRepository: Repository for zk system parameters. Optional.
+	///   - trustMarkSource: Static information or a dynamic Trust Mark provider. Defaults to disabled.
 	///   - trustConfig: Trust configuration describing trust anchors and trust failure handling. Optional.
 	///
 	/// - Throws: An error if initialization fails.
@@ -96,11 +99,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		secureAreas: [any SecureArea]? = nil,
 		transactionLogger: (any TransactionLogger)? = nil,
 		modelFactory: (any DocClaimsDecodableFactory)? = nil,
-		zkSystemRepository: ZkSystemRepository? = nil
+		zkSystemRepository: ZkSystemRepository? = nil,
+		trustMarkSource: TrustMarkSource? = nil
 	) throws {
 		try Self.validateServiceParams(serviceName: eudiWalletConfig.serviceName)
 		self.eudiWalletConfig = eudiWalletConfig
 		self.trustConfig = trustConfig
+		self.trustMarkManager = trustMarkSource.map { TrustMarkManager(source: $0, networking: networking ?? URLSession.shared) }
 		self.openID4VpConfig = openID4VpConfig ?? OpenId4VpConfiguration()
 		self.transactionLogger = transactionLogger
 		self.openID4VciConfigurations = openID4VciConfigurations
