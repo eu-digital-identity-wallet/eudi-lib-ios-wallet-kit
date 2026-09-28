@@ -658,7 +658,7 @@ extension CredentialOfferRequest {
 
 extension EudiWallet {
 	/// Try to resolve a pre-registered VCI service directly from credential offer URL parameters.
-	func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
+	public func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
 		guard let issuerURL = Self.extractCredentialIssuerURL(from: offerUri) else { return nil }
 		return await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerURL)
 	}
