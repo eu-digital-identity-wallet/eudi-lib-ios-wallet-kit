@@ -1,3 +1,10 @@
+## v0.54.0
+
+- Add optional Trust Mark support through `EudiWallet.trustMarkManager`, configured with static information or a dynamic `TrustMarkProvider` via `trustMarkSource`.
+- Add `TrustMarkManager.getTrustMark()` to retrieve Trust Mark display resources and certification links using the wallet's networking client.
+- Make `EudiWallet.extractCredentialIssuerURL(from:)` public.
+
+
 ## v0.53.4
 
 - Update `eudi-lib-ios-openid4vp-swift` to version 0.43.0.
