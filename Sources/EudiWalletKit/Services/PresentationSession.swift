@@ -123,7 +123,8 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 			let warningsKey = if presentationService.flow == .ble { presentationService.wrpVerifierWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
 			let warningSet: [PresentationPolicyViolation]? = if let warnings = presentationService.wrpVerifierWarnings, let warningsKey { warnings[warningsKey] } else { nil }
-			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet))
+			let transactions = (presentationService as? OpenId4VpService)?.transactionDataByRequest[request.requestName ?? ""] ?? [:]
+			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet, transactionData: transactions, requestName: request.requestName))
 		} // next request
 		wrpVerifierPolicy = presentationService.wrpVerifierPolicy
 		wrpVerifierWarnings = presentationService.wrpVerifierWarnings
@@ -213,12 +214,17 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onCancel: Action to perform if the user cancels the biometric authentication
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
-	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
+	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, requestName: String? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
 			await MainActor.run { status = .userSelected }
 			let action = { [self] in
-				try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend,
-					deviceNameSpacesToSend: deviceNameSpacesToSend, authenticationContext: localAuthenticationContext, onSuccess: onSuccess)
+				if let service = presentationService as? OpenId4VpService {
+					try await service.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend,
+						deviceNameSpacesToSend: deviceNameSpacesToSend, authenticationContext: localAuthenticationContext, requestName: requestName, onSuccess: onSuccess)
+				} else {
+					try await presentationService.sendResponse(userAccepted: userAccepted, itemsToSend: itemsToSend,
+						deviceNameSpacesToSend: deviceNameSpacesToSend, authenticationContext: localAuthenticationContext, onSuccess: onSuccess)
+				}
 				return true
 			}
 			let didSend = try await EudiWallet.authorizedAction(action: action, disabled: !userAuthenticationRequired || !userAccepted,
