@@ -658,13 +658,13 @@ extension CredentialOfferRequest {
 
 extension EudiWallet {
 	/// Try to resolve a pre-registered VCI service directly from credential offer URL parameters.
-	func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
+	public func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
 		guard let issuerURL = Self.extractCredentialIssuerURL(from: offerUri) else { return nil }
 		return await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerURL)
 	}
 
 	/// Extract credential issuer URL from an OpenID4VCI offer URL.
-	static func extractCredentialIssuerURL(from offerUri: String) -> String? {
+	public static func extractCredentialIssuerURL(from offerUri: String) -> String? {
 		guard let components = URLComponents(string: offerUri) else { return nil }
 		guard let encodedOffer = components.queryItems?.first(where: { $0.name == "credential_offer" })?.value else {
 			return nil
