@@ -572,7 +572,7 @@ public actor OpenId4VciService {
 				let id = UUID().uuidString
 				let transactionId = issuanceTransactionIds?[i] ?? id
 				transactionIds.append(transactionId)
-				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: docTypeModel.credentialOptions.batchSize,
+				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: 1,
 					issuerName: offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture),
 					issuerIdentifier: offer.credentialIssuerIdentifier.url.absoluteString, reissuance: documentId != nil, isUserTriggered: !backgroundOnly)
 				try await svc.prepareIssuing(id: id, docTypeIdentifier: docTypeIdentifier, displayName: i > 0 ? nil : docTypes.map(\.displayName).joined(separator: ", "), credentialOptions: docTypeModel.credentialOptions, keyOptions: docTypeModel.keyOptions, disablePrompt: i > 0, promptMessage: promptMessage, offer: offer)
@@ -767,7 +767,7 @@ public actor OpenId4VciService {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the deferred data are valid, otherwise a deferred status document
 	@discardableResult public func requestDeferredIssuance(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		await logIssuanceTransaction(id: deferredDoc.id, status: .notCompleted, requested: credentialOptions.batchSize,
+		await logIssuanceTransaction(id: deferredDoc.id, status: .notCompleted, requested: 1,
 			errorMessage: "Issuance deferred")
 		do {
 			guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status for deferred issuance: \(deferredDoc.status)", code: .internalError) }
@@ -840,7 +840,7 @@ public actor OpenId4VciService {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	/// - Returns: The issued document in case it was approved in the backend and the pendingDoc data are valid, otherwise a pendingDoc status document
 	@discardableResult public func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> WalletStorage.Document {
-		await logIssuanceTransaction(id: pendingDoc.id, status: .notCompleted, requested: credentialOptions.batchSize,
+		await logIssuanceTransaction(id: pendingDoc.id, status: .notCompleted, requested: 1,
 			errorMessage: "Issuance pending")
 		do {
 			guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw WalletError(description: "Invalid document status for pending issuance: \(pendingDoc.status)", code: .internalError)}
@@ -1046,7 +1046,7 @@ public actor OpenId4VciService {
 		var issuedNotificationId: String? = nil
 		var issuedAuthorizedRequest: AuthorizedRequest? = nil
 		if issuanceLogs[transactionId] == nil {
-			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: 1,
 				issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil)
 		}
 		do {
@@ -1088,7 +1088,7 @@ public actor OpenId4VciService {
 			let newDocStatus: WalletStorage.DocumentStatus = issueOutcome.isDeferred ? .deferred : (issueOutcome.isPending ? .pending : .issued)
 			let newDocument = WalletStorage.Document(id: issueReq.id, docType: docTypeToSave, docDataFormat: format, data: dataToSave, docKeyInfo: dkInfo.toData(), createdAt: Date(), metadata: docMetadata.toData(), displayName: displayName, status: newDocStatus)
 			if newDocStatus == .pending {
-				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+				await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: 1,
 					issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil, errorMessage: "Issuance pending")
 				await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 				return newDocument
@@ -1099,12 +1099,12 @@ public actor OpenId4VciService {
 			await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 			await storage.refreshPublishedVars()
 			if pds == nil { try await storage.removePendingOrDeferredDoc(id: issueReq.id) }
-			let issuedCount = newDocStatus == .issued ? (batch?.count ?? 1) : 0
-			let complete = newDocStatus == .issued && issuedCount == issueReq.credentialOptions.batchSize
-			await logIssuanceTransaction(id: transactionId, status: complete ? .completed : .notCompleted,
-				requested: issueReq.credentialOptions.batchSize, issued: issuedCount, credentialIdentifiers: newDocStatus == .issued ? [newDocument.docType] : [],
+			// Each transaction represents one attestation, regardless of its credential batch size.
+			let wasCompleted = newDocStatus == .issued
+			await logIssuanceTransaction(id: transactionId, status: wasCompleted ? .completed : .notCompleted,
+				requested: 1, issued: wasCompleted ? 1 : 0, credentialIdentifiers: wasCompleted ? [newDocument.docType] : [],
 				issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil,
-				errorMessage: complete ? nil : (newDocStatus == .deferred ? "Issuance deferred" : "Not all requested credentials were issued"))
+				errorMessage: wasCompleted ? nil : "Issuance deferred")
 			// Notify issuer of successful credential acceptance (fire-and-forget, after storage completes)
 			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
 				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialAccepted)
@@ -1115,7 +1115,7 @@ public actor OpenId4VciService {
 			if let notificationId = issuedNotificationId, let authorized = issuedAuthorizedRequest, let issuer {
 				sendIssuanceNotification(issuer: issuer, authorized: authorized, notificationId: notificationId, event: .credentialFailure, eventDescription: error.localizedDescription)
 			}
-			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: issueReq.credentialOptions.batchSize,
+			await logIssuanceTransaction(id: transactionId, status: .notCompleted, requested: 1,
 				issuerName: issuerName, issuerIdentifier: issuerIdentifier, reissuance: deleteId != nil, errorMessage: error.localizedDescription)
 			throw error
 		}
@@ -1176,8 +1176,8 @@ public actor OpenId4VciService {
 			case .credentialReissuance(let value): details = value.details
 			default: continue
 			}
-			await logIssuanceTransaction(id: id, status: .notCompleted, requested: details.credentialNumberRequested,
-				issued: details.credentialNumberIssued, credentialIdentifiers: details.credentialIdentifier,
+			await logIssuanceTransaction(id: id, status: .notCompleted, requested: 1,
+				issued: 0, credentialIdentifiers: details.credentialIdentifier,
 				issuerName: details.interactingPartyName?.content,
 				errorMessage: error.localizedDescription)
 		}
