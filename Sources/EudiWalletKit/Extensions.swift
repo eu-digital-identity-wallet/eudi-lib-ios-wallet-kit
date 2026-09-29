@@ -664,7 +664,7 @@ extension EudiWallet {
 	}
 
 	/// Extract credential issuer URL from an OpenID4VCI offer URL.
-	static func extractCredentialIssuerURL(from offerUri: String) -> String? {
+	public static func extractCredentialIssuerURL(from offerUri: String) -> String? {
 		guard let components = URLComponents(string: offerUri) else { return nil }
 		guard let encodedOffer = components.queryItems?.first(where: { $0.name == "credential_offer" })?.value else {
 			return nil
