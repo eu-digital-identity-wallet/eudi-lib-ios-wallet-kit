@@ -17,6 +17,7 @@ Created on 09/11/2023
 */
 import Foundation
 import OpenID4VCI
+import struct OpenID4VP.ClaimPath
 import MdocDataModel18013
 import MdocSecurity18013
 import WalletStorage
@@ -495,10 +496,10 @@ class PrecomputedSigner: JOSESwift.SignerProtocol {
 
 
 extension DocClaim {
-	var claimPath: ClaimPath {
-		ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
+	var claimPath: eudi_lib_sdjwt_swift.ClaimPath {
+		eudi_lib_sdjwt_swift.ClaimPath(path.map { if let index = Int($0) { ClaimPathElement.arrayElement(index: index) } else if $0.isEmpty { ClaimPathElement.allArrayElements } else { ClaimPathElement.claim(name: $0) } })
 	}
-	var claimPaths: [ClaimPath] {
+	var claimPaths: [eudi_lib_sdjwt_swift.ClaimPath] {
 		if let children { children.map(\.claimPath) } else { [claimPath] }
 	}
 }
@@ -558,7 +559,7 @@ extension SigningKeyProxy: @retroactive JWKRepresentable {
 			return try! signer.publicKey.toJsonWebKeyJWK()
 		}
 	}
-	
+
 	/// get the public JWK key
 	public func getPublicJWK() throws -> any JOSESwift.JWK {
 		switch self {
@@ -590,15 +591,80 @@ extension JOSESwift.JWK {
 	}
 }
 
+extension CredentialOfferRequest {
+	func recoverMetadataError(
+		from resolverError: Error,
+		policy: IssuerMetadataPolicy,
+		fetcher: Fetcher<CredentialOfferRequestObject>,
+		metadataResolver: CredentialIssuerMetadataResolver
+	) async -> Error {
+		guard Self.isDiscardedMetadataError(resolverError) else { return resolverError }
+		do {
+			let requestObject: CredentialOfferRequestObject
+			switch self {
+			case .passByValue(let metadata):
+				guard let parsed = CredentialOfferRequestObject(jsonString: metadata) else {
+					return resolverError
+				}
+				requestObject = parsed
+			case .fetchByReference(let url):
+				switch await fetcher.fetch(url: url) {
+				case .success(let fetched):
+					requestObject = fetched
+				case .failure:
+					return resolverError
+				}
+			}
+			let issuerId = try CredentialIssuerId(requestObject.credentialIssuer)
+			switch try await metadataResolver.resolve(source: .credentialIssuer(issuerId), policy: policy) {
+			case .success:
+				return resolverError
+			case .failure(let error):
+				return error
+			}
+		} catch {
+			return error
+		}
+	}
+
+	static func metadataErrorDescription(for error: Error) -> String {
+		guard let error = error as? CredentialIssuerMetadataError else {
+			return error.localizedDescription
+		}
+		switch error {
+		case .unableToFetchCredentialIssuerMetadata(let cause):
+			return "Unable to fetch credential issuer metadata: \(cause.localizedDescription)"
+		case .missingSignedMetadata:
+			return "Credential issuer metadata is not signed"
+		case .missingContentType(let reason):
+			return reason
+		case .missingRightContentTypeHeader:
+			return "Credential issuer metadata has an invalid Content-Type"
+		case .invalidSignedMetadata(let reason):
+			return "Invalid signed credential issuer metadata: \(reason)"
+		case .invalidIssuerTrust:
+			return "Credential issuer metadata is not issued by a trusted issuer"
+		default:
+			return String(describing: error)
+		}
+	}
+
+	private static func isDiscardedMetadataError(_ error: Error) -> Bool {
+		// In eudi-lib-ios-openid4vci-swift, CredentialOfferRequestResolver.resolve(source:policy:) discards the resolver's error:
+		guard case .error(let reason) = error as? ValidationError else { return false }
+		return reason == "Invalid credential metadata"
+	}
+}
+
 extension EudiWallet {
 	/// Try to resolve a pre-registered VCI service directly from credential offer URL parameters.
-	func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
+	public func resolveVCIServiceFromOfferUri(_ offerUri: String) async -> OpenId4VciService? {
 		guard let issuerURL = Self.extractCredentialIssuerURL(from: offerUri) else { return nil }
 		return await OpenId4VCIServiceRegistry.shared.getByIssuerURL(issuerURL: issuerURL)
 	}
 
 	/// Extract credential issuer URL from an OpenID4VCI offer URL.
-	static func extractCredentialIssuerURL(from offerUri: String) -> String? {
+	public static func extractCredentialIssuerURL(from offerUri: String) -> String? {
 		guard let components = URLComponents(string: offerUri) else { return nil }
 		guard let encodedOffer = components.queryItems?.first(where: { $0.name == "credential_offer" })?.value else {
 			return nil
@@ -614,10 +680,35 @@ extension EudiWallet {
 	}
 }
 
+extension OpenID4VP.ClaimPath {
+	var mdocClaimPath: MdocDataModel18013.ClaimPath {
+		MdocDataModel18013.ClaimPath(value.map { element in
+			switch element {
+			case .claim(let name): return .claim(name: name)
+			case .arrayElement(let index): return .arrayElement(index: index)
+			case .allArrayElements: return .allArrayElements
+			}
+		})
+	}
+}
+
+extension MdocDataModel18013.ClaimPath {
+	/// Converts a model claim path while preserving names, array indices, and wildcards.
+	var openID4VPClaimPath: OpenID4VP.ClaimPath {
+		OpenID4VP.ClaimPath(value.map { element in
+			switch element {
+			case .claim(let name): return .claim(name: name)
+			case .arrayElement(let index): return .arrayElement(index: index)
+			case .allArrayElements: return .allArrayElements
+			}
+		})
+	}
+}
+
 // MARK: - DCQL Policy Validation
 
 extension RegistrationCertificatePolicy {
-	
+
 	/// Creates a default policy that validates certificate trust and checks
 	/// that the request DCQL does not exceed the scope declared in the WRPRC.
 	/// - Parameters:
@@ -631,5 +722,5 @@ extension RegistrationCertificatePolicy {
 		}
 	  )
 	}
-	
+
 }

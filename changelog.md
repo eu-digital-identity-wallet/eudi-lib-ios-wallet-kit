@@ -1,3 +1,116 @@
+## v0.53.4
+
+- Update `eudi-lib-ios-openid4vp-swift` to version 0.43.0.
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.55.0.
+- Support and validate the RFC 9207 `iss` authorization-response parameter during credential issuance.
+- Preserve credential issuer metadata failures when credential-offer resolution fails.
+- Include the WRPRC `srv_description` values in presentation transaction logs.
+
+## v0.53.3
+
+- Reject issued SD-JWT credentials that use an unsigned, missing, symmetric, invalid, or otherwise unsupported issuer signature algorithm.
+- Fix issuance transaction logs so credential identifiers contain only credentials that were actually issued.
+- Update `eudi-lib-ios-statium-swift` to version 0.6.0 and use a fresh validation time for each status check.
+
+## v0.53.2
+
+- Add `OpenId4VpConfiguration.errorDispatchPolicy` to control which verifiers may receive protocol-level request-validation errors.
+- Dispatch OpenID4VP resolution errors when dispatch details are available.
+- Keep stable issuance transaction identifiers across retries and multi-credential issuance flows.
+
+## v0.53.1
+
+- Add issuer names and identifiers to credential deletion transaction logs.
+- Resolve verifier names from the leaf access certificate instead of the certificate authority.
+- Improve issuer details in issuance transaction logs.
+
+## v0.53.0
+
+### Transaction Logging
+
+- Migrate issuance, presentation, and deletion logging to Statium `TransactionEntry` records.
+- Record requested and presented claim paths without logging credential values or response tokens.
+- Persist pending, completed, rejected, and failed presentation outcomes throughout the presentation lifecycle.
+- Add issuer provider roles and validate WRPRC entitlements against PID and EAA credential classifications.
+
+### Dependency and Platform Updates
+
+- Raise the minimum macOS version to 15.
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.26.0.
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.54.1.
+- Update `eudi-lib-ios-wallet-storage` to version 0.26.1.
+
+## v0.52.1
+
+- Update `eudi-lib-ios-openid4vp-swift` to version 0.42.0.
+- Simplify redirect URI handling for rejected OpenID4VP presentations.
+
+## v0.52.0
+
+- Add the `OpenId4VciConfiguration.allowPlainJwtProof` flag. It defaults to `false` (HAIP-compliant attested proofs only); when enabled, issuance also accepts plain JWT proofs without key attestation using ES256, ES384, or ES512.
+
+## v0.51.0
+
+### Swift Data Storage
+
+Add SwiftData storage as an alternative to the existing keychain storage service. Wallet storage can now be initialized with the primary app group container:
+
+```swift
+let storageService = try! SwiftDataStorageService(usePrimaryGroupContainer: true)
+```
+
+Or configure the SwiftData model container directly:
+
+```swift
+let modelConfiguration = ModelConfiguration(groupContainer: .identifier(Self.appGroup))
+let modelContainer = try! ModelContainer(for: SwiftDataStoredDocument.self, configurations: modelConfiguration)
+let storageService = SwiftDataStorageService(modelContainer: modelContainer)
+```
+
+## v0.50.0
+This release fixes the multiple authentication prompt issue when EUDI Wallet is accessing the keys that are stored in the secure key storage in order to sign attestations during document issuance or presentation.
+For example, during a single document issuance process user needed to enter the passcode or touch ID 4 times.
+With this release, the wallet now reuses a shared local authentication context, so authentication prompt appears only once.
+
+
+### Breaking Changes
+
+- Due to metadata storage changes, existing documents should be deleted.
+- Minimum version of iOS raised to 17.
+
+## v0.40.9
+
+- Support public OpenID4VCI clients.
+- Cache resolved credential offers.
+
+## v0.40.8
+
+- Include WRP VP policy data in transaction logs.
+- Improve relying-party name resolution and fallback handling.
+- Make the VCI client ID optional for attested client IDs.
+
+## v0.40.7
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.3.
+
+## v0.40.6
+
+- Add OAuth grants to `OfferedIssuanceModel`.
+
+## v0.40.5
+
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.24.2.
+
+## v0.40.4
+
+- Revert the WRP registration policy intermediary multi-entry change.
+
+## v0.40.3
+
+- Rename `CredentialQuery.docType` to `docTypeOrVct`.
+- Add the missing entitlement failure reason for presentation and registration.
+- Handle absent `provides_attestations` values.
+
 ## v0.40.2
 
 ### WRP Registration Certificate Improvements

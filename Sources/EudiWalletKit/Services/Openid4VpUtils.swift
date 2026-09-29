@@ -528,7 +528,9 @@ extension OpenId4VpUtils {
 				let requestClaims = selection.claimQueries
 				guard !requestClaims.isEmpty else { continue }
 				guard let pclaims = policyCredential.claims  else { continue }
-				let policyPaths: Set<ClaimPath> = Set(pclaims.map(\.path))
+				let policyPaths: Set<ClaimPath> = Set(pclaims.map { policyClaim -> ClaimPath in
+					policyClaim.path.openID4VPClaimPath
+				})
 				let extraClaims = requestClaims.filter { requestClaim in
 					let claimPath = requestClaim.path
 					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })

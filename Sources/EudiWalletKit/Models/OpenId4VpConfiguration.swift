@@ -22,6 +22,7 @@ import enum OpenID4VP.WebKeySource
 import struct OpenID4VP.WebKeySet
 import enum OpenID4VP.ResponseEncryptionConfiguration
 import struct OpenID4VP.SupportedTransactionDataType
+import enum OpenID4VP.ErrorDispatchPolicy
 import enum OpenID4VP.ResponseMode
 import struct OpenID4VP.RegistrationCertificatePolicy
 
@@ -103,6 +104,13 @@ public struct OpenId4VpConfiguration: Sendable {
 	public let supportedTransactionDataTypes: [SupportedTransactionDataType]
 	///If true WRP Registration Certificate (WRPRC) validationc is performed during request authorization. If nil, WRPRC validation is skipped.
 	public let validateRegistrationCertificate: Bool
+	/// Controls which verifiers may receive protocol-level request validation errors.
+	///
+	/// Defaults to `.allClients`, preserving the existing wallet configuration. This allows
+	/// error responses to be sent even when verifier authentication fails. Select
+	/// `.onlyAuthenticatedClients` to restrict these notifications to authenticated verifiers.
+	/// Responses are only attempted when the OpenID4VP library provides dispatch details.
+	public let errorDispatchPolicy: ErrorDispatchPolicy
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -112,14 +120,16 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.supportedTransactionDataTypes = []
 		self.preferredResponseMode = nil
 		self.validateRegistrationCertificate = true
+		self.errorDispatchPolicy = .allClients
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.preferredResponseMode = preferredResponseMode
 		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 		self.validateRegistrationCertificate = validateRegistrationCertificate
+		self.errorDispatchPolicy = errorDispatchPolicy
 	}
 }
 

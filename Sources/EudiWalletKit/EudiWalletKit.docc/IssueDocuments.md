@@ -7,6 +7,20 @@ using this functionality, EudiWallet must be property initialized.
 If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document".
 After issuing a document, the document data and corresponding private key are stored in the wallet storage.
 
+### Credential proof policy
+
+By default, ``OpenId4VciConfiguration`` uses the HAIP-compliant credential proof policy and accepts only attested proofs. To interoperate with an issuer that requires a plain JWT proof without key attestation, set ``OpenId4VciConfiguration/allowPlainJwtProof`` to `true` for that issuer:
+
+```swift
+let config = OpenId4VciConfiguration(
+  credentialIssuerURL: "https://issuer.example.com",
+  clientId: "my-wallet",
+  allowPlainJwtProof: true
+)
+```
+
+Enabling this flag accepts all supported proof types using ES256, ES384, or ES512. Leave it disabled unless plain JWT proof support is required.
+
 ### Issue document by docType or credential configuration identifier
 
 When the document docType to be issued use the `issueDocuments(issuerName:docTypeIdentifiers:credentialOptions:keyOptions:promptMessage:)` method.
@@ -135,7 +149,7 @@ if let warnings = result.wrpIssuerWarnings, !warnings.isEmpty {
 ### Resolving Credential offer
 
 The library provides the `resolveOfferUrlDocTypes(offerUri:authFlowRedirectionURI:)` method that resolves the credential offer URI.
-The method returns the resolved ``OfferedIssuanceModel`` object that contains the offer's data (offered document types, issuer name and transaction code specification for pre-authorized flow). When registration certificate validation is enabled (``OpenId4VciConfiguration/validateRegistrationCertificate``), the model also includes:
+The method returns the resolved ``OfferedIssuanceModel`` object that contains the offer's data (offered document types, issuer name, grants, and transaction code specification for pre-authorized flow). When registration certificate validation is enabled (``OpenId4VciConfiguration/validateRegistrationCertificate``), the model also includes:
 
 - ``OfferedIssuanceModel/wrpVciRegistrationPolicy`` — the parsed issuer registration policy decoded from the WRPRC.
 - ``OfferedIssuanceModel/wrpVciWarnings`` — validation warnings keyed by credential configuration identifier; the empty key holds request-wide warnings. `nil` when validation is not enabled.
@@ -205,7 +219,7 @@ The user is redirected in an authorization web view to the issuer's authorizatio
 ### Pre-Authorization code flow
 
 When Issuer supports the pre-authorization code flow, the resolved offer will also contain the corresponding
-information. Specifically, the `txCodeSpec` field in the ``OfferedIssuanceModel`` object will contain:
+information. The ``OfferedIssuanceModel/grants`` field exposes whether the offer includes `authorization_code`, `pre-authorized_code`, or both. When a transaction code is required, the `txCodeSpec` field in the ``OfferedIssuanceModel`` object will contain:
 
 - The input mode, whether it is NUMERIC or TEXT
 - The expected length of the input

@@ -28,13 +28,19 @@ public actor DocumentStatusService {
 	let statusList: StatusList
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
-	let date: Date?
+	let dateProvider: @Sendable () -> Date
 	private static let logger = Logger(label: "DocumentStatusService")
 
-	public init(statusList: StatusList, date: Date = .now, trustConfig: TrustConfiguration) {
+	/// Supplies a fresh validation time for each status check by default.
+	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration) {
 		self.statusList = statusList
 		self.trustConfig = trustConfig
-		self.date = date
+		self.dateProvider = dateProvider
+	}
+
+	/// Uses a fixed validation time, for callers that explicitly supply a date.
+	public init(statusList: StatusList, date: Date, trustConfig: TrustConfiguration) {
+		self.init(statusList: statusList, dateProvider: { date }, trustConfig: trustConfig)
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
@@ -43,7 +49,8 @@ public actor DocumentStatusService {
 		}
 		let getStatus = GetStatus()
 		let tokenFetcher = StatusListTokenFetcher(
-			verifier: StatusListTokenSignatureVerifier(trustConfig: trustConfig)
+			verifier: StatusListTokenSignatureVerifier(trustConfig: trustConfig),
+			dateProvider: dateProvider
 		)
 		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew)
 		switch result {

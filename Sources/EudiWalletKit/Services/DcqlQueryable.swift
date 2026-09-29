@@ -18,6 +18,7 @@ import Foundation
 import MdocDataModel18013
 import OpenID4VP
 import struct WalletStorage.Document
+import struct OpenID4VP.ClaimPath
 
 public protocol DcqlQueryable {
 	/// retrieve credential identifiers matching docType and dataFormat

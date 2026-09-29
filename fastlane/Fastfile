@@ -29,8 +29,7 @@ platform :ios do
       devices: ['iPhone Air'],
       output_directory: "xcov_output",
       result_bundle: true,
-      parallel_testing: false,
-      xcodebuild_formatter: "xcbeautify"
+      parallel_testing: false
     }
 
     if ENV['CI']

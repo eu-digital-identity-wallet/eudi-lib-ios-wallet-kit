@@ -65,7 +65,7 @@ The library provides the following functionality:
         - [x] DCQL
         - [x] Optional partial claim presentation for DCQL requests
 
-The library is written in Swift and is compatible with iOS 16 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
+The library is written in Swift and is compatible with iOS 17 or higher. It requires Swift 6.2 or later. It is distributed as a Swift package and can be included in any iOS project.
 
 It is based on the following specifications:
 - ISO/IEC 18013-5 – Published
@@ -137,6 +137,8 @@ let wallet = try! EudiWallet(
 
 Set `preferredResponseMode` to override the response mode requested by the verifier. When set to `.directPost`, the authorization response is sent as a plain POST. When set to `.directPostJWT`, the response is sent as an encrypted direct POST JWT. The response URI is always taken from the verifier's request. When `nil` (the default), the library uses the response mode specified by the verifier.
 
+`OpenId4VpConfiguration.errorDispatchPolicy` controls which verifiers may receive protocol-level errors when a request fails validation. The default is `.allClients`, retaining the existing configuration and allowing notifications even when verifier authentication fails. Set `errorDispatchPolicy: .onlyAuthenticatedClients` to restrict notifications to authenticated verifiers. Errors are sent only when the OpenID4VP library supplies dispatch details.
+
 ### Trust configuration
 
 `EudiWallet` requires a `TrustConfiguration` that describes where trust anchors come from and how trust failures are handled. A single `TrustConfiguration` drives certificate-chain validation across the wallet:
@@ -191,8 +193,9 @@ let issuerConfigurations: [String: OpenId4VciConfiguration] = [
     ),
     "mdl_issuer": OpenId4VciConfiguration(
         credentialIssuerURL: "https://mdl.issuer.example.com",
-    requireDpop: false,
-    issuerMetadataPolicy: .ignoreSigned
+        allowPlainJwtProof: true,
+        requireDpop: false,
+        issuerMetadataPolicy: .ignoreSigned
     )
 ]
 
@@ -209,6 +212,8 @@ try wallet.registerOpenId4VciServices([
     "new_issuer": OpenId4VciConfiguration(credentialIssuerURL: "https://new.issuer.com")
 ])
 ```
+
+The `allowPlainJwtProof` property controls which credential proof types the wallet accepts. It defaults to `false`, which uses the HAIP-compliant proof policy and accepts only attested proofs. Set it to `true` only when interoperability with an issuer requires plain JWT proofs without key attestation; the wallet then accepts all supported proof types using ES256, ES384, or ES512.
 
 The `requireDpop` property controls whether issuance should halt when DPoP is not available. The `issuerMetadataPolicy` property controls signed metadata handling per issuer (`.ignoreSigned` or `.requireSigned`). The `dpopKeyOptions` property allows you to specify key generation parameters for DPoP keys, including the secure area, curve type and user authentication options.
 
