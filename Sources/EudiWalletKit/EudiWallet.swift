@@ -438,7 +438,13 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
 		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { trustConfig.issuerMetadataPolicy }
-		let offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
+		var offer: CredentialOffer?
+		do {
+			offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
+		} catch {
+			if case .ignoreSigned = policy {} else { offer = try await resolveCredentialOffer(offerUri: offerUri, policy: .ignoreSigned) }
+		}
+		guard let offer else { throw WalletError(description: "Unable to resolve credential offer", code: .offerResolutionFailed) }
 		let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
 		let urlString = credentialIssuerIdentifier.url.absoluteString
 		// CHECK: Must be pre-registered in registry
