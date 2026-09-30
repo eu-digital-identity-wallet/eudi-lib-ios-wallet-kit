@@ -442,7 +442,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		do {
 			offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
 		} catch {
-			if case .ignoreSigned = policy {} else { offer = try await resolveCredentialOffer(offerUri: offerUri, policy: .ignoreSigned) }
+			if case .ignoreSigned = policy { throw error } else { offer = try await resolveCredentialOffer(offerUri: offerUri, policy: .ignoreSigned) }
 		}
 		guard let offer else { throw WalletError(description: "Unable to resolve credential offer", code: .offerResolutionFailed) }
 		let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
