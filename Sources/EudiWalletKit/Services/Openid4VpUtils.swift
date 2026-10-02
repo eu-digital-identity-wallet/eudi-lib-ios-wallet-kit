@@ -170,16 +170,18 @@ class OpenId4VpUtils {
 	static func makeCborClaimData(
 		from docsCbor: [Document.ID: IssuerSigned]?,
 		claimPaths: inout [Document.ID: [ClaimPath]],
-		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+		claimValues: inout [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 	) {
-		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+		var paths = [ClaimPath](); var values = [ClaimPath: [DCQLClaimValue]]()
 		for (docId, issuerSigned) in docsCbor ?? [:] {
 			paths.removeAll(); values.removeAll()
 			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
 			for (ns, items) in isNs.nameSpaces {
 				for item in items {
 					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
-					values[paths.last!] = [item.description]
+					if let value = DcqlClaimValueConversion.fromCbor(item.elementValue) {
+						values[paths.last!] = [value]
+					}
 				}
 			}
 			claimPaths[docId] = paths
@@ -190,14 +192,15 @@ class OpenId4VpUtils {
 	static func makeSdJwtClaimData(
 		from docsSdJwt: [Document.ID: SignedSDJWT]?,
 		claimPaths: inout [Document.ID: [ClaimPath]],
-		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+		claimValues: inout [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 	) {
-		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+		var paths = [ClaimPath](); var values = [ClaimPath: [DCQLClaimValue]]()
 
 		for (docId, sdjwt) in docsSdJwt ?? [:] {
-			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
+			guard let recreated = try? sdjwt.recreateClaims(),
+				  let allPathsDict = recreated.disclosuresPerClaimPath else { continue }
 			paths.removeAll(); values.removeAll()
-			for (p, disclosures) in allPathsDict {
+			for (p, _) in allPathsDict {
 				let mappedElements = p.value.map { element in
 					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
 					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
@@ -205,12 +208,7 @@ class OpenId4VpUtils {
 				}
 				let path = ClaimPath(mappedElements)
 				paths.append(path)
-				values[path] = disclosures.map { disclosure in
-					guard let data = Data(base64URLEncoded: disclosure),
-						  let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
-						  json.count >= 3 else { return disclosure }
-					return if let strValue = json[2] as? String { strValue } else { "\(json[2])" }
-				}
+				values[path] = DcqlClaimValueConversion.fromJson(recreated.recreatedClaims, at: path)
 			}
 			claimPaths[docId] = paths
 			claimValues[docId] = values

@@ -260,7 +260,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			formatsRequested: formatsRequested
 		)
 		var claimPaths = [Document.ID: [ClaimPath]]()
-		var claimValues = [Document.ID: [ClaimPath: [String]]]()
+		var claimValues = [Document.ID: [ClaimPath: [DCQLClaimValue]]]()
 		OpenId4VpUtils.makeCborClaimData(from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
 		OpenId4VpUtils.makeSdJwtClaimData(from: docsSdJwt, claimPaths: &claimPaths, claimValues: &claimValues)
 		let defaultDcqlQueryable = DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)

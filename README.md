@@ -769,6 +769,24 @@ Detailed documentation is provided in the DocC documentation [here](https://eu-d
 ### Reference application  
 A reference application that demonstrates the usage of this library is [App Wallet UI](https://github.com/eu-digital-identity-wallet/eudi-app-ios-wallet-ui).
 
+## DCQL value matching
+
+Expected and credential claim values retain their JSON types using
+`OpenID4VP.DCQLClaimValue`. A request for boolean `true` matches boolean `true`,
+not string `"true"` or integer `1`. Mdoc scalar values are converted from CBOR;
+SD-JWT values are read from recreated claims at the requested claim path,
+including indexed and wildcard array paths.
+
+`DcqlQueryable.hasClaimWithValue` and `DefaultDcqlQueryable` claim-value maps now
+use `[DCQLClaimValue]`. Custom queryable implementations must preserve types.
+Existing `[String]` value arrays can be converted with
+`strings.map(DCQLClaimValue.string)`.
+
+The review dependency in `Package.swift` pins the SDK correction proposed in
+[OpenID4VP PR #257](https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift/pull/257).
+Replace it with an official SDK release containing that correction before
+merging or releasing this companion change.
+
 ## How to contribute
 
 We welcome contributions to this project. To ensure that the process is smooth for everyone
