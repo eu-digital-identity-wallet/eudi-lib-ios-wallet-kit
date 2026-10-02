@@ -15,6 +15,7 @@
  */
 
 import Foundation
+import struct MdocDataModel18013.OneOrManyCoded
 import struct MdocDataModel18013.ClaimPath
 import struct MdocDataModel18013.Status
 
@@ -27,7 +28,7 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 	public let purpose: [PolicyPurpose]?
 	public let registryURI: String?
 	public let certificatePolicy: String?
-	public let srvDescription: [PolicyPurpose]?
+	@OneOrManyCoded public var srvDescriptions: [[PolicyPurpose]]?
 	public let supportURI: String?
 	public let supervisoryAuthority: SupervisoryAuthority?
 	public let privacyPolicy: String?
@@ -46,8 +47,9 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 	public var identifiers: [RegistrationIdentifier] {
 		[RegistrationIdentifier(value: sub)] 
 	}
+	public var srvDescription: [PolicyPurpose]? { srvDescriptions?.flatMap { $0 } }
 
-	public init(entitlements: [String]? = nil, sub: String, country: String? = nil, policyID: [String]? = nil, credentials: [PolicyCredential], purpose: [PolicyPurpose]? = nil, registryURI: String? = nil, certificatePolicy: String? = nil, srvDescription: [PolicyPurpose]? = nil, supportURI: String? = nil, supervisoryAuthority: SupervisoryAuthority? = nil, privacyPolicy: String? = nil, name: String? = nil, infoURI: String? = nil, subLn: String? = nil, subGn: String? = nil, subFn: String? = nil, iat: Int? = nil, exp: Int? = nil, status: Status? = nil, intendedUseID: String? = nil, providesAttestations: [PolicyCredential]? = nil, intermediary: PolicyIntermediary? = nil) {
+	public init(entitlements: [String]? = nil, sub: String, country: String? = nil, policyID: [String]? = nil, credentials: [PolicyCredential], purpose: [PolicyPurpose]? = nil, registryURI: String? = nil, certificatePolicy: String? = nil, srvDescriptions: [[PolicyPurpose]]? = nil, supportURI: String? = nil, supervisoryAuthority: SupervisoryAuthority? = nil, privacyPolicy: String? = nil, name: String? = nil, infoURI: String? = nil, subLn: String? = nil, subGn: String? = nil, subFn: String? = nil, iat: Int? = nil, exp: Int? = nil, status: Status? = nil, intendedUseID: String? = nil, providesAttestations: [PolicyCredential]? = nil, intermediary: PolicyIntermediary? = nil) {
 		self.entitlements = entitlements
 		self.sub = sub
 		self.country = country
@@ -56,7 +58,7 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 		self.purpose = purpose
 		self.registryURI = registryURI
 		self.certificatePolicy = certificatePolicy
-		self.srvDescription = srvDescription
+		self.srvDescriptions = srvDescriptions
 		self.supportURI = supportURI
 		self.supervisoryAuthority = supervisoryAuthority
 		self.privacyPolicy = privacyPolicy
@@ -82,7 +84,7 @@ public struct WrpRegistrationPolicy: Decodable, Sendable {
 		case purpose = "purpose"
 		case registryURI = "registry_uri"
 		case certificatePolicy = "certificate_policy"
-		case srvDescription = "srv_description"
+		case srvDescriptions = "srv_description"
 		case supportURI = "support_uri"
 		case supervisoryAuthority = "supervisory_authority"
 		case privacyPolicy = "privacy_policy"
@@ -169,7 +171,7 @@ public struct PolicyCredentialMeta: Decodable, Sendable {
 	}
 }
 
-public struct PolicyPurpose: Decodable, Sendable {
+public struct PolicyPurpose: Codable, Equatable, Sendable {
 	public let lang: String
 	public let value: String
 
