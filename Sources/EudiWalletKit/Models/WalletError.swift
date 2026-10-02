@@ -55,6 +55,15 @@ public struct WalletError: LocalizedError {
 		case userCancelledLogin
 		/// Credential issuance request failed
 		case issuanceRequestFailed
+		/// OpenID4VP transaction data is invalid or cannot be authorized.
+		case invalidTransactionData = "invalid_transaction_data"
+		case invalidScope = "invalid_scope"
+		case invalidRequest = "invalid_request"
+		case invalidClient = "invalid_client"
+		case accessDenied = "access_denied"
+		case vpFormatsNotSupported = "vp_formats_not_supported"
+		case invalidRequestUriMethod = "invalid_request_uri_method"
+		case walletUnavailable = "wallet_unavailable"
 		/// The DCQL/VP query resolution was invalid
 		case invalidQueryResolution
 		/// OpenID4VP not secured request

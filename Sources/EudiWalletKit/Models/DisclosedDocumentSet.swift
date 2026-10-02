@@ -18,17 +18,23 @@ import Foundation
 public struct DisclosedDocumentSet {
 	/// The requested elements of each matching document, grouped per document and format (mso-mdoc or SD-JWT).
 	public let docElements: [DocElements]
+	/// Pass this option identifier back when sending a response.
+	public let requestName: String?
 	/// Violations of the relying party's registration policy detected for this request.
 	/// The presentation can still proceed; these are surfaced to the user as warnings.
 	public let warnings: [PresentationPolicyViolation]?
+	/// Transactions to show before consent, keyed by the wallet document authorizing them.
+	public let transactionData: [String: [PresentationTransactionData]]
 
 	/// Creates a disclosed document set.
 	/// - Parameters:
 	///   - docElements: The requested elements of each matching document.
 	///   - warnings: Registration-policy violations to surface to the user.
-	public init(docElements: [DocElements], warnings: [PresentationPolicyViolation]?) {
+	public init(docElements: [DocElements], warnings: [PresentationPolicyViolation]?, transactionData: [String: [PresentationTransactionData]] = [:], requestName: String? = nil) {
 		self.docElements = docElements
+		self.requestName = requestName
 		self.warnings = warnings
+		self.transactionData = transactionData
 	}
 }
  
