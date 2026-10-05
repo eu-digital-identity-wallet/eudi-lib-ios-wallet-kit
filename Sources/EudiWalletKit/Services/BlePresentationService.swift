@@ -62,6 +62,8 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	let wrpRegistrationValidator: WrpVpRegistrationValidator?
 	public var privateKeyObjects: [String: CoseKeyPrivate]!
 	public var dauthMethod: DeviceAuthMethod
+	/// COSE algorithm used for mdoc device signatures
+	public let deviceAlgorithm: Cose.VerifyAlgorithm
 	public var zkSystemRepository: ZkSystemRepository?
 	public var readerName: String?
 	public var qrCodePayload: String?
@@ -71,7 +73,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	/// Local authentication context reused for the device-key operations of the response
 	var authenticationContext: ThreadSafeAuthContext
 
-	public init(parameters: InitializeTransferData, authenticationContext: ThreadSafeAuthContext, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpVpRegistrationValidator? = nil) async throws {
+	public init(parameters: InitializeTransferData, authenticationContext: ThreadSafeAuthContext, transportFactory: (any BleTransportFactory)? = nil, wrpRegistrationValidator: WrpVpRegistrationValidator? = nil, deviceAlgorithm: Cose.VerifyAlgorithm = .es256) async throws {
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.docs = try objs.documentObjects.mapValues { try IssuerSigned(data: $0.bytes) }
 		docMetadata = parameters.docMetadata
@@ -79,6 +81,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		self.trustValidator = objs.trustValidator
 		self.wrpRegistrationValidator = wrpRegistrationValidator
 		self.dauthMethod = objs.deviceAuthMethod
+		self.deviceAlgorithm = deviceAlgorithm
 		self.zkSystemRepository = objs.zkSystemRepository
 		bleTransferMode = parameters.bleTransferMode
 		self.authenticationContext = authenticationContext
@@ -158,7 +161,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
 			let compactDocMetadata = docMetadata.compactMapValues { $0 }
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, authenticationContext: authenticationContext)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, signatureAlgorithm: deviceAlgorithm, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, authenticationContext: authenticationContext)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest
@@ -286,6 +289,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 					eReaderKey: eReaderKey,
 					privateKeyObjects: privateKeyObjects,
 					dauthMethod: dauthMethod,
+					signatureAlgorithm: deviceAlgorithm,
 					unlockData: unlockData,
 					zkSystemRepository: zkSystemRepository,
 					deviceNameSpacesRequested: deviceNameSpaces,
