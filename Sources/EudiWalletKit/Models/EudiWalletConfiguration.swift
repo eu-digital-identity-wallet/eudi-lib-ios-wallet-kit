@@ -29,6 +29,8 @@ public struct EudiWalletConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	/// Method to perform mdoc authentication (MAC or signature). Defaults to device signature
 	public let deviceAuthMethod: DeviceAuthMethod
+	/// COSE algorithm for mdoc device signatures. Defaults to ES256 and is ignored for device MACs.
+	public let deviceAlgorithm: Cose.VerifyAlgorithm
 	/// preferred UI culture for localization of display names. It must be a 2-letter language code. If not set, the system locale is used
 	public let uiCulture: String?
 	/// If not-nil, logging to the specified log file name will be configured
@@ -49,6 +51,7 @@ public struct EudiWalletConfiguration: Sendable {
 		accessGroup: String? = nil,
 		userAuthenticationRequired: Bool = false,
 		deviceAuthMethod: DeviceAuthMethod = .deviceSignature,
+		deviceAlgorithm: Cose.VerifyAlgorithm = .es256,
 		uiCulture: String? = nil,
 		logFileName: String? = nil,
 		bleTransferMode: BleTransferMode = .server,
@@ -58,6 +61,7 @@ public struct EudiWalletConfiguration: Sendable {
 		self.accessGroup = accessGroup
         self.userAuthenticationRequired = userAuthenticationRequired
 		self.deviceAuthMethod = deviceAuthMethod
+		self.deviceAlgorithm = deviceAlgorithm
 		self.uiCulture = uiCulture
 		self.logFileName = logFileName
 		self.bleTransferMode = bleTransferMode
