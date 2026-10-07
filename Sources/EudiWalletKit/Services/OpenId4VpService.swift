@@ -40,6 +40,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public var status: TransferStatus = .initialized
 	var openid4VPlink: String
 	let transferInfo: InitializeTransferInfo
+	/// COSE algorithm used for mdoc device signatures
+	public let deviceAlgorithm: Cose.VerifyAlgorithm
 	// map of document-id to IssuerSigned
 	var docsCbor: [Document.ID: IssuerSigned]!
 	// map of document-id to SignedSDJWT
@@ -93,11 +95,13 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		networking: Networking,
 		trustConfig: TrustConfiguration,
 		wrpRegistrationValidator: WrpVpRegistrationValidator,
-		docTypeDisplayNames: [DocType: String] = [:]
+		docTypeDisplayNames: [DocType: String] = [:],
+		deviceAlgorithm: Cose.VerifyAlgorithm = .es256
 	) async throws {
 		self.flow = .openid4vp(qrCode: qrCode)
 		let objs = try await parameters.toInitializeTransferInfo()
 		self.transferInfo = objs
+		self.deviceAlgorithm = deviceAlgorithm
 		guard let openid4VPlink = String(data: qrCode, encoding: .utf8) else {
 			throw WalletError(description: "QR_DATA_MALFORMED", code: .invalidQueryResolution)
 		}
@@ -304,6 +308,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			privateKeyObjects: privateKeyObjects,
 			sessionTranscript: sessionTranscript,
 			dauthMethod: .deviceSignature,
+			signatureAlgorithm: deviceAlgorithm,
 			unlockData: unlockData,
 			zkSpecsRequested: zkSpecsRequested,
 			zkSystemRepository: zkSystemRepository,

@@ -402,9 +402,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	}
 
 	private func resolveCredentialOffer(offerUri: String, policy: IssuerMetadataPolicy) async throws -> CredentialOffer {
-		if let offer = Self.credentialOfferCache[offerUri] {
-			return offer
-		}
+		if let offer = Self.credentialOfferCache[offerUri] { return offer }
 		let fetcher = Fetcher<CredentialOfferRequestObject>(session: networkingVci)
 		let metadataResolver = OpenId4VciService.makeMetadataResolver(networkingVci)
 		let oidcFetcher = Fetcher<OIDCProviderMetadata>(session: networkingVci)
@@ -418,13 +416,9 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			return offer
 		case .failure(let error):
 			let recoverySource = try CredentialOfferRequest(urlString: offerUri)
-			let recoveredError = await recoverySource.recoverMetadataError(
-				from: error,
-				policy: policy,
-				fetcher: fetcher,
-				metadataResolver: metadataResolver
-			)
-			throw WalletError(description: "Unable to resolve credential offer: \(CredentialOfferRequest.metadataErrorDescription(for: recoveredError))", code: .offerResolutionFailed, innerError: recoveredError)
+			let recoveredError = await recoverySource.recoverMetadataError(from: error, policy: policy, fetcher: fetcher, metadataResolver: metadataResolver)
+			let issuer = EudiWallet.extractCredentialIssuerURL(from: offerUri) ?? "server"
+			throw WalletError(description: "Credential offer from \(issuer) cannot be trusted.", code: .offerResolutionFailed, innerError: recoveredError)
 		}
 	}
 
@@ -438,13 +432,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
 		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { trustConfig.issuerMetadataPolicy }
-		var offer: CredentialOffer?
-		do {
-			offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
-		} catch {
-			if case .ignoreSigned = policy { throw error } else { offer = try await resolveCredentialOffer(offerUri: offerUri, policy: .ignoreSigned) }
-		}
-		guard let offer else { throw WalletError(description: "Unable to resolve credential offer", code: .offerResolutionFailed) }
+		let offer = try await resolveCredentialOffer(offerUri: offerUri, policy: policy)
 		let credentialIssuerIdentifier = offer.credentialIssuerIdentifier
 		let urlString = credentialIssuerIdentifier.url.absoluteString
 		// CHECK: Must be pre-registered in registry
@@ -704,7 +692,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters, authenticationContext: localAuthenticationContext, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator)
+				let bleSvc = try await BlePresentationService(parameters: parameters, authenticationContext: localAuthenticationContext, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator, deviceAlgorithm: eudiWalletConfig.deviceAlgorithm)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
 				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in
@@ -713,7 +701,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 				}, uniquingKeysWith: { first, _ in first })
 				let openIdSvc = try await OpenId4VpService(
 					parameters: parameters, qrCode: qrCode, openID4VpConfig: self.openID4VpConfig, networking: networkingVp,
-					trustConfig: trustConfig, wrpRegistrationValidator: wrpRegistrationValidator, docTypeDisplayNames: docTypeDisplayNames
+					trustConfig: trustConfig, wrpRegistrationValidator: wrpRegistrationValidator, docTypeDisplayNames: docTypeDisplayNames, deviceAlgorithm: eudiWalletConfig.deviceAlgorithm
 				)
 				return PresentationSession(presentationService: openIdSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			default:
