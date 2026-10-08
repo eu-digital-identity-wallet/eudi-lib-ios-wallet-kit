@@ -128,7 +128,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw WalletError(description: "Invalid link \(openid4VPlink)", code: .invalidQueryResolution) }
 		let dcqlQ = decodeDocuments()
 		await wrpRegistrationValidator.set(dcqlQueryable: dcqlQ)
-		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf())
+		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf(), authorizatinRequestResolver: WalletAuthorizationRequestResolver())
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case let .notSecured(data: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
