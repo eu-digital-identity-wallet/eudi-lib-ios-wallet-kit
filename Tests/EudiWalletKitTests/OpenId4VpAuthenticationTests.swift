@@ -16,6 +16,43 @@ struct OpenId4VpAuthenticationTests {
     private static let requestURI = "https://verifier.example/request"
     private static let docType = "org.iso.18013.5.1.mDL"
 
+    @Test("Unprefixed IDs cannot impersonate X.509 clients", arguments: [false, true], [false, true])
+    func requiresX509Prefix(byReference: Bool, x509Only: Bool) async throws {
+        let fixture = try CertificateFixture()
+        let schemes: [ClientIdScheme]? = x509Only ? [.x509SanDns, .x509Hash] : nil
+        let bareId = "verifier.example"
+        let prefixedId = "x509_san_dns:\(bareId)"
+
+        // Sign both forms with the same trusted key so the prefix is the only
+        // semantic difference. Rejection must not depend on a bad signature.
+        let bareToken = try fixture.token(clientId: bareId, validSignature: true)
+        let (bareService, bareNetwork) = try await makeService(clientId: bareId, token: bareToken,
+            byReference: byReference, anchors: [fixture.der], clientIdSchemes: schemes)
+        await assertRejected(bareService, network: bareNetwork)
+        #expect(!bareService.readerAuthValidated)
+        #expect(bareService.readerCertificateIssuer == nil)
+        #expect(bareService.certificateChain == nil)
+        #expect(bareService.vpClientId == nil)
+
+        let prefixedToken = try fixture.token(clientId: prefixedId, validSignature: true)
+        let (prefixedService, _) = try await makeService(clientId: prefixedId, token: prefixedToken,
+            byReference: byReference, anchors: [fixture.der], clientIdSchemes: schemes)
+        let requests = try await prefixedService.receiveRequest()
+        #expect(!requests.isEmpty)
+        #expect(prefixedService.resolvedRequestData?.client.id.clientId == prefixedId)
+        #expect(prefixedService.vpClientId == prefixedId)
+        let authentication = try #require(requests.first?.readerAuthResults[""])
+        #expect(authentication.isValidated)
+        #expect(authentication.certificateChain == [fixture.der])
+
+        // A recognized prefix must still require a valid request signature.
+        let invalidToken = try fixture.token(clientId: prefixedId, validSignature: false)
+        let (invalidService, invalidNetwork) = try await makeService(clientId: prefixedId, token: invalidToken,
+            byReference: byReference, anchors: [fixture.der], clientIdSchemes: schemes)
+        await assertRejected(invalidService, network: invalidNetwork)
+        #expect(invalidService.readerAuthValidated)
+    }
+
     @Test("Unsupported client IDs cannot bypass JAR authentication", arguments: [false, true])
     func rejectsFallbackIdentity(byReference: Bool) async throws {
         let fixture = try CertificateFixture()
@@ -97,7 +134,8 @@ struct OpenId4VpAuthenticationTests {
     private enum RegistrationMode { case disabled, warning, enforce }
 
     private func makeService(clientId: String, token: String?, byReference: Bool = false,
-                             anchors: [Data] = [], registration: RegistrationMode = .disabled) async throws -> (OpenId4VpService, RequestNetworking) {
+                             anchors: [Data] = [], registration: RegistrationMode = .disabled,
+                             clientIdSchemes: [ClientIdScheme]? = nil) async throws -> (OpenId4VpService, RequestNetworking) {
         let registrationPolicy: TrustPolicy = registration == .warning ? .warning : .enforce
         #if canImport(EudiEtsi1196x2)
         let trust = TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), wrprcVpTrustPolicy: registrationPolicy)
@@ -125,7 +163,7 @@ struct OpenId4VpAuthenticationTests {
         }
         let network = RequestNetworking(token: token ?? "")
         let service = try await OpenId4VpService(parameters: parameters, qrCode: Data(url.string!.utf8),
-            openID4VpConfig: .init(validateRegistrationCertificate: registration != .disabled), networking: network,
+            openID4VpConfig: .init(clientIdSchemes: clientIdSchemes, validateRegistrationCertificate: registration != .disabled), networking: network,
             trustConfig: trust, wrpRegistrationValidator: .init(trustConfig: trust))
         return (service, network)
     }
