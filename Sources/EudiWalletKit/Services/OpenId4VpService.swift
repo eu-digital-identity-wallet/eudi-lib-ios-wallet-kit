@@ -489,7 +489,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			publicWebKeySet: keySet,
 			supportedClientIdSchemes: supportedClientIdPrefixes,
 			vpFormatsSupported: [],
-			jarConfiguration: .encryptionOption,
+			// Request Object encryption is the Verifier's choice (OpenID4VP 1.0): the wallet still
+			// sends its key and decrypts an encrypted Request Object, but accepts a signed-only one.
+			jarConfiguration: .noEncryptionOption,
 			vpConfiguration: try! .init(vpFormatsSupported: .default(), supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
 			errorDispatchPolicy: openID4VpConfig.errorDispatchPolicy,
 			session: networking,
