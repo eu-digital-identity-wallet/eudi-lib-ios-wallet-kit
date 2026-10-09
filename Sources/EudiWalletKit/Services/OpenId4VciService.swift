@@ -358,8 +358,8 @@ public actor OpenId4VciService {
 		var dpopConstructor: DPoPConstructorType? = nil
 		let credentialIssuerId = offer.credentialIssuerIdentifier.url.absoluteString
 		if config.requireDpop {
-			let keyId = OpenId4VciConfiguration.generatePopKeyId(popUsage: .dpop, credentialIssuerId: credentialIssuerId)
-			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: keyId, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions, context: localAuthenticationContext)
+			let key = config.dpopKey(credentialIssuerId: credentialIssuerId, clientAttestationAlgorithms: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported)
+			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: key.id, algorithms: offer.authorizationServerMetadata.dpopSigningAlgValuesSupported, keyOptions: key.keyOptions, context: localAuthenticationContext)
 		}
 		let registrationCertificateEnforcement = makeRegistrationCertificatePolicy()
 		let vciConfig = try await config.toOpenId4VCIConfig(credentialIssuerId: credentialIssuerId, clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported, registrationCertificatePolicy: registrationCertificateEnforcement?.policy, context: localAuthenticationContext)
@@ -396,8 +396,8 @@ public actor OpenId4VciService {
 		var dpopConstructor: DPoPConstructor? = nil
 		let dpopSigningAlgValuesSupported = configuration.dpopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) }
 		if config.requireDpop {
-			let keyId = OpenId4VciConfiguration.generatePopKeyId(popUsage: .dpop, credentialIssuerId: configuration.credentialIssuerIdentifier)
-			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: keyId, algorithms: dpopSigningAlgValuesSupported, keyOptions: config.dpopKeyOptions, context: localAuthenticationContext)
+			let key = config.dpopKey(credentialIssuerId: configuration.credentialIssuerIdentifier, clientAttestationAlgorithms: configuration.clientAttestationPopSigningAlgValuesSupported?.map { JWSAlgorithm(name: $0) })
+			dpopConstructor = try await config.makePoPConstructor(popUsage: .dpop, privateKeyId: key.id, algorithms: dpopSigningAlgValuesSupported, keyOptions: key.keyOptions, context: localAuthenticationContext)
 		}
 		let (_, issuerMetadata) = try await resolveIssuerMetadata()
 		guard let authorizationServer = issuerMetadata.authorizationServers?.first else {
