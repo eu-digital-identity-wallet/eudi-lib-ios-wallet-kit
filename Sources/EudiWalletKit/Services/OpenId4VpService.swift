@@ -17,6 +17,7 @@ Created on 04/10/2023
 */
 
 import Foundation
+import os
 @preconcurrency import LocalAuthentication
 import SwiftCBOR
 import MdocDataModel18013
@@ -59,6 +60,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var resolvedRequestData: ResolvedRequestData?
 	var openId4Vp: OpenID4VP!
 	var openID4VpConfig: OpenId4VpConfiguration
+	/// Complete request authentication; certificate trust alone does not establish this verdict.
+	public private(set) var readerAuthenticationStatus: ReaderAuthenticationStatus = .notEvaluated
+	private let requestOperationLock = OSAllocatedUnfairLock(initialState: false)
 	var readerAuthValidated: Bool = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
@@ -125,16 +129,63 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///
 	/// - Returns: The requested items.
 	public func receiveRequest() async throws -> [UserRequestInfo] {
+		try beginRequestOperation()
+		defer { endRequestOperation() }
+		resetPresentationState()
+		do {
+			return try await resolveRequest()
+		} catch {
+			readerAuthenticationStatus = .failed
+			resolvedRequestData = nil
+			dcql = nil
+			vpNonce = nil; vpClientId = nil; sessionTranscript = nil; eReaderPub = nil
+			throw error
+		}
+	}
+
+	private func resetPresentationState() {
+		readerAuthenticationStatus = .notEvaluated
+		readerAuthValidated = false
+		readerCertificateIssuer = nil
+		readerCertificateValidationMessage = nil
+		certificateChain = nil
+		resolvedRequestData = nil
+		dcql = nil
+		vpNonce = nil; vpClientId = nil; sessionTranscript = nil; eReaderPub = nil
+		wrpVerifierPolicy = nil; wrpVerifierWarnings = nil
+		formatsRequested = nil; inputDescriptorMap = nil; zkSpecsRequested = nil
+		transactionData = nil; verifierInfo = nil; dcqlQueryable = nil; mdocGeneratedNonce = nil
+		presentedDocumentIds = []
+	}
+
+	// Reserve mutable request/callback state across suspension points without holding a lock.
+	private func beginRequestOperation() throws {
+		try requestOperationLock.withLock { inProgress in
+			guard !inProgress else {
+				throw WalletError(description: "A presentation request operation is already in progress", code: .invalidQueryResolution)
+			}
+			inProgress = true
+		}
+	}
+
+	private func endRequestOperation() {
+		requestOperationLock.withLock { $0 = false }
+	}
+
+	private func resolveRequest() async throws -> [UserRequestInfo] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw WalletError(description: "Invalid link \(openid4VPlink)", code: .invalidQueryResolution) }
 		let dcqlQ = decodeDocuments()
+		await wrpRegistrationValidator.resetValidations()
 		await wrpRegistrationValidator.set(dcqlQueryable: dcqlQ)
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf(), authorizatinRequestResolver: WalletAuthorizationRequestResolver())
 		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
 		case let .notSecured(data: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
-			if case .redirectUri = rrd.client { return try await handleRequestData(rrd) }
-			else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
+			guard case .redirectUri = rrd.client else { throw WalletError(description: "Not secured request", code: .notSecuredRequest) }
+			let requests = try await handleRequestData(rrd)
+			readerAuthenticationStatus = .notApplicable
+			return requests
 		case .invalidResolution(error: let error, dispatchDetails: let details):
 			logger.error("Invalid resolution: \(error.errorDescription ?? error.localizedDescription)")
 			if let details {
@@ -148,11 +199,25 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		case let .jwt(request: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
-			return try await handleRequestData(rrd)
+			switch rrd.client {
+			case .x509SanDns(_, let certificate), .x509Hash(_, let certificate):
+				guard readerAuthValidated, let leaf = certificateChain?.first,
+					let validatedCertificate = try? X509.Certificate(derEncoded: [UInt8](leaf)),
+					validatedCertificate == certificate else {
+					let message = "Required reader certificate authentication was not established"
+					readerCertificateValidationMessage = message
+					throw WalletError(description: message, code: .trustError)
+				}
+			case .preRegistered: break // The selected registered key has verified the JAR.
+			default: throw WalletError(description: "Unsupported authenticated client", code: .notSecuredRequest)
+			}
+			let requests = try await handleRequestData(rrd)
+			readerAuthenticationStatus = .authenticated
+			return requests
 		}
 	}
 
-	func handleRequestData(_ rrd: ResolvedRequestData) async throws -> [UserRequestInfo] {
+	private func handleRequestData(_ rrd: ResolvedRequestData) async throws -> [UserRequestInfo] {
 		wrpVerifierPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
@@ -280,7 +345,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	///   - deviceNameSpacesToSend: Optional device-signed namespaces to include in the response
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, authenticationContext: ThreadSafeAuthContext, onSuccess: ((URL?) -> Void)?) async throws {
+		try beginRequestOperation()
+		defer { endRequestOperation() }
 		presentedDocumentIds = []
+		guard readerAuthenticationStatus == .authenticated || readerAuthenticationStatus == .notApplicable else {
+			throw WalletError(description: "No successfully validated presentation request", code: .notSecuredRequest)
+		}
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw WalletError(description: "Unexpected error", code: .internalError)
 		}
@@ -383,6 +453,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates async -> Bool in
 		guard let self else { return false }
+		self.readerAuthValidated = false
+		self.readerCertificateIssuer = nil
+		self.certificateChain = nil
+		self.readerCertificateValidationMessage = "The reader certificate chain is malformed"
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
 		guard certsData.count > 0, certsData.count == b64certs.count else { return false }
 		// x5c is leaf-first. The leaf identifies the verifier; the last certificate is normally a CA.

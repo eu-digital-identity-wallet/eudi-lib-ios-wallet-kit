@@ -16,6 +16,191 @@ struct OpenId4VpAuthenticationTests {
     private static let requestURI = "https://verifier.example/request"
     private static let docType = "org.iso.18013.5.1.mDL"
 
+    @Test("X.509 requests require the wallet's trust validation result")
+    func rejectsMissingTrustEvaluation() async throws {
+        let fixture = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            for registration in [RegistrationMode.disabled, .warning] {
+                let token = try fixture.token(clientId: clientId, validSignature: true, invalidRegistration: registration == .warning)
+                let (service, network) = try await makeService(clientId: clientId, token: token,
+                    anchors: [fixture.der], registration: registration)
+                // Simulate dependency success without the wallet's trust evaluation.
+                service.chainVerifier = { _ in true }
+                await assertRejected(service, network: network)
+                #expect(service.readerAuthenticationStatus == .failed)
+                #expect(service.readerCertificateValidationMessage != nil)
+                if registration == .warning { #expect(service.wrpVerifierWarnings?.isEmpty == false) }
+            }
+        }
+    }
+
+    @Test("A failed subsequent request cannot reuse consent or authentication")
+    @MainActor func clearsPreviousRequest() async throws {
+        let fixture = try CertificateFixture()
+        let token = try fixture.token(clientId: fixture.clientIds[0], validSignature: true)
+        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: token, byReference: true, anchors: [fixture.der])
+        let requests = try await service.receiveRequest()
+        let session = try makeSession(service)
+        try session.decodeRequest(requests)
+        #expect(session.readerCertIssuerValid == true)
+        #expect(session.readerAuthenticationStatus == .authenticated)
+        #expect(!session.disclosedDocumentSets.isEmpty)
+
+        await network.setToken(try fixture.token(clientId: "unknown:verifier.example", validSignature: true))
+        #expect(await session.receiveRequest() == nil)
+        #expect(session.status == .error)
+        #expect(session.readerAuthenticationStatus == .failed)
+        #expect(session.readerLegalName == nil)
+        #expect(session.readerCertIssuer == nil)
+        #expect(session.disclosedDocumentSets.isEmpty)
+        #expect(!service.readerAuthValidated)
+        #expect(service.certificateChain == nil)
+        #expect(service.resolvedRequestData == nil)
+        #expect(service.dcql == nil)
+        await #expect(throws: WalletError.self) {
+            try await service.sendResponse(userAccepted: true, itemsToSend: [:],
+                authenticationContext: ThreadSafeAuthContext(), onSuccess: nil)
+        }
+        #expect(await network.posts == 0)
+    }
+
+    @Test("Session publishes validation failure even without an issuer name")
+    @MainActor func exposesIssuerlessFailure() async throws {
+        let (service, _) = try await makeService(clientId: "redirect_uri:\(Self.responseURI)", token: nil)
+        var requests = try await service.receiveRequest()
+        let session = try makeSession(service)
+        session.presentationService = FaultPresentationService(msg: "Test service")
+        requests[0].readerAuthResults = ["": ReaderAuthenticationResult(isValidated: false,
+            validationMessage: "Reader authentication was not evaluated", legalName: "Unverified name")]
+        try session.decodeRequest(requests)
+        #expect(session.readerCertIssuerValid == false)
+        #expect(session.readerCertValidationMessage == "Reader authentication was not evaluated")
+        #expect(session.readerAuthenticationStatus == .notEvaluated)
+        #expect(session.readerLegalName == nil)
+
+        requests[0].readerAuthResults = [:]
+        try session.decodeRequest(requests)
+        #expect(session.readerAuthenticationStatus == .notEvaluated)
+        #expect(session.readerCertIssuerValid == nil)
+        #expect(session.readerCertValidationMessage == nil)
+    }
+
+    @Test("Registration warnings remain separate from successful reader authentication")
+    @MainActor func preservesRegistrationWarnings() async throws {
+        let fixture = try CertificateFixture()
+        let token = try fixture.token(clientId: fixture.clientIds[0], validSignature: true, invalidRegistration: true)
+        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: token,
+            anchors: [fixture.der], registration: .warning)
+        let requests = try await service.receiveRequest()
+        let session = try makeSession(service)
+        try session.decodeRequest(requests)
+        #expect(session.readerAuthenticationStatus == .authenticated)
+        #expect(session.readerCertIssuerValid == true)
+        #expect(session.readerLegalName != nil)
+        #expect(session.wrpVerifierWarnings?.isEmpty == false)
+        await #expect(throws: PostError.self) {
+            try await session.sendResponse(userAccepted: false, itemsToSend: [:])
+        }
+        #expect(await network.posts == 1)
+    }
+
+    @Test("A session that cannot decode a request cannot send a response")
+    @MainActor func rejectsSendingAfterSessionFailure() async throws {
+        let fixture = try CertificateFixture()
+        let token = try fixture.token(clientId: fixture.clientIds[0], validSignature: true)
+        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: token, anchors: [fixture.der])
+        let session = PresentationSession(presentationService: service, docIdToPresentInfo: [:],
+            documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: ThreadSafeAuthContext())
+        #expect(await session.receiveRequest() == nil)
+        #expect(session.readerAuthenticationStatus == .failed)
+        await #expect(throws: WalletError.self) {
+            try await session.sendResponse(userAccepted: true, itemsToSend: [:])
+        }
+        #expect(await network.posts == 0)
+    }
+
+    @Test("Session authentication covers every document's reader authentication")
+    @MainActor func rejectsPartialAuthenticationVerdict() async throws {
+        let (service, _) = try await makeService(clientId: "redirect_uri:\(Self.responseURI)", token: nil)
+        var requests = try await service.receiveRequest()
+        let session = try makeSession(service)
+        session.presentationService = FaultPresentationService(msg: "Test service")
+        let invalid = ReaderAuthenticationResult(isValidated: false, validationMessage: "Invalid signature", authBytes: Data([0]))
+        var results = ["first-document": invalid, "second-document": invalid]
+        // Keep the first/default entry valid: the other document must still affect the verdict.
+        results[try #require(results.keys.first)] = ReaderAuthenticationResult(isValidated: true, legalName: "Verified name")
+        requests[0].readerAuthResults = results
+        #expect(requests[0].defaultReaderAuthResult?.isValidated == true)
+        try session.decodeRequest(requests)
+        #expect(session.readerAuthenticationStatus == .failed)
+        #expect(session.readerLegalName == nil)
+
+        requests[0].readerAuthResults = ["first-document": .init(isValidated: false,
+            validationMessage: "Reader authentication not present in request")]
+        try session.decodeRequest(requests)
+        #expect(session.readerAuthenticationStatus == .notEvaluated)
+    }
+
+    @MainActor private func makeSession(_ service: OpenId4VpService) throws -> PresentationSession {
+        let document = try #require(service.docsCbor["mdl"])
+        let info = DocPresentInfo(docType: Self.docType, secureAreaName: nil, docDataFormat: .cbor,
+            displayName: "Driving licence", docClaims: [], typedData: .msoMdoc(document))
+        return PresentationSession(presentationService: service, docIdToPresentInfo: ["mdl": info],
+            documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: ThreadSafeAuthContext())
+    }
+
+    @Test("Partial request decoding cannot leave a sendable context")
+    func rejectsPartialRequest() async throws {
+        let fixture = try CertificateFixture()
+        let invalid = try fixture.token(clientId: fixture.clientIds[0], validSignature: true, requestedDocType: "unavailable")
+        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: invalid,
+            byReference: true, anchors: [fixture.der])
+        await assertRejected(service, network: network)
+        #expect(service.readerAuthValidated) // Trust succeeded before local DCQL resolution failed.
+        #expect(service.readerAuthenticationStatus == .failed)
+        #expect(service.vpClientId == nil)
+
+        await network.setToken(try fixture.token(clientId: fixture.clientIds[0], validSignature: true))
+        #expect(try await !service.receiveRequest().isEmpty)
+        #expect(service.readerAuthenticationStatus == .authenticated)
+    }
+
+    @Test("Request validation cannot overlap another receive or a send")
+    func rejectsOverlappingOperations() async throws {
+        let fixture = try CertificateFixture()
+        let token = try fixture.token(clientId: fixture.clientIds[0], validSignature: true)
+        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: token,
+            byReference: true, anchors: [fixture.der])
+        _ = try await service.receiveRequest()
+        await network.holdNextFetch()
+        let receiving = Task { try await service.receiveRequest() }
+        await network.waitForHeldFetch()
+        #expect(service.readerAuthenticationStatus == .notEvaluated)
+        await #expect(throws: WalletError.self) { try await service.receiveRequest() }
+        await #expect(throws: WalletError.self) {
+            try await service.sendResponse(userAccepted: true, itemsToSend: [:],
+                authenticationContext: ThreadSafeAuthContext(), onSuccess: nil)
+        }
+        #expect(await network.posts == 0)
+        await network.resumeFetch()
+        #expect(try await !receiving.value.isEmpty)
+        #expect(service.readerAuthenticationStatus == .authenticated)
+    }
+
+    @Test("Malformed trust input clears previous certificate success")
+    func rejectsMalformedTrustInput() async throws {
+        let fixture = try CertificateFixture()
+        let (service, _) = try await makeService(clientId: fixture.clientIds[0], token: nil, anchors: [fixture.der])
+        for malformed in [[], ["!"], [Data([0]).base64EncodedString()]] as [[String]] {
+            #expect(await service.chainVerifier([fixture.der.base64EncodedString()]))
+            #expect(await !service.chainVerifier(malformed))
+            #expect(!service.readerAuthValidated)
+            #expect(service.readerCertificateIssuer == nil)
+            #expect(service.certificateChain == nil)
+            #expect(service.readerCertificateValidationMessage != nil)
+        }
+    }
+
     @Test("Unsupported IDs cannot fall back to a preregistered client", arguments: [false, true])
     func rejectsPreregisteredFallback(byReference: Bool) async throws {
         let fixture = try CertificateFixture()
@@ -106,6 +291,8 @@ struct OpenId4VpAuthenticationTests {
             #expect(!requests.isEmpty)
             #expect(service.resolvedRequestData?.client.id.clientId == client.clientId)
             #expect(service.resolvedRequestData?.legalName == client.legalName)
+            #expect(service.readerAuthenticationStatus == .authenticated)
+            #expect(!service.readerAuthValidated)
         }
         let wrongKeyToken = try first.token(clientId: clients[1].clientId, validSignature: true)
         let (service, network) = try await makeService(clientId: clients[1].clientId, token: wrongKeyToken,
@@ -177,6 +364,7 @@ struct OpenId4VpAuthenticationTests {
             await assertRejected(service, network: network)
             // The trust callback succeeded; rejection must still happen before consent.
             #expect(service.readerAuthValidated)
+            #expect(service.readerAuthenticationStatus == .failed)
         }
     }
 
@@ -208,21 +396,34 @@ struct OpenId4VpAuthenticationTests {
     }
 
     @Test("Plain redirect-URI requests remain supported without a fabricated legal name")
-    func acceptsPlainRedirect() async throws {
-        let (service, _) = try await makeService(clientId: "redirect_uri:\(Self.responseURI)", token: nil)
+    @MainActor func acceptsPlainRedirect() async throws {
+        let (service, network) = try await makeService(clientId: "redirect_uri:\(Self.responseURI)", token: nil)
+        #expect(service.readerAuthenticationStatus == .notEvaluated)
         let requests = try await service.receiveRequest()
         #expect(!requests.isEmpty)
         #expect(service.resolvedRequestData?.legalName == nil)
         #expect(!service.readerAuthValidated)
+        let session = try makeSession(service)
+        try session.decodeRequest(requests)
+        #expect(session.readerAuthenticationStatus == .notApplicable)
+        #expect(session.readerLegalName == nil)
+        // The transport deliberately rejects POSTs; reaching it proves this flow can still respond.
+        await #expect(throws: PostError.self) {
+            try await session.sendResponse(userAccepted: false, itemsToSend: [:])
+        }
+        #expect(await network.posts == 1)
     }
 
     private func assertRejected(_ service: OpenId4VpService, network: RequestNetworking) async {
         await #expect(throws: WalletError.self) { try await service.receiveRequest() }
         #expect(service.resolvedRequestData == nil)
         #expect(service.dcql == nil)
-        await #expect(throws: WalletError.self) {
-            try await service.sendResponse(userAccepted: true, itemsToSend: [:],
-                authenticationContext: ThreadSafeAuthContext(), onSuccess: nil)
+        let selected: RequestItems = ["mdl": ["org.iso.18013.5.1": [.init(elementPath: ["family_name"])]]]
+        for items in [[:], selected] {
+            await #expect(throws: WalletError.self) {
+                try await service.sendResponse(userAccepted: true, itemsToSend: items,
+                    authenticationContext: ThreadSafeAuthContext(), onSuccess: nil)
+            }
         }
         #expect(await network.posts == 0)
         #expect(service.presentedDocumentIds.isEmpty)
@@ -265,11 +466,11 @@ struct OpenId4VpAuthenticationTests {
         return (service, network)
     }
 
-    private static func payload(clientId: String) -> [String: Any] {
+    private static func payload(clientId: String, requestedDocType: String? = nil) -> [String: Any] {
         ["client_id": clientId, "response_type": "vp_token", "response_mode": "direct_post",
          "response_uri": responseURI, "nonce": "authentication-regression-test",
          "dcql_query": ["credentials": [["id": "mdl", "format": "mso_mdoc",
-             "meta": ["doctype_value": docType], "claims": [["path": ["org.iso.18013.5.1", "family_name"]]]]]]]
+             "meta": ["doctype_value": requestedDocType ?? docType], "claims": [["path": ["org.iso.18013.5.1", "family_name"]]]]]]]
     }
 
     private struct CertificateFixture {
@@ -292,9 +493,11 @@ struct OpenId4VpAuthenticationTests {
             try serializer.serialize(certificate)
             der = Data(serializer.serializedBytes)
         }
-        func token(clientId: String, validSignature: Bool) throws -> String {
+        func token(clientId: String, validSignature: Bool, invalidRegistration: Bool = false, requestedDocType: String? = nil) throws -> String {
             let header = try JSONSerialization.data(withJSONObject: ["alg": "ES256", "typ": "oauth-authz-req+jwt", "x5c": [der.base64EncodedString()]])
-            let payload = try JSONSerialization.data(withJSONObject: OpenId4VpAuthenticationTests.payload(clientId: clientId))
+            var claims = OpenId4VpAuthenticationTests.payload(clientId: clientId, requestedDocType: requestedDocType)
+            if invalidRegistration { claims["verifier_info"] = [["format": "registration_cert", "data": "invalid-registration-certificate"]] }
+            let payload = try JSONSerialization.data(withJSONObject: claims)
             let input = "\(Self.base64URL(header)).\(Self.base64URL(payload))"
             let signature = validSignature ? try key.signature(for: Data(input.utf8)).rawRepresentation : Data(repeating: 0, count: 64)
             return "\(input).\(Self.base64URL(signature))"
@@ -313,12 +516,29 @@ struct OpenId4VpAuthenticationTests {
     }
 
     private actor RequestNetworking: Networking {
-        let token: String
+        var token: String
         var posts = 0
         var fetches = 0
+        private var holdFetch = false
+        private var heldFetch: CheckedContinuation<Void, Never>?
+        private var fetchObserver: CheckedContinuation<Void, Never>?
         init(token: String) { self.token = token }
+        func setToken(_ token: String) { self.token = token }
+        func holdNextFetch() { holdFetch = true }
+        func waitForHeldFetch() async {
+            if heldFetch != nil { return }
+            await withCheckedContinuation { fetchObserver = $0 }
+        }
+        func resumeFetch() { heldFetch?.resume(); heldFetch = nil }
         func data(from url: URL) async throws -> (Data, URLResponse) {
             fetches += 1
+            if holdFetch {
+                holdFetch = false
+                await withCheckedContinuation {
+                    heldFetch = $0
+                    fetchObserver?.resume(); fetchObserver = nil
+                }
+            }
             #expect(url.absoluteString == OpenId4VpAuthenticationTests.requestURI)
             return (Data(token.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/oauth-authz-req+jwt"])!)
         }
