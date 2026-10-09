@@ -21,6 +21,7 @@ import MdocDataTransfer18013
 import X509
 import struct WalletStorage.Document
 import struct OpenID4VP.ClaimPath
+import enum OpenID4VP.DCQLClaimValue
 import enum OpenID4VP.Authorization
 
 /// Implements proximity attestation presentation with QR to BLE data transfer
@@ -231,7 +232,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		let formatsRequested = Dictionary(idsToDocTypes.values.map { ($0, DocDataFormat.cbor) }, uniquingKeysWith: { first, _ in first })
 		let credentialMap = OpenId4VpUtils.makeCredentialMap(idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
 		var claimPaths = [Document.ID: [ClaimPath]]()
-		var claimValues = [Document.ID: [ClaimPath: [String]]]()
+		var claimValues = [Document.ID: [ClaimPath: [DCQLClaimValue]]]()
 		OpenId4VpUtils.makeCborClaimData(from: docs, claimPaths: &claimPaths, claimValues: &claimValues)
 		return DefaultDcqlQueryable(credentials: credentialMap, claimPaths: claimPaths, claimValues: claimValues)
 	}

@@ -376,6 +376,98 @@ struct EudiWalletKitTests {
 		}
 	}
 
+	@Test("Issuer credential reuse policy controls batch and reissue defaults")
+	func testResolveCredentialOptionsFromReusePolicy() async throws {
+		let service = try makeVciService(storageService: TestDataStorageService())
+		let issuerBatch = try BatchCredentialIssuance(batchSize: 6)
+
+		let noPolicy = try await service.resolveCredentialOptions(batchCredentialIssuance: issuerBatch)
+		#expect(noPolicy.batchSize == 6)
+		#expect(noPolicy.reissueTriggerUnused == nil)
+		if case .rotateUse = noPolicy.credentialPolicy {} else { Issue.record("Expected rotation when no reuse policy is declared") }
+
+		let onceOnly = CredentialReusePolicy(id: "arf_annex_ii", options: [.onceOnly(batchSize: 4, reissueTriggerUnused: 2)])
+		let oneTimeOptions = try await service.resolveCredentialOptions(batchCredentialIssuance: issuerBatch, credentialReusePolicy: onceOnly)
+		#expect(oneTimeOptions.batchSize == 4)
+		#expect(oneTimeOptions.reissueTriggerUnused == 2)
+		#expect(oneTimeOptions.reissueTriggerLifetimeLeft == nil)
+		if case .oneTimeUse = oneTimeOptions.credentialPolicy {} else { Issue.record("once_only should use one-time credentials") }
+
+		let limitedTime = CredentialReusePolicy(id: "arf_annex_ii", options: [.limitedTime(reissueTriggerLifetimeLeft: 12)])
+		let limitedTimeOptions = try await service.resolveCredentialOptions(batchCredentialIssuance: issuerBatch, credentialReusePolicy: limitedTime)
+		#expect(limitedTimeOptions.batchSize == 1)
+		#expect(limitedTimeOptions.reissueTriggerUnused == nil)
+		#expect(limitedTimeOptions.reissueTriggerLifetimeLeft == 12)
+
+		let rotating = CredentialReusePolicy(id: "arf_annex_ii", options: [.rotatingBatch(batchSize: 3, reissueTriggerLifetimeLeft: 5)])
+		let requested = CredentialOptions(credentialPolicy: .oneTimeUse, batchSize: 10, reissueTriggerUnused: 9, reissueTriggerLifetimeLeft: 9)
+		let rotatingOptions = try await service.resolveCredentialOptions(batchCredentialIssuance: issuerBatch, credentialReusePolicy: rotating, userCredentialOptions: requested)
+		#expect(rotatingOptions.batchSize == 3)
+		#expect(rotatingOptions.reissueTriggerUnused == nil)
+		#expect(rotatingOptions.reissueTriggerLifetimeLeft == 5)
+		if case .rotateUse = rotatingOptions.credentialPolicy {} else { Issue.record("Issuer reuse policy should override the wallet's policy") }
+
+		let walletOptions = try await service.resolveCredentialOptions(batchCredentialIssuance: try BatchCredentialIssuance(batchSize: 2), userCredentialOptions: requested)
+		#expect(walletOptions.batchSize == 2)
+		#expect(walletOptions.reissueTriggerUnused == 9)
+
+		let unsupported = CredentialReusePolicy(id: "unknown-policy", options: [.onceOnly(batchSize: 2, reissueTriggerUnused: 1)])
+		do {
+			_ = try await service.resolveCredentialOptions(batchCredentialIssuance: issuerBatch, credentialReusePolicy: unsupported)
+			Issue.record("Unsupported reuse policy id should fail")
+		} catch CredentialReusePolicyError.unsupportedPolicyId(let id) {
+			#expect(id == "unknown-policy")
+		} catch {
+			Issue.record("Expected an unsupported reuse policy error, received \(error)")
+		}
+	}
+
+	@Test("Credential configuration resolution supports both formats and rejects unknown identifiers")
+	func testGetCredentialConfigurationFormats() async throws {
+		let data = try #require(Data(name: "pid-demo-openid-credential-issuer", ext: "json", from: Bundle.module))
+		let metadata = try JSONDecoder().decode(CredentialIssuerMetadata.self, from: data)
+		let service = try makeVciService(storageService: TestDataStorageService())
+		let mdoc = try await service.getCredentialConfiguration(
+			credentialIssuerIdentifier: metadata.credentialIssuerIdentifier.url.absoluteString,
+			issuerDisplay: metadata.display,
+			credentialsSupported: metadata.credentialsSupported,
+			identifier: "pid-mso-mdoc", docType: "eu.europa.ec.eudi.pid.1", vct: nil,
+			batchCredentialIssuance: nil, dpopSigningAlgValuesSupported: nil,
+			clientAttestationPopSigningAlgValuesSupported: nil
+		)
+		#expect(mdoc.format == .cbor)
+		#expect(mdoc.docType == "eu.europa.ec.eudi.pid.1")
+		#expect(mdoc.configurationIdentifier.value == "pid-mso-mdoc")
+
+		let sdJwt = try await service.getCredentialConfiguration(
+			credentialIssuerIdentifier: metadata.credentialIssuerIdentifier.url.absoluteString,
+			issuerDisplay: metadata.display,
+			credentialsSupported: metadata.credentialsSupported,
+			identifier: "pid-sd-jwt", docType: nil, vct: "urn:eudi:pid:de:1",
+			batchCredentialIssuance: nil, dpopSigningAlgValuesSupported: ["ES256"],
+			clientAttestationPopSigningAlgValuesSupported: ["ES384"]
+		)
+		#expect(sdJwt.format == .sdjwt)
+		#expect(sdJwt.vct == "urn:eudi:pid:de:1")
+		#expect(sdJwt.dpopSigningAlgValuesSupported == ["ES256"])
+		#expect(sdJwt.clientAttestationPopSigningAlgValuesSupported == ["ES384"])
+		#expect(sdJwt.credentialSigningAlgValuesSupported.isEmpty == false)
+
+		do {
+			_ = try await service.getCredentialConfiguration(
+				credentialIssuerIdentifier: metadata.credentialIssuerIdentifier.url.absoluteString,
+				issuerDisplay: metadata.display,
+				credentialsSupported: metadata.credentialsSupported,
+				identifier: "missing", docType: nil, vct: nil,
+				batchCredentialIssuance: nil, dpopSigningAlgValuesSupported: nil,
+				clientAttestationPopSigningAlgValuesSupported: nil
+			)
+			Issue.record("An unknown credential configuration should fail")
+		} catch let error as WalletError {
+			#expect(error.code == .invalidQueryResolution)
+		}
+	}
+
 	@Test("Issued mDOC mDL credential validation", .disabled("Test mDL credential has expired (validUntil: 2026-07-20)"))
 	func testValidateIssuedMdocCredential() async throws {
 		let storageService = TestDataStorageService()
@@ -664,7 +756,7 @@ final class TestNetworking: Networking {
 	}
 
 	func data(from url: URL) async throws -> (Data, URLResponse) {
-		let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:])!
+		let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
 		return (metadata, response)
 	}
 
