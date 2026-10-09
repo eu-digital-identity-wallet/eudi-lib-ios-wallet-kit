@@ -67,6 +67,20 @@ struct StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
 		let attTF: AttestToken.Format = switch format { case .jwt: .jwt; case .cwt: .cwt }
 		let att = try x5cVerifyJwtOrCwt.parse(attestData: statusListToken, format: attTF)
+		if case let .jwt(jws) = att {
+			// Certificate-chain warnings must never permit an unsigned or MAC-authenticated JWT.
+			guard let algorithm = jws.protectedHeader.algorithm else {
+				throw WalletError(description: "Status JWT is missing a signature algorithm", code: .unsupportedAlgorithm)
+			}
+			switch algorithm {
+			case .RS256, .RS384, .RS512,
+				 .ES256, .ES384, .ES512, .ES256K,
+				 .PS256, .PS384, .PS512, .EdDSA:
+				break
+			case .HS256, .HS384, .HS512, .none, .invalid:
+				throw WalletError(description: "Unsupported status JWT signature algorithm: \(algorithm.rawValue)", code: .unsupportedAlgorithm)
+			}
+		}
 		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.accessTrustManager)
 		guard isValid else {
 			let message = "\(format) status token trust error: \(reason ?? "")"

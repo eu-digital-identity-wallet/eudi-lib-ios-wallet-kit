@@ -33,7 +33,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public var readerCertIssuer: String?
 	/// Reader legal name (if provided)
 	@Published public var readerLegalName: String?
-	/// Reader certificate validation message (only for BLE transfer wih verifier using reader authentication)
+	/// Authentication of the current request, independent of certificate-name availability and registration warnings.
+	@Published public private(set) var readerAuthenticationStatus: ReaderAuthenticationStatus = .notEvaluated
+	/// Reader certificate validation message
 	@Published public var readerCertValidationMessage: String?
 	/// Reader certificate issuer is valid
 	@Published public var readerCertIssuerValid: Bool?
@@ -90,6 +92,19 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// - Parameter requests: Request information
 	func decodeRequest(_ requests: [UserRequestInfo]) throws {
 		guard docIdToPresentInfo.count > 0 else { throw WalletError(description: "No documents added to session ", code: .noDocumentsAvailable)}
+		if let service = presentationService as? OpenId4VpService {
+			readerAuthenticationStatus = service.readerAuthenticationStatus
+		} else {
+			let results = requests.flatMap { $0.readerAuthResults.values }
+			if !results.isEmpty, results.allSatisfy(\.isValidated) {
+				readerAuthenticationStatus = .authenticated
+			} else if results.contains(where: { !$0.isValidated && ($0.authBytes != nil || $0.certificateChain != nil) }) {
+				readerAuthenticationStatus = .failed
+			} else {
+				// Optional reader authentication may be absent with an informational message.
+				readerAuthenticationStatus = .notEvaluated
+			}
+		}
 		// show the items as checkboxes
 		disclosedDocumentSets.removeAll()
 		for request in requests {
@@ -113,12 +128,11 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 					default: logger.error("Unsupported format \(docPresentInfo.docDataFormat) for \(docId)")
 				}
 			}
-			if let authResult = request.defaultReaderAuthResult, let readerAuthority = authResult.certificateIssuer {
-				readerCertIssuer = readerAuthority
-				readerCertIssuerValid = authResult.isValidated
-				readerCertValidationMessage = authResult.validationMessage
-			}
-			readerLegalName = request.defaultReaderAuthResult?.legalName
+			let authResult = request.defaultReaderAuthResult
+			readerCertIssuer = authResult?.certificateIssuer
+			readerCertIssuerValid = authResult?.isValidated
+			readerCertValidationMessage = authResult?.validationMessage
+			readerLegalName = readerAuthenticationStatus == .authenticated ? authResult?.legalName : nil
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
 			if disclosedElements.count == 0 { throw WalletError(description: Self.notAvailableStr, localizationKey: "request_data_no_document", code: .noDocumentsAvailable) }
 			let warningsKey = if presentationService.flow == .ble { presentationService.wrpVerifierWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
@@ -176,6 +190,13 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	/// On error ``uiError`` will be filled and ``status`` will be ``.error``
 	/// - Returns: A request object
 	public func receiveRequest() async -> [UserRequestInfo]? {
+		await MainActor.run {
+			readerAuthenticationStatus = .notEvaluated
+			readerCertIssuer = nil; readerCertIssuerValid = nil; readerCertValidationMessage = nil; readerLegalName = nil
+			disclosedDocumentSets.removeAll()
+			wrpVerifierPolicy = nil; wrpVerifierWarnings = nil
+			uiError = nil
+		}
 		await presentationService.persistTransactionLog()
 		do {
 			let request = try await presentationService.receiveRequest()
@@ -186,6 +207,16 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &presentationService.transactionLog)
 			await presentationService.persistTransactionLog()
 			let walletError = error as? WalletError
+			await MainActor.run {
+				readerAuthenticationStatus = .failed
+				readerLegalName = nil
+				disclosedDocumentSets.removeAll()
+				if let service = presentationService as? OpenId4VpService {
+					readerCertIssuer = service.readerCertificateIssuer.map(MdocHelpers.getCN(from:))
+					readerCertIssuerValid = service.readerAuthValidated
+					readerCertValidationMessage = service.readerCertificateValidationMessage
+				}
+			}
 			await setError(error.localizedDescription, localizationKey: walletError?.localizationKey, code: walletError?.code ?? .internalError, innerError: error)
 			return nil
 		}
@@ -216,6 +247,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	///   - onSuccess: Callback invoked on successful response with an optional redirect URL
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil, requestName: String? = nil, onCancel: (() -> Void)? = nil, onSuccess: (@Sendable (URL?) -> Void)? = nil) async throws {
 		do {
+			if presentationService is OpenId4VpService {
+				let authentication = await MainActor.run { readerAuthenticationStatus }
+				guard authentication == .authenticated || authentication == .notApplicable else {
+					throw WalletError(description: "No successfully decoded presentation request", code: .notSecuredRequest)
+				}
+			}
 			await MainActor.run { status = .userSelected }
 			let action = { [self] in
 				if let service = presentationService as? OpenId4VpService {
