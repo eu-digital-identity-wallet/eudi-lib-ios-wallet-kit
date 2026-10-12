@@ -21,4 +21,17 @@ import JOSESwift
 public protocol WalletAttestationsProvider: Sendable {
 	func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String
 	func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String
+	/// Whether credential-key attestation needs private-key proofs.
+	var requiresKeyProofs: Bool { get }
+	/// Signing handles follow the public-key order and keep private material in the secure area.
+	func getKeysAttestation(keys: [any JWK], signingKeys: [SigningKeyProxy], nonce: String?) async throws -> String
+}
+
+public extension WalletAttestationsProvider {
+	var requiresKeyProofs: Bool { false }
+
+	/// Existing providers can continue to attest public keys without signing proofs.
+	func getKeysAttestation(keys: [any JWK], signingKeys: [SigningKeyProxy], nonce: String?) async throws -> String {
+		try await getKeysAttestation(keys: keys, nonce: nonce)
+	}
 }
