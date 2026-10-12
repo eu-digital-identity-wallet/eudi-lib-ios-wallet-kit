@@ -215,11 +215,11 @@ extension OpenId4VciConfiguration {
 			throw WalletError(description: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation", code: .unsupportedAlgorithm)
 		}
 		let popJwtSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt")
-		let attestation = try await attestationsProvider.getWalletAttestation(signingKey: signingKey)
-		let attestationJWT = try ClientAttestationJWT(jws: JWS(compactSerialization: attestation))
+		let attestationCache = WalletAttestationCache(provider: attestationsProvider, signingKey: signingKey)
+		let attestationJWT = try await attestationCache.attestation()
 		let resolvedClientId = try clientId ?? attestationJWT.decodeAsClientAttestationClaims().subject.value
 		let client: Client = .attested(id: resolvedClientId, alg: popConstructor.algorithm, jwk: popConstructor.jwk, popJwtSpec: popJwtSpec, clientAttestationProvider: { _ in
-			return (attestationJWT, signingKey)
+			return (try await attestationCache.attestation(), signingKey)
 		})
 		return client
 	}
