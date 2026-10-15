@@ -113,7 +113,15 @@ public actor OpenId4VciService {
 		let publicCoseKeys = try await issueReq.createKeyBatch()
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys, algorithm: algType)
 		let unlockData = try await issueReq.secureArea.unlockKey(id: issueReq.id)
-		let funcKeyAttestationJWT: FuncKeyAttestationJWT = { nonce in try await self.getKeyAttestationJWT(publicKeys, nonce: nonce) }
+		let signingKeys: [SigningKeyProxy]
+		if config.keyAttestationsConfig?.walletAttestationsProvider.requiresKeyProofs == true {
+			signingKeys = try makeKeyProofSigners(publicKeys, request: issueReq, algorithm: selectedAlgorithm, unlockData: unlockData)
+		} else {
+			signingKeys = []
+		}
+		let funcKeyAttestationJWT: FuncKeyAttestationJWT = { nonce in
+			try await self.getKeyAttestationJWT(publicKeys, signingKeys: signingKeys, nonce: nonce)
+		}
 		let bindingKey: BindingKey
 		if config.keyAttestationsConfig != nil, configuration.supportsAttestationProofType {
 			// Send a single `attestation` proof for the whole batch. The key attestation JWT already attests every key
@@ -138,7 +146,18 @@ public actor OpenId4VciService {
 		let request = try IssueRequest(id: id, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		let publicCoseKeys = try await request.createKeyBatch()
 		let publicKeys = try Self.makePublicJwks(from: publicCoseKeys)
-		let keyAttestation = try await attestationProvider.getKeysAttestation(keys: publicKeys, nonce: nonce)
+		let signingKeys: [SigningKeyProxy]
+		if attestationProvider.requiresKeyProofs {
+			guard let firstKey = publicKeys.first else {
+				throw WalletError(description: "Key attestation requires at least one credential key", code: .internalError)
+			}
+			let algorithm = await request.secureArea.defaultSigningAlgorithm(ecCurve: firstKey.crv.coseEcCurve)
+			let unlockData = try await request.secureArea.unlockKey(id: request.id)
+			signingKeys = try makeKeyProofSigners(publicKeys, request: request, algorithm: algorithm, unlockData: unlockData)
+		} else {
+			signingKeys = []
+		}
+		let keyAttestation = try await attestationProvider.getKeysAttestation(keys: publicKeys, signingKeys: signingKeys, nonce: nonce)
 		return BatchCreateKeyResult(keys: publicCoseKeys, keyAttestation: keyAttestation)
 	}
 
@@ -150,13 +169,22 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], nonce: String?) async throws -> KeyAttestationJWT {
+	func getKeyAttestationJWT(_ publicKeys: [ECPublicKey], signingKeys: [SigningKeyProxy] = [], nonce: String?) async throws -> KeyAttestationJWT {
 		guard let attestationProvider = config.keyAttestationsConfig?.walletAttestationsProvider else {
 			throw WalletError(description: "Key attestation configuration is required to create key attestations", code: .unsupportedCredentialConfiguration)
 		}
-		let jwt = try await attestationProvider.getKeysAttestation(keys: publicKeys, nonce: nonce)
+		let jwt = try await attestationProvider.getKeysAttestation(keys: publicKeys, signingKeys: signingKeys, nonce: nonce)
 		let keyAttestationJwt: KeyAttestationJWT = try .init(jws: .init(compactSerialization: jwt))
 		return keyAttestationJwt
+	}
+
+	private func makeKeyProofSigners(_ publicKeys: [ECPublicKey], request: IssueRequest,
+		algorithm: MdocDataModel18013.SigningAlgorithm, unlockData: Data?) throws -> [SigningKeyProxy] {
+		try publicKeys.enumerated().map { index, publicKey in
+			.custom(try SecureAreaSigner(secureArea: request.secureArea, id: request.id, index: index,
+				publicKey: publicKey, curve: publicKey.crv.coseEcCurve, ecAlgorithm: algorithm,
+				unlockData: unlockData, context: localAuthenticationContext))
+		}
 	}
 
 	func setConfiguration(_ config: OpenId4VciConfiguration) {
