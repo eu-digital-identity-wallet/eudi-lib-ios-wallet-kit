@@ -118,3 +118,80 @@ await presentationSession.sendResponse(userAccepted: true,
     }
   })
 ```
+
+## QES transaction data
+
+Enable the CSC QES transaction types explicitly in the OpenID4VP configuration:
+
+```swift
+let configuration = OpenId4VpConfiguration(
+    supportedTransactionDataTypes: [.qesRequest, .qesApprovalRequest]
+)
+```
+
+The identifiers are `https://cloudsignatureconsortium.org/2025/qes` and
+`https://cloudsignatureconsortium.org/2025/qes-approval`. The default configuration accepts no
+transaction data types. Other explicitly configured types are exposed as raw JSON.
+
+Each disclosed document set exposes `transactionData`, keyed by wallet document ID. Display
+**all** transactions in the chosen option before asking for consent. The array preserves multiple
+transactions of the same type. Use `DisclosedDocumentSet.transactionData` as the source of
+transaction information for the consent UI.
+
+```swift
+for transactions in selectedOption.transactionData.values {
+    for transaction in transactions {
+        switch transaction.payload {
+        case .qesApprovalRequest(let approval):
+            // Display signatureQualifier, numSignatures and every document digest/label.
+            showApproval(approval)
+        case .qesRequest(let request):
+            showSignatureRequests(request.signatureRequests)
+        case .raw(let json):
+            showCustomTransaction(json)
+        }
+    }
+}
+try await presentationSession.sendResponse(
+    userAccepted: true,
+    itemsToSend: selectedOption.docElements.items,
+    requestName: selectedOption.requestName
+)
+```
+
+Pass `requestName` to preserve the displayed option's transaction and credential-query assignment.
+Without it, ambiguous transaction assignments are rejected. Each transaction is bound to exactly
+one eligible credential, following `credential_ids` order. QES approvals support both SD-JWT VC
+and mdoc. SD-JWTs need a holder binding key; mdocs need a device key and issuer `KeyAuthorizations`
+permitting `org.cloudsignatureconsortium.dm.1/qesApproval` (the entire namespace or that element).
+Options that cannot authorize every transaction are not offered.
+
+The Key Binding JWT hashes the original encoded transaction string, using a mutually supported
+hash algorithm (SHA-256 by default; SHA-384 and SHA-512 can be configured). A QES approval also
+adds `org.cloudsignatureconsortium.dm.1.qesApproval`, using `hashAlgorithmOID` and standard Base64
+as required by CSC. Multiple approvals that would need the same proof are rejected. This library
+does not fetch referenced documents or perform the remote signing operation; those belong to
+the application and RQES libraries.
+
+For mdoc, the wallet automatically includes `qesApproval` in the device-signed namespace
+`org.cloudsignatureconsortium.dm.1`. Following [CSC Data Model Bindings §7.2.1.1](https://cloudsignatureconsortium.org/wp-content/uploads/2025/10/data-model-bindings.pdf),
+the value is a CBOR byte string containing SHA-256 of the original **decoded JSON bytes**,
+without reserialization or Base64 encoding of the digest. This binding does not use the SD-JWT
+`transaction_data_hashes_alg` negotiation or its `hashAlgorithmOID`-selected approval hash.
+Other application-supplied device namespaces are preserved; a conflicting `qesApproval` is rejected.
+The generated response must contain the device-signed approval; a ZK-only response cannot replace it.
+Only `qesApprovalRequest` has a supported mdoc binding. `qesRequest` and custom types cannot be
+assigned to an mdoc without a format-specific binding and return `invalid_transaction_data`
+when no supported alternative credential can authorize them.
+
+Malformed, unsupported or unfulfillable transaction data produces `WalletError.Code.invalidTransactionData`
+(`invalid_transaction_data`) and a protocol error response when safe dispatch details are available.
+The other OpenID4VP error codes are exposed as distinct wallet codes, including `invalidScope`,
+`invalidRequest`, `invalidClient`, `accessDenied`, `vpFormatsNotSupported`, `invalidRequestUriMethod`
+and `walletUnavailable`. Credential matching failures retain their detailed wallet codes and send
+`access_denied` to the verifier. Negative consent works even when the request omits `state`.
+
+Presentation log entries retain decoded objects in `transactionalData` alongside the result,
+including declined requests. Read typed payloads with
+`entry.transactionalData?.payloads(supportedTypes: configuration.supportedTransactionDataTypes)`.
+Older log entries without transaction data remain readable.

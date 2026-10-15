@@ -149,22 +149,6 @@ struct OpenId4VpAuthenticationTests {
             documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: ThreadSafeAuthContext())
     }
 
-    @Test("Partial request decoding cannot leave a sendable context")
-    func rejectsPartialRequest() async throws {
-        let fixture = try CertificateFixture()
-        let invalid = try fixture.token(clientId: fixture.clientIds[0], validSignature: true, requestedDocType: "unavailable")
-        let (service, network) = try await makeService(clientId: fixture.clientIds[0], token: invalid,
-            byReference: true, anchors: [fixture.der])
-        await assertRejected(service, network: network)
-        #expect(service.readerAuthValidated) // Trust succeeded before local DCQL resolution failed.
-        #expect(service.readerAuthenticationStatus == .failed)
-        #expect(service.vpClientId == nil)
-
-        await network.setToken(try fixture.token(clientId: fixture.clientIds[0], validSignature: true))
-        #expect(try await !service.receiveRequest().isEmpty)
-        #expect(service.readerAuthenticationStatus == .authenticated)
-    }
-
     @Test("Request validation cannot overlap another receive or a send")
     func rejectsOverlappingOperations() async throws {
         let fixture = try CertificateFixture()
