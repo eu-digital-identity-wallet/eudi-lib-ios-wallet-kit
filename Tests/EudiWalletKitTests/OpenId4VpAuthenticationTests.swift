@@ -260,6 +260,29 @@ struct OpenId4VpAuthenticationTests {
         await assertRejected(service, network: network)
     }
 
+    @Test("The preregistered convenience initializer defaults to RS256")
+    func defaultsToRS256() throws {
+        let client = PreregisteredClient(clientId: "registered", verifierLegalName: "Registered verifier",
+            webKeys: try WebKeySet(["keys": []]))
+        #expect(client.jarSigningAlg.name == "RS256")
+    }
+
+    @Test("The configured request algorithm is enforced", arguments: [false, true])
+    func rejectsDifferentRegisteredAlgorithm(byReference: Bool) async throws {
+        let fixture = try CertificateFixture()
+        let configured = try fixture.preregistered(clientId: "registered")
+        guard case .passByValue(let keys) = configured.jwkSetSource else {
+            Issue.record("Expected inline keys")
+            return
+        }
+        let client = PreregisteredClient(clientId: configured.clientId, verifierLegalName: configured.legalName,
+            webKeys: keys, jarSigningAlg: JWSAlgorithm(.ES384))
+        let token = try fixture.token(clientId: client.clientId, validSignature: true)
+        let (service, network) = try await makeService(clientId: client.clientId, token: token,
+            byReference: byReference, clientIdSchemes: [.preregistered([client])])
+        await assertRejected(service, network: network)
+    }
+
     @Test("Preregistered requests use the exact registered identity and key", arguments: [false, true])
     func selectsRegisteredClient(byReference: Bool) async throws {
         let first = try CertificateFixture()
@@ -490,8 +513,8 @@ struct OpenId4VpAuthenticationTests {
             let coordinates = key.publicKey.x963Representation.dropFirst()
             let keys = try WebKeySet(["keys": [["kty": "EC", "crv": "P-256", "use": "sig", "alg": "ES256",
                 "x": Self.base64URL(Data(coordinates.prefix(32))), "y": Self.base64URL(Data(coordinates.suffix(32)))]]])
-            return PreregisteredClient(clientId: clientId, legalName: "Registered \(clientId)",
-                jarSigningAlg: JWSAlgorithm(.ES256), jwkSetSource: .passByValue(webKeys: keys))
+            return PreregisteredClient(clientId: clientId, verifierLegalName: "Registered \(clientId)",
+                webKeys: keys, jarSigningAlg: JWSAlgorithm(.ES256))
         }
         static func base64URL(_ data: Data) -> String {
             data.base64EncodedString().replacingOccurrences(of: "+", with: "-")
