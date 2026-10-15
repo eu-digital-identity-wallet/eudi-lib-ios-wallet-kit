@@ -61,7 +61,7 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// Key options for generating DPoP keys, if DPoP is used
 	public let dpopKeyOptions: KeyOptions?
 	/// Builder used to create client-attestation proofs of possession.
-	public let clientAttestationPoPBuilder: any ClientAttestationPoPBuilder
+	public let clientAttestationPoPBuilder: (any ClientAttestationPoPBuilder)
 
 	public init(
 		credentialIssuerURL: String?,
