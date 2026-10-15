@@ -37,7 +37,9 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public private(set) var readerAuthenticationStatus: ReaderAuthenticationStatus = .notEvaluated
 	/// Reader certificate validation message
 	@Published public var readerCertValidationMessage: String?
-	/// Reader certificate issuer is valid
+	/// Validation result from the default reader authentication result.
+	/// Use ``readerAuthenticationStatus`` for authentication of the current request.
+	@available(*, deprecated, message: "Use readerAuthenticationStatus == .authenticated to determine whether the current request is authenticated.")
 	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
