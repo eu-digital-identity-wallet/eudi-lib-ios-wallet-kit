@@ -1,3 +1,8 @@
+## Unreleased
+
+- Remove the unused `cacheIssuerMetadata` argument from `OpenId4VciConfiguration.init` and `verifierApiUri` from the preregistered verifier convenience initializer. Callers must remove these arguments; existing runtime behavior is unchanged.
+- Add `jarSigningAlg` to the preregistered verifier convenience initializer, defaulting to RS256, to support verifiers using other request signing algorithms such as ES256.
+
 ## v0.54.0
 
 - Add optional Trust Mark support through `EudiWallet.trustMarkManager`, configured with static information or a dynamic `TrustMarkProvider` via `trustMarkSource`.

@@ -139,6 +139,19 @@ Set `preferredResponseMode` to override the response mode requested by the verif
 
 `OpenId4VpConfiguration.errorDispatchPolicy` controls which verifiers may receive protocol-level errors when a request fails validation. The default is `.allClients`, retaining the existing configuration and allowing notifications even when verifier authentication fails. Set `errorDispatchPolicy: .onlyAuthenticatedClients` to restrict notifications to authenticated verifiers. Errors are sent only when the OpenID4VP library supplies dispatch details.
 
+The preregistered verifier convenience initializer accepts `jarSigningAlg` (default: RS256). For an ES256 verifier, use:
+
+```swift
+let verifier = PreregisteredClient(
+    clientId: "registered-verifier",
+    verifierLegalName: "Example verifier",
+    webKeys: verifierWebKeys,
+    jarSigningAlg: JWSAlgorithm(.ES256)
+)
+```
+
+When migrating from 0.54.8, remove `verifierApiUri` from this initializer and `cacheIssuerMetadata` from `OpenId4VciConfiguration.init`. Both arguments were ignored and have been removed. Issuer metadata resolved directly by issuer URL continues to be cached automatically; this initializer does not offer a cache toggle.
+
 ### Trust configuration
 
 `EudiWallet` requires a `TrustConfiguration` that describes where trust anchors come from and how trust failures are handled. A single `TrustConfiguration` drives certificate-chain validation across the wallet:
