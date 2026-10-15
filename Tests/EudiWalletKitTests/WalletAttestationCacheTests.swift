@@ -16,14 +16,13 @@ limitations under the License.
 
 import Foundation
 import Security
-import Synchronization
+import os
 import Testing
 @preconcurrency import JOSESwift
 import OpenID4VCI
 
 @testable import EudiWalletKit
 
-@available(iOS 18.0, watchOS 11.0, *)
 @Suite("Wallet attestation expiry")
 struct WalletAttestationCacheTests {
     @Test("A valid cached WIA is reused")
@@ -106,10 +105,9 @@ struct WalletAttestationCacheTests {
     }
 }
 
-@available(iOS 18.0, watchOS 11.0, *)
 private final class ExpiryTestClock: ClockType {
-    private let instant: Mutex<Date>
-    init(_ date: Date) { instant = Mutex(date) }
+    private let instant: OSAllocatedUnfairLock<Date>
+    init(_ date: Date) { instant = OSAllocatedUnfairLock(initialState: date) }
     func now() -> Date { instant.withLock { $0 } }
     func set(_ date: Date) { instant.withLock { $0 = date } }
 }
@@ -142,7 +140,7 @@ private actor ExpiryTestProvider: WalletAttestationsProvider {
         return try response.get()
     }
 
-    func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
+    nonisolated func getKeysAttestation(keys: [any JWK], nonce: String?) async throws -> String {
         throw ExpiryTestError.unavailable
     }
 }

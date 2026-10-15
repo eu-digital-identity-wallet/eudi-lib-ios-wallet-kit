@@ -739,11 +739,11 @@ private actor ProofCheckingWalletAttestationsProvider: WalletAttestationsProvide
 
     func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String { Self.attestation }
 
-    func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
+    nonisolated func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
         throw WalletError(description: "A proof provider must receive signing handles", code: .internalError)
     }
 
-    func getKeysAttestation(keys: [any JOSESwift.JWK], signingKeys: [SigningKeyProxy], nonce: String?) async throws -> String {
+    nonisolated func getKeysAttestation(keys: [any JOSESwift.JWK], signingKeys: [SigningKeyProxy], nonce: String?) async throws -> String {
         #expect(signingKeys.count == keys.count)
         let header = try JWSHeader(parameters: ["alg": "ES256", "typ": "wallet-provider-key-proof+jws"])
         let payload = Data(#"{"purpose":"key-attestation/ios"}"#.utf8)
@@ -762,7 +762,11 @@ private actor ProofCheckingWalletAttestationsProvider: WalletAttestationsProvide
             #expect(verified.payload.data() == payload)
             thumbprints.append(try publicKey.thumbprint(algorithm: .SHA256))
         }
-        lastRequest = (thumbprints, nonce)
+        await recordRequest(thumbprints: thumbprints, nonce: nonce)
         return Self.attestation
+    }
+
+    private func recordRequest(thumbprints: [String], nonce: String?) {
+        lastRequest = (thumbprints, nonce)
     }
 }
