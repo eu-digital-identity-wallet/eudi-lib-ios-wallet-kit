@@ -68,6 +68,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	public private(set) var readerAuthenticationStatus: ReaderAuthenticationStatus = .notEvaluated
 	private let requestOperationLock = OSAllocatedUnfairLock(initialState: false)
 	var readerAuthValidated: Bool = false
+	private var readerCertificateAccepted = false
 	var readerCertificateIssuer: String?
 	var readerCertificateValidationMessage: String?
 	var certificateChain: [Data]?
@@ -150,6 +151,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	private func resetPresentationState() {
 		readerAuthenticationStatus = .notEvaluated
 		readerAuthValidated = false
+		readerCertificateAccepted = false
 		readerCertificateIssuer = nil
 		readerCertificateValidationMessage = nil
 		certificateChain = nil
@@ -203,20 +205,22 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		case let .jwt(request: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
+			let isX509: Bool
 			switch rrd.client {
 			case .x509SanDns(_, let certificate), .x509Hash(_, let certificate):
-				guard readerAuthValidated, let leaf = certificateChain?.first,
+				isX509 = true
+				guard readerCertificateAccepted, let leaf = certificateChain?.first,
 					let validatedCertificate = try? X509.Certificate(derEncoded: [UInt8](leaf)),
 					validatedCertificate == certificate else {
 					let message = "Required reader certificate authentication was not established"
 					readerCertificateValidationMessage = message
 					throw WalletError(description: message, code: .trustError)
 				}
-			case .preRegistered: break // The selected registered key has verified the JAR.
+			case .preRegistered: isX509 = false // The selected registered key has verified the JAR.
 			default: throw WalletError(description: "Unsupported authenticated client", code: .notSecuredRequest)
 			}
-			let requests = try await handleRequest(rrd)
-			readerAuthenticationStatus = .authenticated
+			let requests = try await handleRequestData(rrd)
+			readerAuthenticationStatus = isX509 && !readerAuthValidated ? .authenticatedWithUntrustedCertificate : .authenticated
 			return requests
 		}
 	}
@@ -436,7 +440,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		try beginRequestOperation()
 		defer { endRequestOperation() }
 		presentedDocumentIds = []
-		guard readerAuthenticationStatus == .authenticated || readerAuthenticationStatus == .notApplicable else {
+		guard readerAuthenticationStatus == .authenticated || readerAuthenticationStatus == .authenticatedWithUntrustedCertificate || readerAuthenticationStatus == .notApplicable else {
 			throw WalletError(description: "No successfully validated presentation request", code: .notSecuredRequest)
 		}
 		guard dcql != nil, let resolved = resolvedRequestData else {
@@ -572,20 +576,26 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	lazy var chainVerifier: CertificateTrust = { [weak self] certificates async -> Bool in
 		guard let self else { return false }
 		self.readerAuthValidated = false
+		self.readerCertificateAccepted = false
 		self.readerCertificateIssuer = nil
 		self.certificateChain = nil
 		self.readerCertificateValidationMessage = "The reader certificate chain is malformed"
 		let b64certs = certificates; let certsData = b64certs.compactMap { Data(base64Encoded: $0) }
 		guard certsData.count > 0, certsData.count == b64certs.count else { return false }
 		// x5c is leaf-first. The leaf identifies the verifier; the last certificate is normally a CA.
-		guard let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData[0])) else { return false }
+		guard certsData.allSatisfy({ (try? X509.Certificate(derEncoded: [UInt8]($0))) != nil }),
+			let x509 = try? X509.Certificate(derEncoded: [UInt8](certsData[0])) else { return false }
 		self.readerCertificateIssuer = x509.subject.description
 		// Validate the reader access certificate chain against the configured trust anchors (WRPAC context).
 		let (isValid, failureReason) = await self.trustConfig.accessTrustManager.validateCertTrustPath(chain: certsData)
 		self.readerAuthValidated = isValid
 		self.readerCertificateValidationMessage = failureReason ?? (isValid ? nil : "The reader certificate chain is not trusted")
 		self.certificateChain = certsData
-		return isValid
+		self.readerCertificateAccepted = isValid || self.trustConfig.readerTrustPolicy == .warning
+		if !isValid && self.readerCertificateAccepted {
+			self.logger.warning("Reader certificate chain is not trusted; proceeding under readerTrustPolicy=.warning: \(self.readerCertificateValidationMessage ?? "Unknown trust failure")")
+		}
+		return self.readerCertificateAccepted
 	}
 
 	/// OpenId4VP wallet configuration

@@ -39,7 +39,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public var readerCertValidationMessage: String?
 	/// Validation result from the default reader authentication result.
 	/// Use ``readerAuthenticationStatus`` for authentication of the current request.
-	@available(*, deprecated, message: "Use readerAuthenticationStatus == .authenticated to determine whether the current request is authenticated.")
+	@available(*, deprecated, message: "Use readerAuthenticationStatus to distinguish trusted authentication from policy-accepted untrusted certificates.")
 	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
@@ -251,7 +251,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		do {
 			if presentationService is OpenId4VpService {
 				let authentication = await MainActor.run { readerAuthenticationStatus }
-				guard authentication == .authenticated || authentication == .notApplicable else {
+				guard authentication == .authenticated || authentication == .authenticatedWithUntrustedCertificate || authentication == .notApplicable else {
 					throw WalletError(description: "No successfully decoded presentation request", code: .notSecuredRequest)
 				}
 			}
