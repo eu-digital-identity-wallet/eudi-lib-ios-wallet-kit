@@ -734,7 +734,17 @@ public actor OpenId4VciService {
 	}
 
 	private static func submissionUseCase(_ authorized: AuthorizedRequest, issuer: Issuer, configuration: CredentialConfiguration, bindingKeys: [BindingKey], publicKeys: [Data], logger: Logger) async throws -> IssuanceOutcome {
-		let payload: IssuanceRequestPayload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
+		
+		let payload: IssuanceRequestPayload
+		if let credentialIdentifiers = authorized.credentialIdentifiers, !credentialIdentifiers.isEmpty {
+			guard let credentialIdentifier = credentialIdentifiers[configuration.configurationIdentifier]?.first else {
+				throw WalletError(description: "No credential identifier for requested configuration", code: .issuanceRequestFailed)
+			}
+			payload = .identifierBased(credentialConfigurationIdentifier:configuration.configurationIdentifier, credentialIdentifier: credentialIdentifier)
+		} else {
+			payload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
+		}
+		
 		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
 		switch requestOutcome {
 		case .success(let response):
