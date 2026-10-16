@@ -34,6 +34,88 @@ struct OpenId4VpAuthenticationTests {
         }
     }
 
+    @Test("Reader warning policy allows signed requests without claiming certificate trust", arguments: [false, true])
+    @MainActor func acceptsReaderTrustWarning(trusted: Bool) async throws {
+        let fixture = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: true)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                anchors: trusted ? [fixture.der] : [], readerTrustPolicy: .warning)
+            let requests = try await service.receiveRequest()
+            let session = try makeSession(service)
+            try session.decodeRequest(requests)
+            let expected: ReaderAuthenticationStatus = trusted ? .authenticated : .authenticatedWithUntrustedCertificate
+            #expect(service.readerAuthenticationStatus == expected)
+            #expect(session.readerAuthenticationStatus == expected)
+            #expect(service.readerAuthValidated == trusted)
+            #expect(requests[0].defaultReaderAuthResult?.isValidated == trusted)
+            #expect((session.readerCertValidationMessage != nil) == !trusted)
+            if !trusted { #expect(session.readerLegalName == nil) }
+            // Reaching the deliberately failing transport proves both send guards accept the policy.
+            await #expect(throws: PostError.self) {
+                try await session.sendResponse(userAccepted: false, itemsToSend: [:])
+            }
+            #expect(await network.posts == 1)
+        }
+    }
+
+    @Test("Reader warning policy cannot bypass signature verification")
+    func rejectsInvalidSignatureWithReaderWarning() async throws {
+        let fixture = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: false)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                readerTrustPolicy: .warning)
+            await assertRejected(service, network: network)
+            #expect(service.readerAuthenticationStatus == .failed)
+        }
+    }
+
+    @Test("Reader warning policy still requires a well-formed evaluated certificate chain")
+    func rejectsMissingOrMalformedEvaluationWithReaderWarning() async throws {
+        let fixture = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: true)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                readerTrustPolicy: .warning)
+            let validate = service.chainVerifier
+            let malformedChains = [[], ["invalid-base64"], [Data([0]).base64EncodedString()],
+                [fixture.der.base64EncodedString(), Data([0]).base64EncodedString()]]
+            for chain in malformedChains {
+                #expect(await validate([fixture.der.base64EncodedString()]))
+                #expect(await !validate(chain)) // A prior policy acceptance must not survive malformed input.
+            }
+            // A dependency reporting success without invoking wallet validation must still be rejected.
+            service.chainVerifier = { _ in true }
+            await assertRejected(service, network: network)
+        }
+    }
+
+    @Test("Reader warning policy acceptance is bound to the evaluated leaf certificate")
+    func rejectsMismatchedCertificateWithReaderWarning() async throws {
+        let fixture = try CertificateFixture()
+        let other = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: true)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                readerTrustPolicy: .warning)
+            let validate = service.chainVerifier
+            service.chainVerifier = { _ in await validate([other.der.base64EncodedString()]) }
+            await assertRejected(service, network: network)
+        }
+    }
+
+    @Test("Issuer warning policy does not relax reader certificate trust")
+    func keepsIssuerAndReaderPoliciesSeparate() async throws {
+        let fixture = try CertificateFixture()
+        let clientId = fixture.clientIds[0]
+        let token = try fixture.token(clientId: clientId, validSignature: true)
+        let (service, network) = try await makeService(clientId: clientId, token: token,
+            defaultPolicy: .warning)
+        await assertRejected(service, network: network)
+        #expect(service.readerAuthenticationStatus == .failed)
+    }
+
     @Test("A failed subsequent request cannot reuse consent or authentication")
     @MainActor func clearsPreviousRequest() async throws {
         let fixture = try CertificateFixture()
@@ -440,12 +522,13 @@ struct OpenId4VpAuthenticationTests {
 
     private func makeService(clientId: String, token: String?, byReference: Bool = false,
                              anchors: [Data] = [], registration: RegistrationMode = .disabled,
+                             readerTrustPolicy: TrustPolicy = .enforce, defaultPolicy: TrustPolicy = .enforce,
                              clientIdSchemes: [ClientIdScheme]? = nil) async throws -> (OpenId4VpService, RequestNetworking) {
         let registrationPolicy: TrustPolicy = registration == .warning ? .warning : .enforce
         #if canImport(EudiEtsi1196x2)
-        let trust = TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), wrprcVpTrustPolicy: registrationPolicy)
+        let trust = TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), defaultPolicy: defaultPolicy, readerTrustPolicy: readerTrustPolicy, wrprcVpTrustPolicy: registrationPolicy)
         #else
-        let trust = TrustConfiguration(rootIaca: anchors.map { [$0] }, wrprcVpTrustPolicy: registrationPolicy)
+        let trust = TrustConfiguration(rootIaca: anchors.map { [$0] }, defaultPolicy: defaultPolicy, readerTrustPolicy: readerTrustPolicy, wrprcVpTrustPolicy: registrationPolicy)
         #endif
         let resource = try #require(Bundle.module.url(forResource: "mdoc-mdl", withExtension: "txt"))
         let encoded = try String(contentsOf: resource, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)

@@ -29,6 +29,10 @@ public struct TrustConfiguration: Sendable {
 	/// The trust policy applied to document status token validation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow status checks to succeed even when the status token trust chain cannot be validated.
 	public let statusTrustPolicy: TrustPolicy
+	/// Trust policy for OpenID4VP reader access certificates, independent of issuer and registration policies.
+	/// Defaults to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted
+	/// certificate chain and report `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate`.
+	public let readerTrustPolicy: TrustPolicy
 	/// The trust policy applied to WRPRC validation during OpenID4VP and BLE presentation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow presentation to proceed even when the WRPRC trust chain cannot be validated.
 	public let wrprcVpTrustPolicy: TrustPolicy
@@ -58,6 +62,7 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		readerTrustPolicy: TrustPolicy = .enforce,
 		wrprcVpTrustPolicy: TrustPolicy = .warning,
 		wrprcVciTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
@@ -66,6 +71,7 @@ public struct TrustConfiguration: Sendable {
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.readerTrustPolicy = readerTrustPolicy
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew
@@ -105,6 +111,7 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		readerTrustPolicy: TrustPolicy = .enforce,
 		wrprcVpTrustPolicy: TrustPolicy = .enforce,
 		wrprcVciTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
@@ -113,6 +120,7 @@ public struct TrustConfiguration: Sendable {
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.readerTrustPolicy = readerTrustPolicy
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew
