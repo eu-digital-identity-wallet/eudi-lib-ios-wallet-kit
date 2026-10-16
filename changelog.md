@@ -1,5 +1,9 @@
 ## Unreleased
 
+- Add `TrustConfiguration.readerTrustPolicy` for OpenID4VP reader access certificates, defaulting to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted certificate chain; signature verification and certificate-chain parsing remain required.
+- Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` instead of the deprecated `readerCertIssuerValid`; show no trusted-reader badge for the new status.
+- Update `eudi-lib-ios-iso18013-data-transfer` and the resolved `eudi-lib-ios-iso18013-security` dependency to version 0.28.0.
+- Update the transitive `EudiEtsi1196x2` library to v0.4.0-alpha.4 through the security package, allowing certificates with non-critical `basicConstraints` to be accepted.
 - Remove the unused `cacheIssuerMetadata` argument from `OpenId4VciConfiguration.init` and `verifierApiUri` from the preregistered verifier convenience initializer. Callers must remove these arguments; existing runtime behavior is unchanged.
 - Add `jarSigningAlg` to the preregistered verifier convenience initializer, defaulting to RS256, to support verifiers using other request signing algorithms such as ES256.
 

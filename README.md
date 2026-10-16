@@ -179,15 +179,20 @@ let trustConfig = TrustConfiguration(
     docTypePolicies: [:],                // optional per-doc-type overrides of defaultPolicy
     requireSignedMetadata: true,         // require signed OpenID4VCI issuer metadata
     statusTrustPolicy: .warning,         // trust policy for status token signature validation
+    readerTrustPolicy: .enforce,         // OpenID4VP reader access certificate trust (default)
     clockSkew: 60                        // allowed clock skew (seconds) for status token verification
 )
 ```
 
 The `fallbackTrustSource` is optional (pass `nil` to disable it). When the primary trust source cannot evaluate a chain — for example, it has no verification context configured for the requested doc type — validation is delegated to the fallback source.
 
-Use `defaultPolicy` to control the behaviour on a trust failure: `.enforce` rejects the certificate chain, while `.warning` logs the failure but allows the operation to continue. Provide `docTypePolicies` to override the policy for specific doc types.
+Use `defaultPolicy` to control the behaviour on an issuer certificate trust failure: `.enforce` rejects the certificate chain, while `.warning` logs the failure but allows the operation to continue. Provide `docTypePolicies` to override the policy for specific doc types.
 
 The `statusTrustPolicy` parameter controls how the wallet handles trust failures when validating status list token signatures (used for document revocation/suspension checks). It defaults to `.enforce`, which rejects tokens whose signing certificate chain cannot be validated. Set it to `.warning` to log the trust failure but still allow the status check to succeed — useful during development or when status token issuers use certificates outside the configured trust anchors.
+
+The `readerTrustPolicy` parameter independently controls reader access certificate trust for OpenID4VP X.509 clients (`.x509SanDns` and `.x509Hash`). It defaults to `.enforce`, rejecting untrusted chains. Set it to `.warning` to allow a valid signed request with an untrusted chain to proceed with `readerAuthenticationStatus == .authenticatedWithUntrustedCertificate`. The chain must still be well formed and its evaluated leaf must match the request's signing certificate. This policy does not change BLE reader authentication, issuer trust, or WRPRC validation.
+
+Use `PresentationSession.readerAuthenticationStatus` instead of the deprecated `readerCertIssuerValid` and update exhaustive switches to handle `.authenticatedWithUntrustedCertificate`. For this status, display `readerCertValidationMessage` as a trust warning and do not show a trusted-reader badge; `readerLegalName` remains `nil`. See the [presentation guide](Sources/EudiWalletKit/EudiWalletKit.docc/PresentationService.md#reader-authentication-and-certificate-trust) for all authentication statuses.
 
 ### OpenID4VCI Configuration
 

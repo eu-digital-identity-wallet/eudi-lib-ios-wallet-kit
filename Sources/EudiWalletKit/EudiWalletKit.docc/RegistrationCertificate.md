@@ -73,6 +73,8 @@ let wallet = try EudiWallet(
 
 ### Trust policy
 
+OpenID4VP reader access certificate trust is controlled separately by ``TrustConfiguration/readerTrustPolicy`` (default `.enforce`). Setting it to `.warning` may allow a signed request with an untrusted access certificate chain and reports ``ReaderAuthenticationStatus/authenticatedWithUntrustedCertificate``. It does not relax WRPRC validation; see <doc:PresentationService> for authentication status and UI guidance.
+
 ``TrustConfiguration/wrprcVpTrustPolicy`` and ``TrustConfiguration/wrprcVciTrustPolicy`` control the behaviour when a validation check fails:
 
 - **`.enforce`** (default) — a failed check causes the request to fail with ``WalletError/Code/invalidWrprc``.
