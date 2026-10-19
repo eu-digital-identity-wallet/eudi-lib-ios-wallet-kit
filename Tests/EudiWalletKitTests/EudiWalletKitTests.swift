@@ -427,6 +427,7 @@ struct EudiWalletKitTests {
 	@Test("createKeyBatchWithAttestation returns keys with matching attestation input")
 	func testCreateKeyBatchWithAttestation() async throws {
 		let storageService = TestDataStorageService()
+		let issuerName = "attested-issuer-\(UUID().uuidString)"
 		let provider = RecordingWalletAttestationsProvider()
 		#if canImport(EudiEtsi1196x2)
 		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
@@ -437,20 +438,20 @@ struct EudiWalletKitTests {
 			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"), trustConfig: trustConfig,
 			storageService: storageService,
 			openID4VciConfigurations: [
-				"attested_issuer": OpenId4VciConfiguration(
+				issuerName: OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
 					parUsage: .required(authorizationCodeDPoPBinding: false),
 					requireDpop: true
 				)
 			],
-			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
+			secureAreas: [KeyAttestationTestSecureArea.shared]
 		)
 		let result = try await wallet.createKeyBatchWithAttestation(
-			issuerName: "attested_issuer",
+			issuerName: issuerName,
 			id: UUID().uuidString,
 			credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2),
-			keyOptions: KeyOptions(curve: .P256, secureAreaName: SoftwareSecureArea.name),
+			keyOptions: KeyOptions(curve: .P256, secureAreaName: KeyAttestationTestSecureArea.name),
 			nonce: "test-nonce"
 		)
 
@@ -469,6 +470,7 @@ struct EudiWalletKitTests {
 	@Test("createKeyBatchWithAttestation supplies ordered signing handles to proof providers")
 	func testCreateKeyBatchWithKeyProofs() async throws {
 		let storageService = TestDataStorageService()
+		let issuerName = "attested-issuer-\(UUID().uuidString)"
 		let provider = ProofCheckingWalletAttestationsProvider()
 		#if canImport(EudiEtsi1196x2)
 		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
@@ -479,20 +481,20 @@ struct EudiWalletKitTests {
 			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithKeyProofs"), trustConfig: trustConfig,
 			storageService: storageService,
 			openID4VciConfigurations: [
-				"attested_issuer": OpenId4VciConfiguration(
+				issuerName: OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
 					parUsage: .required(authorizationCodeDPoPBinding: false),
 					requireDpop: true
 				)
 			],
-			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
+			secureAreas: [KeyAttestationTestSecureArea.shared]
 		)
 		let result = try await wallet.createKeyBatchWithAttestation(
-			issuerName: "attested_issuer",
+			issuerName: issuerName,
 			id: UUID().uuidString,
 			credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2),
-			keyOptions: KeyOptions(curve: .P256, secureAreaName: SoftwareSecureArea.name),
+			keyOptions: KeyOptions(curve: .P256, secureAreaName: KeyAttestationTestSecureArea.name),
 			nonce: "test-nonce"
 		)
 
