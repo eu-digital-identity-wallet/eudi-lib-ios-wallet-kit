@@ -1210,7 +1210,7 @@ struct DcqlQueryTests {
 			entitlements: [], sub: "test", country: "EU", policyID: ["p1"],
 			credentials: credentials,
 			purpose: [], registryURI: "https://example.com", certificatePolicy: "test",
-			srvDescription: [], supportURI: "https://example.com",
+			srvDescriptions: [], supportURI: "https://example.com",
 			supervisoryAuthority: SupervisoryAuthority(email: "a@b.com", phone: "123", uri: "https://example.com"),
 			privacyPolicy: "https://example.com", name: "Test",
 			infoURI: "https://example.com", subLn: "test", iat: 0,

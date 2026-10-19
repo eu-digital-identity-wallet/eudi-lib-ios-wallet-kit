@@ -38,7 +38,7 @@ struct WrpRegistrationPolicyDecodingTests {
 	@Test func decodesServiceDescriptionAsArrayOfMultiLangStrings() throws {
 		let policy = try JSONDecoder().decode(WrpRegistrationPolicy.self, from: Data(Self.playgroundPayload.utf8))
 
-		let services = try #require(policy.srvDescription)
+		let services = try #require(policy.srvDescriptions)
 		#expect(services.count == 1)
 		#expect(services.first?.map(\.lang) == ["en"])
 		#expect(services.first?.map(\.value) == ["Club"])

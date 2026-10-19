@@ -1,4 +1,69 @@
+## Unreleased
+
+- Add `TrustConfiguration.readerTrustPolicy` for OpenID4VP reader access certificates, defaulting to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted certificate chain; signature verification and certificate-chain parsing remain required.
+
+- Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` instead of the deprecated `readerCertIssuerValid`
+
+- Update `eudi-lib-ios-iso18013-data-transfer` and the resolved `eudi-lib-ios-iso18013-security` dependency to version 0.28.0.
+- Update the transitive `EudiEtsi1196x2` library to v0.4.0-alpha.4 through the security package, allowing certificates with non-critical `basicConstraints` to be accepted.
+
+- Remove the unused `cacheIssuerMetadata` argument from `OpenId4VciConfiguration.init` and `verifierApiUri` from the preregistered verifier convenience initializer. Callers must remove these arguments; existing runtime behavior is unchanged.
+
+- Add `jarSigningAlg` to the preregistered verifier convenience initializer, defaulting to RS256, to support verifiers using other request signing algorithms such as ES256.
+
+## v0.54.0
+
+- Add optional Trust Mark support through `EudiWallet.trustMarkManager`, configured with static information or a dynamic `TrustMarkProvider` via `trustMarkSource`.
+- Add `TrustMarkManager.getTrustMark()` to retrieve Trust Mark display resources and certification links using the wallet's networking client.
+- Make `EudiWallet.extractCredentialIssuerURL(from:)` public.
+
+
+## v0.53.4
+
+- Update `eudi-lib-ios-openid4vp-swift` to version 0.43.0.
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.55.0.
+- Support and validate the RFC 9207 `iss` authorization-response parameter during credential issuance.
+- Preserve credential issuer metadata failures when credential-offer resolution fails.
+- Include the WRPRC `srv_description` values in presentation transaction logs.
+
+## v0.53.3
+
+- Reject issued SD-JWT credentials that use an unsigned, missing, symmetric, invalid, or otherwise unsupported issuer signature algorithm.
+- Fix issuance transaction logs so credential identifiers contain only credentials that were actually issued.
+- Update `eudi-lib-ios-statium-swift` to version 0.6.0 and use a fresh validation time for each status check.
+
+## v0.53.2
+
+- Add `OpenId4VpConfiguration.errorDispatchPolicy` to control which verifiers may receive protocol-level request-validation errors.
+- Dispatch OpenID4VP resolution errors when dispatch details are available.
+- Keep stable issuance transaction identifiers across retries and multi-credential issuance flows.
+
+## v0.53.1
+
+- Add issuer names and identifiers to credential deletion transaction logs.
+- Resolve verifier names from the leaf access certificate instead of the certificate authority.
+- Improve issuer details in issuance transaction logs.
+
+## v0.53.0
+
+### Transaction Logging
+
+- Migrate issuance, presentation, and deletion logging to Statium `TransactionEntry` records.
+- Record requested and presented claim paths without logging credential values or response tokens.
+- Persist pending, completed, rejected, and failed presentation outcomes throughout the presentation lifecycle.
+- Add issuer provider roles and validate WRPRC entitlements against PID and EAA credential classifications.
+
+### Dependency and Platform Updates
+
+- Raise the minimum macOS version to 15.
+- Update `eudi-lib-ios-iso18013-data-transfer` to version 0.26.0.
+- Update `eudi-lib-ios-openid4vci-swift` to version 0.54.1.
+- Update `eudi-lib-ios-wallet-storage` to version 0.26.1.
+
+## v0.52.1
+
 - Update `eudi-lib-ios-openid4vp-swift` to version 0.42.0.
+- Simplify redirect URI handling for rejected OpenID4VP presentations.
 
 ## v0.52.0
 

@@ -50,22 +50,28 @@ struct TransactionEntryLoggingTests {
         #expect(path.mdocClaimPath.openID4VPClaimPath == path)
     }
 
-    @Test("Request metadata and identity survive incomplete and completed snapshots")
+    @Test("Failed presentations clear requested claims while successful presentations retain them")
     func lifecycle() throws {
         var log = TransactionLogUtils.createEmptyPresentationLog()
         let identifier = log.transactionIdentifier
         let time = log.time
         let requested = [ClaimInfo(credentialIdentifier: "pid", claims: [.claim("name"), .claim("age")])]
         let policy = WrpRegistrationPolicy(sub: "LEIXG-123", credentials: [], purpose: [.init(lang: "en", value: "Age check")],
-            registryURI: "https://registry.example", privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
+            registryURI: "https://registry.example",
+            srvDescriptions: [[.init(lang: "en", value: "Identity verification service")]],
+            privacyPolicy: "https://rp.example/privacy", name: "Registered RP")
         TransactionLogUtils.withRequest(requested, policy: policy, name: "Certificate CN", transactionLog: &log)
+        let requestLog = log
         TransactionLogUtils.withResult(.notCompleted, reason: "User declined", transactionLog: &log)
         guard case .presentation(let incomplete) = log else { Issue.record("Expected presentation"); return }
-        #expect(incomplete.listOfClaimsRequested == requested)
+        #expect(incomplete.listOfClaimsRequested.isEmpty)
+        let failedJSON = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(log)) as? [String: Any])
+        #expect((failedJSON["listOfClaimsRequested"] as? [Any])?.isEmpty == true)
         #expect(incomplete.listOfClaimsPresented.isEmpty)
         #expect(incomplete.interactingPartyName?.content == "Registered RP")
         #expect(incomplete.interactingPartyIdentifier == .init(type: QualifiedIdentifier.lei, value: "123"))
         #expect(incomplete.reasonOfNoncompletion == "User declined")
+        log = requestLog
         let presented = [ClaimInfo(credentialIdentifier: "pid", claims: [.claim("age")])]
         TransactionLogUtils.withResult(.completed, presented: presented, transactionLog: &log)
         #expect(log.transactionIdentifier == identifier)
@@ -75,6 +81,7 @@ struct TransactionEntryLoggingTests {
         #expect(completed.listOfClaimsPresented == presented)
         #expect(completed.listOfClaimsRequested == requested)
         #expect(completed.purpose == incomplete.purpose)
+        #expect(completed.purpose?.map(\.content) == ["Age check", "Identity verification service"])
         #expect(completed.privacyPolicy == incomplete.privacyPolicy)
         let encoded = try JSONEncoder().encode(log)
         let decoded = try JSONDecoder().decode(TransactionEntry.self, from: encoded)
@@ -102,6 +109,26 @@ struct TransactionEntryLoggingTests {
         #expect(TransactionLogUtils.interactingPartyName(policy) == "Legal name")
     }
 
+    @Test("Credential issuer fields retain the issuer name and qualified identifier")
+    func credentialIssuerFields() {
+        let qualified = TransactionLogUtils.credentialIssuer(name: "Example Issuer", identifier: "LEI-123")
+        #expect(qualified.name?.content == "Example Issuer")
+        #expect(qualified.identifier == .init(type: QualifiedIdentifier.lei, value: "123"))
+
+        let url = TransactionLogUtils.credentialIssuer(name: nil, identifier: "https://issuer.example")
+        #expect(url.name?.content == "https://issuer.example")
+        #expect(url.identifier == nil)
+    }
+
+    @Test("Verifier certificate subject takes precedence over its CA-derived legal name")
+    func verifierCertificateName() {
+        let name = TransactionLogUtils.verifierName(
+            legalName: "Example CA",
+            certificateSubject: "C=CY, O=Example Verifier, CN=verifier.example")
+        #expect(name == "verifier.example")
+        #expect(TransactionLogUtils.verifierName(legalName: "Pre-registered verifier", certificateSubject: nil) == "Pre-registered verifier")
+    }
+
     @Test("Request failure is persisted under the original transaction identifier")
     func requestFailure() async {
         let recorder = RecordingTransactionLogger()
@@ -118,7 +145,7 @@ struct TransactionEntryLoggingTests {
         #expect(snapshots.last?.transactionResult == .notCompleted)
         #expect(snapshots.last?.reasonOfNoncompletion == "Invalid request")
         if case .presentation(let last)? = snapshots.last {
-            #expect(last.listOfClaimsRequested == requested)
+            #expect(last.listOfClaimsRequested.isEmpty)
             #expect(last.listOfClaimsPresented.isEmpty)
         } else { Issue.record("Missing presentation entry") }
     }

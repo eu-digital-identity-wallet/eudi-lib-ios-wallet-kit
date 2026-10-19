@@ -170,7 +170,7 @@ extension OpenId4VciService {
 						promptMessage: promptMessage
 					)
 					await service.setAdditionalOptions(docType.identifier ?? "")
-					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(credentialConfigurations[index], issuer: issuer.config.client.id)
+					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(credentialConfigurations[index], clientId: issuer.config.client.id)
 					let outcome = try await service.issueDocumentByOfferUrl(
 						issuer: issuer,
 						offer: offer,
@@ -306,7 +306,7 @@ extension OpenId4VciService {
 						promptMessage: promptMessage
 					)
 					await service.setAdditionalOptions(configuration.configurationIdentifier.value)
-					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(configuration, issuer: issuer.config.client.id)
+					let (bindingKeys, publicKeys) = try await service.initSecurityKeys(configuration, clientId: issuer.config.client.id)
 					let outcome = try await service.issueDocumentByOfferUrl(
 						issuer: issuer,
 						offer: offer,

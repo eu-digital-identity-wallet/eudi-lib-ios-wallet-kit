@@ -125,7 +125,7 @@ enum TransactionLogUtils {
 	/// Preserves the transaction identifier and time, resets the result and presented claims,
 	/// and leaves other transaction types unchanged.
 	static func withRequest(_ claims: [ClaimInfo],
-		policy: WrpRegistrationPolicy?, name: String?, identifier: String? = nil, transactionLog: inout TransactionEntry) {
+		policy: WrpRegistrationPolicy?, name: String?, identifier: String? = nil, transactionalData: TransactionalData? = nil, transactionLog: inout TransactionEntry) {
 		guard case let .presentation(previous) = transactionLog else { return }
 		let dpa = policy?.supervisoryAuthority
 		transactionLog = .presentation(.init(
@@ -141,10 +141,11 @@ enum TransactionLogUtils {
 			intermediaryIdentifier: policy?.intermediary?.identifier.flatMap { toQualifiedIdentifier($0) },
 			intermediaryName: policy?.intermediary?.name.map { .init(lang: defaultLang, content: $0) },
 			registrarURL: policy?.registryURI,
-			purpose: policy?.purpose?.map { .init(lang: $0.lang, content: $0.value) },
+			purpose: policy.flatMap { transactionPurposes($0) },
 			privacyPolicy: policy?.privacyPolicy.map { [.init(type: Policy.privacyPolicy, policyURI: $0)] },
 			dpaName: dpa?.name.map { .init(lang: defaultLang, content: $0) },
-			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } }
+			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } },
+			transactionalData: transactionalData
 		))
 	}
 
@@ -162,6 +163,12 @@ enum TransactionLogUtils {
 		return contact.isEmpty ? nil : contact
 	}
 
+	/// Combines the WRPRC purpose and service-description claims for the TS10 purpose field.
+	static func transactionPurposes(_ policy: WrpRegistrationPolicy) -> [MultiLangString]? {
+		let purposes = (policy.purpose ?? []) + (policy.srvDescription ?? [])
+		return purposes.isEmpty ? nil : purposes.map { .init(lang: $0.lang, content: $0.value) }
+	}
+
 	/// Maps the issuer's registration entitlements to its TS10 interacting-party type.
 	/// Uses the first recognized entitlement in PID, QEAA, public EAA and non-qualified EAA order.
 	static func interactingPartyType(_ policy: WrpRegistrationPolicy?) -> String? {
@@ -174,6 +181,24 @@ enum TransactionLogUtils {
 		return types.first { entitlement, _ in
 			policy?.entitlements?.contains(entitlement) == true
 		}?.1.rawValue
+	}
+
+	/// Builds the issuer fields used by credential lifecycle entries.
+	/// The issuer URL is retained as a display fallback when it is not an ETSI qualified identifier.
+	static func credentialIssuer(name: String?, identifier: String?) -> (identifier: QualifiedIdentifier?, name: MultiLangString?) {
+		let issuerName = [name, identifier]
+			.compactMap { $0?.isEmpty == false ? $0 : nil }
+			.first
+		return (
+			identifier.flatMap { toQualifiedIdentifier($0) },
+			issuerName.map { .init(lang: defaultLang, content: $0) }
+		)
+	}
+
+	/// Prefers the verifier identity from the leaf access certificate over a legal name
+	/// derived from the certificate issuer.
+	static func verifierName(legalName: String?, certificateSubject: String?) -> String? {
+		certificateSubject.map(MdocHelpers.getCN(from:)) ?? legalName
 	}
 
 	/// Parses a an ETSI EN 319 412-1 semantic identifier.
@@ -199,7 +224,7 @@ enum TransactionLogUtils {
 
 	/// Sets the presentation result and optional reason of non-completion.
 	/// Replaces presented claims when supplied; otherwise keeps the recorded claims.
-	/// Preserves request and party details, and leaves other transaction types unchanged.
+	/// Clears requested claims on non-completion; preserves party details and other transaction types.
 	static func withResult(_ result: TransactionResult,
 		reason: String? = nil, presented: [ClaimInfo]? = nil, transactionLog: inout TransactionEntry) {
 		guard case let .presentation(previous) = transactionLog else { return }
@@ -208,7 +233,7 @@ enum TransactionLogUtils {
 			time: previous.time,
 			transactionResult: result,
 			reasonOfNoncompletion: reason,
-			listOfClaimsRequested: previous.listOfClaimsRequested,
+			listOfClaimsRequested: result == .notCompleted ? [] : previous.listOfClaimsRequested,
 			listOfClaimsPresented: presented ?? previous.listOfClaimsPresented,
 			interactingPartyType: previous.interactingPartyType,
 			interactingPartyName: previous.interactingPartyName,
@@ -223,6 +248,7 @@ enum TransactionLogUtils {
 			privacyPolicy: previous.privacyPolicy,
 			dpaName: previous.dpaName,
 			dpaCountry: previous.dpaCountry,
-			dpaContact: previous.dpaContact))
+			dpaContact: previous.dpaContact,
+			transactionalData: previous.transactionalData))
 	}
 }

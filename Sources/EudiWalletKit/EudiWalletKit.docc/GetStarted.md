@@ -30,6 +30,14 @@ wallet.transactionLogger = MyFileTransactionLogger(wallet: wallet)
 wallet.loadAllDocuments()
 ```
 
+### Device signature algorithm
+
+Set ``EudiWalletConfiguration/deviceAlgorithm`` to select the COSE algorithm for mdoc device signatures in BLE and OpenID4VP presentations. It defaults to `.es256`; use `.esp256` for fully specified P-256 signatures. Device MAC authentication ignores this setting.
+
+```swift
+let config = EudiWalletConfiguration(deviceAlgorithm: .esp256)
+```
+
 ### Transaction logging
 
 Implement `TransactionLogger.log(transaction:)` with `TransactionEntry`. Persist entries by

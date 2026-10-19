@@ -28,13 +28,19 @@ public actor DocumentStatusService {
 	let statusList: StatusList
 	/// Trust configuration used to validate the reader/relying-party access certificate chain.
 	public let trustConfig: TrustConfiguration
-	let date: Date?
+	let dateProvider: @Sendable () -> Date
 	private static let logger = Logger(label: "DocumentStatusService")
 
-	public init(statusList: StatusList, date: Date = .now, trustConfig: TrustConfiguration) {
+	/// Supplies a fresh validation time for each status check by default.
+	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration) {
 		self.statusList = statusList
 		self.trustConfig = trustConfig
-		self.date = date
+		self.dateProvider = dateProvider
+	}
+
+	/// Uses a fixed validation time, for callers that explicitly supply a date.
+	public init(statusList: StatusList, date: Date, trustConfig: TrustConfiguration) {
+		self.init(statusList: statusList, dateProvider: { date }, trustConfig: trustConfig)
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
@@ -43,7 +49,8 @@ public actor DocumentStatusService {
 		}
 		let getStatus = GetStatus()
 		let tokenFetcher = StatusListTokenFetcher(
-			verifier: StatusListTokenSignatureVerifier(trustConfig: trustConfig)
+			verifier: StatusListTokenSignatureVerifier(trustConfig: trustConfig),
+			dateProvider: dateProvider
 		)
 		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew)
 		switch result {
@@ -60,6 +67,20 @@ struct StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
 		let attTF: AttestToken.Format = switch format { case .jwt: .jwt; case .cwt: .cwt }
 		let att = try x5cVerifyJwtOrCwt.parse(attestData: statusListToken, format: attTF)
+		if case let .jwt(jws) = att {
+			// Certificate-chain warnings must never permit an unsigned or MAC-authenticated JWT.
+			guard let algorithm = jws.protectedHeader.algorithm else {
+				throw WalletError(description: "Status JWT is missing a signature algorithm", code: .unsupportedAlgorithm)
+			}
+			switch algorithm {
+			case .RS256, .RS384, .RS512,
+				 .ES256, .ES384, .ES512, .ES256K,
+				 .PS256, .PS384, .PS512, .EdDSA:
+				break
+			case .HS256, .HS384, .HS512, .none, .invalid:
+				throw WalletError(description: "Unsupported status JWT signature algorithm: \(algorithm.rawValue)", code: .unsupportedAlgorithm)
+			}
+		}
 		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.accessTrustManager)
 		guard isValid else {
 			let message = "\(format) status token trust error: \(reason ?? "")"
