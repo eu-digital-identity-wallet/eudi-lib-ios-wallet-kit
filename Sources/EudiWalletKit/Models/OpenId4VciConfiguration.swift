@@ -74,7 +74,6 @@ public struct OpenId4VciConfiguration: Sendable {
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
 		validateRegistrationCertificate: Bool = false,
-		cacheIssuerMetadata: Bool = true,
 		userAuthenticationRequired: Bool = false,
 		dpopKeyOptions: KeyOptions? = nil,
 		trustedIssuerCertificates: [x5chain]? = nil,

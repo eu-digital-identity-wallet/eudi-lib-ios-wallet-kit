@@ -93,6 +93,31 @@ On view appearance the attestations are presented with the ``PresentationService
 }
 ```
 
+## Reader Authentication and Certificate Trust
+
+Use ``PresentationSession/readerAuthenticationStatus`` to display authentication of the current request. This replaces the deprecated ``PresentationSession/readerCertIssuerValid`` property.
+
+| Status | Meaning |
+| --- | --- |
+| `.notEvaluated` | Authentication has not completed or no result is available. |
+| `.authenticated` | The request passed the authentication required by its client identifier scheme. For X.509 clients, the reader certificate chain is also trusted. |
+| `.authenticatedWithUntrustedCertificate` | The request signature was verified, but the reader certificate chain is untrusted and was accepted under an explicit warning policy. |
+| `.failed` | Request validation or required authentication failed. |
+| `.notApplicable` | The flow, such as plain redirect URI, requires no reader authentication. |
+
+``TrustConfiguration/readerTrustPolicy`` controls access certificate trust for OpenID4VP `.x509SanDns` and `.x509Hash` clients. The default, `.enforce`, rejects untrusted chains. To allow valid signed requests with an untrusted chain:
+
+```swift
+let trustConfig = TrustConfiguration(
+    trustSource: .etsi(.eudiRef),
+    readerTrustPolicy: .warning
+)
+```
+
+The warning policy still requires a well-formed certificate chain, an evaluated leaf matching the request's signing certificate, and a valid request signature. It does not change BLE reader authentication, issuer trust policies, or WRPRC validation policies.
+
+When the status is `.authenticatedWithUntrustedCertificate`, display a certificate trust warning using ``PresentationSession/readerCertValidationMessage`` and do not show a trusted-reader badge. ``PresentationSession/readerLegalName`` remains `nil` for this status. The session permits sending a response after the request has otherwise passed validation and the user has made a consent decision. Update exhaustive switches over ``ReaderAuthenticationStatus`` to handle the new case explicitly.
+
 ## Credential Selection
 
 After the request is received, ``PresentationSession/disclosedDocumentSets`` contains an array of ``DisclosedDocumentSet`` values. Each set holds the matching documents (`docElements`) and any registration-policy `warnings` for that combination. When credential sets or the `multiple` flag produce multiple satisfiable combinations, the UI should allow the user to pick which option to present.
