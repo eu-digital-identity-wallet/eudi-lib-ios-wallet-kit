@@ -62,6 +62,8 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let dpopKeyOptions: KeyOptions?
 	/// Builder used to create client-attestation proofs of possession.
 	public let clientAttestationPoPBuilder: (any ClientAttestationPoPBuilder)
+	/// Wallet-side credential request / response encryption configuration.
+	public let encryptionSupportConfig: EncryptionSupportConfig
 
 	public init(
 		credentialIssuerURL: String?,
@@ -77,7 +79,8 @@ public struct OpenId4VciConfiguration: Sendable {
 		userAuthenticationRequired: Bool = false,
 		dpopKeyOptions: KeyOptions? = nil,
 		trustedIssuerCertificates: [x5chain]? = nil,
-		clientAttestationPoPBuilder: any ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder()
+		clientAttestationPoPBuilder: any ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder(),
+		encryptionSupportConfig: EncryptionSupportConfig = .default
 	) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId
@@ -92,6 +95,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
 		self.clientAttestationPoPBuilder = clientAttestationPoPBuilder
+		self.encryptionSupportConfig = encryptionSupportConfig
 	}
 }
 
@@ -193,7 +197,7 @@ extension OpenId4VciConfiguration {
 		}
 		let jwsAlgorithms = [CoseEcCurve.P256, .P384, .P521].compactMap { $0.jwsAlgorithm }
 		let proofTypesPolicy: ProofTypesPolicy = allowPlainJwtProof ? .acceptAll(supportedAlgorithms: jwsAlgorithms) : .haipCompliant(algorithms: jwsAlgorithms)
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, proofTypesPolicy: proofTypesPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy)
+		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, proofTypesPolicy: proofTypesPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy, encryptionSupportConfig: encryptionSupportConfig)
 	}
 
 	private func makePublicClient() throws -> Client {
