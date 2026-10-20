@@ -18,6 +18,7 @@ import Testing
 @testable import EudiWalletKit
 import Foundation
 import CryptoKit
+import Security
 import MdocDataModel18013
 import WalletStorage
 import MdocSecurity18013
@@ -518,6 +519,7 @@ struct EudiWalletKitTests {
 	@Test("createKeyBatchWithAttestation returns keys with matching attestation input")
 	func testCreateKeyBatchWithAttestation() async throws {
 		let storageService = TestDataStorageService()
+		let issuerName = "attested-issuer-\(UUID().uuidString)"
 		let provider = RecordingWalletAttestationsProvider()
 		#if canImport(EudiEtsi1196x2)
 		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
@@ -528,26 +530,69 @@ struct EudiWalletKitTests {
 			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithAttestation"), trustConfig: trustConfig,
 			storageService: storageService,
 			openID4VciConfigurations: [
-				"attested_issuer": OpenId4VciConfiguration(
+				issuerName: OpenId4VciConfiguration(
 					credentialIssuerURL: "https://issuer.example.com",
 					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
 					parUsage: .required(authorizationCodeDPoPBinding: false),
 					requireDpop: true
 				)
 			],
-			secureAreas: [SoftwareSecureArea.create(storage: InMemorySecureKeyStorage())]
+			secureAreas: [KeyAttestationTestSecureArea.shared]
 		)
 		let result = try await wallet.createKeyBatchWithAttestation(
-			issuerName: "attested_issuer",
+			issuerName: issuerName,
 			id: UUID().uuidString,
 			credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2),
-			keyOptions: KeyOptions(curve: .P256, secureAreaName: SoftwareSecureArea.name),
+			keyOptions: KeyOptions(curve: .P256, secureAreaName: KeyAttestationTestSecureArea.name),
 			nonce: "test-nonce"
 		)
 
 		#expect(result.keys.count == 2)
 		#expect(result.keyAttestation == RecordingWalletAttestationsProvider.attestation)
 		let request = try #require(provider.lastRequest)
+		#expect(request.nonce == "test-nonce")
+		#expect(request.keyThumbprints.count == 2)
+
+		let resultKeyThumbprints = try result.keys.map {
+			try ECPublicKey(publicKey: try $0.toSecKey(), additionalParameters: ["use": "sig"]).thumbprint(algorithm: .SHA256)
+		}
+		#expect(request.keyThumbprints == resultKeyThumbprints)
+	}
+
+	@Test("createKeyBatchWithAttestation supplies ordered signing handles to proof providers")
+	func testCreateKeyBatchWithKeyProofs() async throws {
+		let storageService = TestDataStorageService()
+		let issuerName = "attested-issuer-\(UUID().uuidString)"
+		let provider = ProofCheckingWalletAttestationsProvider()
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		#else
+		let trustConfig = TrustConfiguration(rootIaca: [])
+		#endif
+		let wallet = try EudiWallet(
+			eudiWalletConfig: EudiWalletConfiguration(serviceName: "test.createKeyBatchWithKeyProofs"), trustConfig: trustConfig,
+			storageService: storageService,
+			openID4VciConfigurations: [
+				issuerName: OpenId4VciConfiguration(
+					credentialIssuerURL: "https://issuer.example.com",
+					keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider),
+					parUsage: .required(authorizationCodeDPoPBinding: false),
+					requireDpop: true
+				)
+			],
+			secureAreas: [KeyAttestationTestSecureArea.shared]
+		)
+		let result = try await wallet.createKeyBatchWithAttestation(
+			issuerName: issuerName,
+			id: UUID().uuidString,
+			credentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2),
+			keyOptions: KeyOptions(curve: .P256, secureAreaName: KeyAttestationTestSecureArea.name),
+			nonce: "test-nonce"
+		)
+
+		#expect(result.keys.count == 2)
+		#expect(result.keyAttestation == ProofCheckingWalletAttestationsProvider.attestation)
+		let request = try #require(await provider.lastRequest)
 		#expect(request.nonce == "test-nonce")
 		#expect(request.keyThumbprints.count == 2)
 
@@ -779,4 +824,43 @@ extension Data {
 		}
 		return nil
 	}
+}
+
+private actor ProofCheckingWalletAttestationsProvider: WalletAttestationsProvider {
+    nonisolated var requiresKeyProofs: Bool { true }
+    static let attestation = "test-key-attestation"
+    private(set) var lastRequest: (keyThumbprints: [String], nonce: String?)?
+
+    func getWalletAttestation(signingKey: SigningKeyProxy) async throws -> String { Self.attestation }
+
+    nonisolated func getKeysAttestation(keys: [any JOSESwift.JWK], nonce: String?) async throws -> String {
+        throw WalletError(description: "A proof provider must receive signing handles", code: .internalError)
+    }
+
+    nonisolated func getKeysAttestation(keys: [any JOSESwift.JWK], signingKeys: [SigningKeyProxy], nonce: String?) async throws -> String {
+        #expect(signingKeys.count == keys.count)
+        let header = try JWSHeader(parameters: ["alg": "ES256", "typ": "wallet-provider-key-proof+jws"])
+        let payload = Data(#"{"purpose":"key-attestation/ios"}"#.utf8)
+        let headerBytes = header.data()
+        let input = Data((headerBytes.base64URLEncodedString() + "." + payload.base64URLEncodedString()).utf8)
+        var thumbprints: [String] = []
+        for (key, signingKey) in zip(keys, signingKeys) {
+            guard let publicKey = key as? ECPublicKey, case .custom(let signer) = signingKey else {
+                throw WalletError(description: "Expected a secure-area signer for every public key", code: .internalError)
+            }
+            let signature = try await signer.signAsync(headerBytes, payload)
+            let secKey = try publicKey.converted(to: SecKey.self)
+            let verifier = try #require(Verifier(signatureAlgorithm: .ES256, key: secKey))
+            let compact = String(decoding: input, as: UTF8.self) + "." + signature.base64URLEncodedString()
+            let verified = try JWS(compactSerialization: compact).validate(using: verifier)
+            #expect(verified.payload.data() == payload)
+            thumbprints.append(try publicKey.thumbprint(algorithm: .SHA256))
+        }
+        await recordRequest(thumbprints: thumbprints, nonce: nonce)
+        return Self.attestation
+    }
+
+    private func recordRequest(thumbprints: [String], nonce: String?) {
+        lastRequest = (thumbprints, nonce)
+    }
 }

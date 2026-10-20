@@ -28,13 +28,16 @@ public struct CredentialSelection: Sendable, Hashable {
 	public let credentialId: Document.ID
 	public let docType: DocType
 	public let queryId: QueryId
+	/// All queries satisfied by this document when alternatives are merged.
+	public let queryIds: [QueryId]
 	public let optionId: String
 	public let claimQueries: [ClaimsQuery]
 
-	public init(credentialId: Document.ID, docType: DocType, queryId: QueryId, optionId: String, claimQueries: [ClaimsQuery]) {
+	public init(credentialId: Document.ID, docType: DocType, queryId: QueryId, optionId: String, claimQueries: [ClaimsQuery], queryIds: [QueryId]? = nil) {
 		self.credentialId = credentialId
 		self.docType = docType
 		self.queryId = queryId
+		self.queryIds = queryIds ?? [queryId]
 		self.optionId = optionId
 		self.claimQueries = claimQueries
 	}
