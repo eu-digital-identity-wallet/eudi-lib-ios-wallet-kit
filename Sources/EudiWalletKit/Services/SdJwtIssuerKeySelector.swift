@@ -19,13 +19,16 @@ import struct JSONWebKey.JWK
 
 /// Selects the issuer signing key of an SD-JWT VC from the JWT VC Issuer Metadata key set.
 enum SdJwtIssuerKeySelector {
-	/// With a `kid`, returns the key with that identifier.
+	/// With a `kid`, returns the key with that identifier. An encryption key is rejected.
 	/// Without a `kid`, returns the one key that is not an encryption key.
 	/// A `jwk` header narrows the choice to keys with the same key material.
 	static func select(from keys: [JWK], keyID: String?, headerKey: JWK?) throws -> JWK {
 		if let keyID {
 			guard let key = keys.first(where: { $0.keyID == keyID }) else {
 				throw WalletError(description: "Unable to resolve issuer signing key for issued SD-JWT", code: .trustError)
+			}
+			guard key.publicKeyUse != .encryption else {
+				throw WalletError(description: "Issuer key \(keyID) is an encryption key, not a signing key", code: .trustError)
 			}
 			return key
 		}

@@ -8,7 +8,11 @@ import struct JSONWebKey.JWK
 	let enc = JWK(keyType: .ellipticCurve, publicKeyUse: .encryption, keyID: "enc", curve: .p256, x: Data([3]), y: Data([4]))
 
 	@Test func kidSelectsTheMatchingKey() throws {
-		#expect(try SdJwtIssuerKeySelector.select(from: [sig, enc], keyID: "enc", headerKey: nil).keyID == "enc")
+		#expect(try SdJwtIssuerKeySelector.select(from: [enc, sig], keyID: "sig", headerKey: nil).keyID == "sig")
+	}
+
+	@Test func kidPointingAtAnEncryptionKeyFails() {
+		#expect(throws: WalletError.self) { try SdJwtIssuerKeySelector.select(from: [sig, enc], keyID: "enc", headerKey: nil) }
 	}
 
 	@Test func unknownKidFails() {
