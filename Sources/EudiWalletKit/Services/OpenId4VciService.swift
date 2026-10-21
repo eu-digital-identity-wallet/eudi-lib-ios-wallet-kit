@@ -1255,13 +1255,12 @@ public actor OpenId4VciService {
 		} else {
 			let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
 			let metadata = try await metadataFetcher.fetchIssuerMetaData(issuer: expectedIssuer)
-			guard let kid = signedSdJwt.jwt.protectedHeader.keyID else {
-				throw WalletError(description: "Issued SD-JWT is missing both x5c chain and key identifier", code: .issuanceRequestFailed)
-			}
-			guard let issuerJwk = metadata?.jwks.first(where: { $0.keyID == kid }) else {
-				throw WalletError(description: "Unable to resolve issuer signing key for issued SD-JWT", code: .trustError)
-			}
-			issuerKey = issuerJwk
+			// A kid is recommended, not required (SD-JWT VC, JWT VC Issuer Metadata).
+			issuerKey = try SdJwtIssuerKeySelector.select(
+				from: metadata?.jwks ?? [],
+				keyID: signedSdJwt.jwt.protectedHeader.keyID,
+				headerKey: signedSdJwt.jwt.protectedHeader.jwk
+			)
 		}
 		let result = try verifier.verifyIssuance(
 			issuersSignatureVerifier: { jws in try SignatureVerifier(signedJWT: jws, publicKey: issuerKey) },
