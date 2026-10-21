@@ -53,6 +53,8 @@ public enum PresentationFailureReason: Sendable, Hashable {
 	case wrprcMismatch
 	/// The WRPRC entitlements do not include the expected operation.
 	case entitlementMissing(expected: String)
+	/// The request has no WRPRC.
+	case wrprcMissing
 	/// An unclassified failure.
 	case other
 
