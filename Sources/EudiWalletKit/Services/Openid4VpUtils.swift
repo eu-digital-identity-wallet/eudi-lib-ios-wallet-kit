@@ -111,33 +111,6 @@ class OpenId4VpUtils {
 	}
 
 
-	static func getTransactionDataRequested(_ credentialSetOptions: CredentialSelectionSetOptions, transactionDataList: [TransactionData]) throws -> [(String, RequestTransactionData)] {
-		var result = [(String, RequestTransactionData)]()
-		for (requestName, credentialSet) in credentialSetOptions {
-			var requestTransactionData: RequestTransactionData = [:]
-			for transactionData in transactionDataList {
-				let type = try transactionData.type()
-				let credentialIds = try transactionData.credentialIds()
-				let parameters = try transactionData.decode()
-				for credentialId in credentialIds {
-					if let document = credentialSet.first(
-						where: { value in value.queryId.value == credentialId.value
-						}) {
-						if (requestTransactionData[document.credentialId] == nil) {
-							requestTransactionData[document.credentialId] = [:]
-						}
-						requestTransactionData[document.credentialId]![type.value] = parameters
-						break
-					} else {
-						throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)", code: .credentialNotFound)
-					}
-				}
-			}
-			result.append((requestName, requestTransactionData))
-		}
-		return result
-	}
-	
 	static func getVerifierInfoRequested(_ credentialSetOptions: CredentialSelectionSetOptions, verifierInfoList: [VerifierInfo]) -> [(String, RequestVerifierInfo)] {
 		var result = [(String, RequestVerifierInfo)]()
 		for (requestName, credentialSet) in credentialSetOptions {
@@ -231,7 +204,7 @@ class OpenId4VpUtils {
 		return nil
 	}
 
-	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
+	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [PresentationTransactionData]?, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) async throws -> SignedSDJWT? {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found", code: .internalError) }
 		let allPaths = Array(allPathsDict.keys)
 		print(allPaths.map { p in p.value.map { $0.description } })
@@ -244,10 +217,8 @@ class OpenId4VpUtils {
 		let issuedAtTimestamp = Int(Date().timeIntervalSince1970.rounded())
 		var payload = [Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: issuedAtTimestamp, Keys.sdHash.rawValue: sdHash] as [String : Any]
 		  // Process transaction data hashes if available
-		if let transactionData, !transactionData.isEmpty {
-			let transactionDataHashes = transactionData.map { sha256Hash($0.value) }
-			payload["transaction_data_hashes_alg"] = "sha-256"
-			payload["transaction_data_hashes"] = transactionDataHashes
+		if let transactionData {
+			payload.merge(try PresentationTransactionData.keyBindingClaims(transactionData, supportedTypes: supportedTransactionDataTypes)) { _, new in new }
 		}
 		let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), kbJwtPayload: JSON(payload))
 		let holderPresentation = try await SDJWTIssuer.presentation(holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
@@ -318,7 +289,7 @@ extension CredentialSelectionSet {
 			let mergedPaths = existing.claimQueries + sel.claimQueries
 			let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
 			remove(existing)
-			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths))
+			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths, queryIds: existing.queryIds + sel.queryIds.filter { !existing.queryIds.contains($0) }))
 		} else {
 			append(sel)
 		}
@@ -546,7 +517,7 @@ extension OpenId4VpUtils {
 
 	/// Resolves claims for a specific credential query and credential
 	/// - Throws: WalletError if claims cannot be satisfied, with details about the first missing claim
-	private static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) throws(WalletError) -> [ClaimsQuery] {
+	static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) throws(WalletError) -> [ClaimsQuery] {
 		// If no claims specified, return empty array (only mandatory claims)
 		guard let claims = credQuery.claims, !claims.isEmpty else {
 			return []

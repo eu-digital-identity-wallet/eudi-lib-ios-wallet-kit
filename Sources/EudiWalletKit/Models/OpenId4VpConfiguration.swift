@@ -39,7 +39,7 @@ public enum ClientIdScheme: Sendable {
 	/// whitelisted with their credentials and metadata.
 	///
 	/// - Parameter preregisteredClients: List of pre-approved client configurations with their
-	///   client IDs, legal names, API endpoints, and cryptographic parameters
+	///   client IDs, legal names, and cryptographic parameters
 	case preregistered([PreregisteredClient])
 
 	/// Client identifier scheme using X.509 certificate validation with DNS Subject Alternative Names.
@@ -134,7 +134,13 @@ public struct OpenId4VpConfiguration: Sendable {
 }
 
 extension PreregisteredClient {
-	public init(clientId: String, verifierApiUri: String, verifierLegalName: String, webKeys: WebKeySet) {
-		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.passByValue(webKeys: webKeys))
+	/// Creates a preregistered verifier using an inline JSON Web Key Set.
+	/// - Parameters:
+	///   - clientId: The registered verifier client identifier.
+	///   - verifierLegalName: The verifier name displayed to the user.
+	///   - webKeys: Public keys used to verify signed authorization requests.
+	///   - jarSigningAlg: The expected request signing algorithm. Defaults to RS256.
+	public init(clientId: String, verifierLegalName: String, webKeys: WebKeySet, jarSigningAlg: JWSAlgorithm = JWSAlgorithm(.RS256)) {
+		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: jarSigningAlg, jwkSetSource: WebKeySource.passByValue(webKeys: webKeys))
 	}
 }

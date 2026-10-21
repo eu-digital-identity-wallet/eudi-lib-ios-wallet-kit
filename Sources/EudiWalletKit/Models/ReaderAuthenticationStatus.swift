@@ -19,8 +19,12 @@ limitations under the License.
 public enum ReaderAuthenticationStatus: Sendable, Equatable {
     /// Authentication has not completed or no authentication result is available.
     case notEvaluated
-    /// The request passed the authentication required by its client identifier scheme.
+    /// The request passed authentication required by its client identifier scheme.
+    /// For X.509 clients, the reader certificate chain is also trusted.
     case authenticated
+    /// The request signature was verified, but its reader certificate chain is untrusted.
+    /// An explicit reader trust warning policy permits this request; do not show a trusted-reader badge.
+    case authenticatedWithUntrustedCertificate
     /// The request failed validation or required authentication was not established.
     case failed
     /// An explicitly supported flow, such as plain redirect URI, requires no reader authentication.
