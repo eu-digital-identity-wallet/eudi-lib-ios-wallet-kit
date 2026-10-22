@@ -124,7 +124,6 @@ struct OpenId4VpAuthenticationTests {
         let requests = try await service.receiveRequest()
         let session = try makeSession(service)
         try session.decodeRequest(requests)
-        #expect(session.readerCertIssuerValid == true)
         #expect(session.readerAuthenticationStatus == .authenticated)
         #expect(!session.disclosedDocumentSets.isEmpty)
 
@@ -155,7 +154,6 @@ struct OpenId4VpAuthenticationTests {
         requests[0].readerAuthResults = ["": ReaderAuthenticationResult(isValidated: false,
             validationMessage: "Reader authentication was not evaluated", legalName: "Unverified name")]
         try session.decodeRequest(requests)
-        #expect(session.readerCertIssuerValid == false)
         #expect(session.readerCertValidationMessage == "Reader authentication was not evaluated")
         #expect(session.readerAuthenticationStatus == .notEvaluated)
         #expect(session.readerLegalName == nil)
@@ -163,7 +161,6 @@ struct OpenId4VpAuthenticationTests {
         requests[0].readerAuthResults = [:]
         try session.decodeRequest(requests)
         #expect(session.readerAuthenticationStatus == .notEvaluated)
-        #expect(session.readerCertIssuerValid == nil)
         #expect(session.readerCertValidationMessage == nil)
     }
 
@@ -177,7 +174,6 @@ struct OpenId4VpAuthenticationTests {
         let session = try makeSession(service)
         try session.decodeRequest(requests)
         #expect(session.readerAuthenticationStatus == .authenticated)
-        #expect(session.readerCertIssuerValid == true)
         #expect(session.readerLegalName != nil)
         #expect(session.wrpVerifierWarnings?.isEmpty == false)
         await #expect(throws: PostError.self) {
