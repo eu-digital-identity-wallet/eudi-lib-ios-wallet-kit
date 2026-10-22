@@ -2,7 +2,7 @@
 
 - Add `TrustConfiguration.readerTrustPolicy` for OpenID4VP reader access certificates, defaulting to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted certificate chain; signature verification and certificate-chain parsing remain required.
 
-- Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` instead of the deprecated `readerCertIssuerValid`
+- Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` for reader authentication
 
 - Update `eudi-lib-ios-iso18013-data-transfer` and the resolved `eudi-lib-ios-iso18013-security` dependency to version 0.28.0.
 - Update the transitive `EudiEtsi1196x2` library to v0.4.0-alpha.4 through the security package, allowing certificates with non-critical `basicConstraints` to be accepted.
@@ -1658,7 +1658,7 @@ OS16 offer url parsing issue
 d4VP fixes and updates
 The flow is supported by existing methods:
 - Update eudi-lib-ios-siop-openid4vp to version 0.1.1
-1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`nid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`nid4vp certificate chain verification (PresentationSession's `readerCertIssuer` property)
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)y to PresentationSession
 
 2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`).
@@ -1678,7 +1678,7 @@ The flow is supported by existing methods:
 ### Openid4VP fixes and updatesking change - docModels contains not-nil items (SwiftUI breaks with nil items)
 
 - Update eudi-lib-ios-siop-openid4vp to version 0.1.1
-- Fix openid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
+- Fix openid4vp certificate chain verification (PresentationSession's `readerCertIssuer` property)
 - Add `readerLegalName` property to PresentationSession
 
 ## v0.4.8- PresentationSession / func sendResponse: itemsToSend dictionary is keyed by docId (and not docType)
@@ -1754,7 +1754,7 @@ DisplayStrings is recursive (cbor elements can be dictionaries)
 ## v0.3.2
 - Internal updates for security checks
 
-## v0.3.1- `PresentationSession`: add `readerCertIssuerValid`` (is verifier certificate trusted)
+## v0.3.1
 - Updated presentation definition parsingtationSession`: change `readerCertIssuer`` (has verifier certificate common name)
 () -> [String: Any]`
 ## v0.3.0
@@ -1774,7 +1774,6 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 ## v0.1.6allet-kit/pull/68)) via [@phisakel](https://github.com/phisakel)
 - Add isMandatory property to DocElementsViewModel structure via [@phisakel](https://github.com/phisakel)
 - `PresentationSession` methods do not run on main actor) via [@phisakel](https://github.com/phisakel)
-- `PresentationSession`: add `readerCertIssuerValid`` (is verifier certificate trusted)com/phisakel)
 - `PresentationSession`: change `readerCertIssuer`` (has verifier certificate common name)
 - `MdocDecodable`: add extension method: `public func toJson() -> [String: Any]`
 
