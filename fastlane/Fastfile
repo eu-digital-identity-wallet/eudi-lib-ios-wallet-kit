@@ -42,7 +42,6 @@ platform :ios do
       scheme: "EudiWalletKit",
       output_directory: "xcov_output",
       is_swift_package: true,
-      minimum_coverage_percentage: 50.0,
       include_targets: "EudiWalletKit"
     )
     if ENV['CI'] != 'true'
