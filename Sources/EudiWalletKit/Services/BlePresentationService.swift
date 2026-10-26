@@ -55,7 +55,13 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var deviceEngagement: DeviceEngagement?
 	/// The handover in the session transcript. QR engagement uses null (the default).
 	/// NFC static handover uses [Handover Select message, null] (ISO/IEC 18013-5, 9.1.5.1).
-	public var handOver: CBOR = BleTransferMode.QRHandover
+	/// The holder app can set it from an NFC callback on a different thread. A lock protects it.
+	public var handOver: CBOR {
+		get { handOverLock.withLock { _handOver } }
+		set { handOverLock.withLock { _handOver = newValue } }
+	}
+	private let handOverLock = NSLock()
+	private var _handOver: CBOR = BleTransferMode.QRHandover
 	public var deviceRequest: DeviceRequest?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
