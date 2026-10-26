@@ -26,7 +26,7 @@ struct OpenId4VpAuthenticationTests {
                     anchors: [fixture.der], registration: registration)
                 // Simulate dependency success without the wallet's trust evaluation.
                 service.chainVerifier = { _ in true }
-                await assertRejected(service, network: network)
+				await assertRejected(service, network: network, reportedError: "invalid_client")
                 #expect(service.readerAuthenticationStatus == .failed)
                 #expect(service.readerCertificateValidationMessage != nil)
                 if registration == .warning { #expect(service.wrpVerifierWarnings?.isEmpty == false) }
@@ -87,7 +87,7 @@ struct OpenId4VpAuthenticationTests {
             }
             // A dependency reporting success without invoking wallet validation must still be rejected.
             service.chainVerifier = { _ in true }
-            await assertRejected(service, network: network)
+			await assertRejected(service, network: network, reportedError: "invalid_client")
         }
     }
 
@@ -101,7 +101,7 @@ struct OpenId4VpAuthenticationTests {
                 readerTrustPolicy: .warning)
             let validate = service.chainVerifier
             service.chainVerifier = { _ in await validate([other.der.base64EncodedString()]) }
-            await assertRejected(service, network: network)
+			await assertRejected(service, network: network, reportedError: "invalid_client")
         }
     }
 
@@ -464,6 +464,41 @@ struct OpenId4VpAuthenticationTests {
         }
     }
 
+	@Test("Signed requests report an unsatisfiable query to the verifier", arguments: [false, true])
+	func reportsUnsatisfiableQueryForSignedRequest(byReference: Bool) async throws {
+		let fixture = try CertificateFixture()
+		for clientId in fixture.clientIds {
+			let token = try fixture.token(clientId: clientId, validSignature: true,
+										  requestedDocType: "org.example.unknown")
+			let (service, network) = try await makeService(clientId: clientId, token: token,
+														   byReference: byReference, anchors: [fixture.der])
+			await assertRejected(service, network: network, reportedError: "access_denied")
+			#expect(service.readerAuthenticationStatus == .failed)
+			#expect(service.readerAuthValidated)
+		}
+	}
+
+	@Test("Preregistered requests report an unsatisfiable query to the verifier", arguments: [false, true])
+	func reportsUnsatisfiableQueryForPreregisteredRequest(byReference: Bool) async throws {
+		let fixture = try CertificateFixture()
+		let client = try fixture.preregistered(clientId: "registered-verifier")
+		let token = try fixture.token(
+			clientId: client.clientId,
+			validSignature: true,
+			requestedDocType: "org.example.unknown"
+		)
+		let (service, network) = try await makeService(
+			clientId: client.clientId,
+			token: token,
+			byReference: byReference,
+			clientIdSchemes: [.preregistered([client])]
+		)
+
+		await assertRejected(service, network: network, reportedError: "access_denied")
+		#expect(service.readerAuthenticationStatus == .failed)
+		#expect(!service.readerAuthValidated)
+	}
+
     @Test("Authenticated X.509 requests reach consent with the expected client ID", arguments: [false, true])
     func acceptsSignedRequest(byReference: Bool) async throws {
         let fixture = try CertificateFixture()
@@ -499,7 +534,11 @@ struct OpenId4VpAuthenticationTests {
         #expect(await network.posts == 1)
     }
 
-    private func assertRejected(_ service: OpenId4VpService, network: RequestNetworking) async {
+	private func assertRejected(
+		_ service: OpenId4VpService,
+		network: RequestNetworking,
+		reportedError: String? = nil
+	) async {
         await #expect(throws: WalletError.self) { try await service.receiveRequest() }
         #expect(service.resolvedRequestData == nil)
         #expect(service.dcql == nil)
@@ -510,7 +549,9 @@ struct OpenId4VpAuthenticationTests {
                     authenticationContext: ThreadSafeAuthContext(), onSuccess: nil)
             }
         }
-        #expect(await network.posts == 0)
+		#expect(await network.posts == (reportedError == nil ? 0 : 1))
+		if let reportedError { #expect(await network.postBodies.last?.contains("error=\(reportedError)") == true) }
+		#expect(await network.postBodies.allSatisfy { !$0.contains("vp_token=") })
         #expect(service.presentedDocumentIds.isEmpty)
     }
 
@@ -604,6 +645,7 @@ struct OpenId4VpAuthenticationTests {
     private actor RequestNetworking: Networking {
         var token: String
         var posts = 0
+		var postBodies: [String] = []
         var fetches = 0
         private var holdFetch = false
         private var heldFetch: CheckedContinuation<Void, Never>?
@@ -629,7 +671,11 @@ struct OpenId4VpAuthenticationTests {
             return (Data(token.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/oauth-authz-req+jwt"])!)
         }
         func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-            if request.httpMethod == "POST" { posts += 1; throw URLError(.unsupportedURL) }
+			if request.httpMethod == "POST" {
+				posts += 1
+				postBodies.append(String(decoding: request.httpBody ?? Data(), as: UTF8.self))
+				throw URLError(.unsupportedURL)
+			}
             return try await data(from: #require(request.url))
         }
     }
