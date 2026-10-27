@@ -1241,6 +1241,25 @@ public actor OpenId4VciService {
 			} else if doc.docDataFormat == .sdjwt {
 				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
+			let missing = Self.missingMandatoryClaims(doc, claims: DocMetadata(from: issued.metadata)?.claims ?? [])
+			guard missing.isEmpty else {
+				throw WalletError(description: "Issued credential is missing mandatory claims: \(missing.joined(separator: ", "))", code: .issuanceRequestFailed)
+			}
+		}
+	}
+
+	/// The top-level claims that the issuer metadata marks mandatory and the credential does not contain.
+	static func missingMandatoryClaims(_ doc: WalletStorage.Document, claims: [DocClaimMetadata]) -> [String] {
+		let mandatory = claims.filter { $0.isMandatory == true }.map(\.claimPath)
+		switch doc.docDataFormat {
+		case .cbor:
+			guard let issuerNameSpaces = (try? IssuerSigned(data: [UInt8](doc.data)))?.issuerNameSpaces else { return [] }
+			return mandatory.filter { $0.count == 2 }.filter { path in
+				!(issuerNameSpaces[path[0]] ?? []).contains { $0.elementIdentifier == path[1] }
+			}.map { $0.joined(separator: ".") }
+		case .sdjwt:
+			guard let json = SdJwtUtils.recreateSdJwtClaims(docData: doc.data)?.json else { return [] }
+			return mandatory.filter { $0.count == 1 && !json[$0[0]].exists() }.map { $0[0] }
 		}
 	}
 
