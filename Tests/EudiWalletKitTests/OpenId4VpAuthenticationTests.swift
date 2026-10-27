@@ -534,6 +534,65 @@ struct OpenId4VpAuthenticationTests {
         #expect(await network.posts == 1)
     }
 
+	@Test(
+		"Preferred response modes preserve consent and require encryption metadata",
+		arguments: [false, true], [false, true]
+	)
+	func validatesPreferredResponseMode(userAccepted: Bool, encrypted: Bool) async throws {
+		let (service, network) = try await makeService(clientId: "redirect_uri:\(Self.responseURI)", token: nil)
+		_ = try await service.receiveRequest()
+		let resolved = try #require(service.resolvedRequestData)
+
+		#expect(resolved.request.state == nil)
+		#expect(resolved.request.responseEncryptionSpecification == nil)
+
+		service.openID4VpConfig = .init(preferredResponseMode: encrypted ? .directPostJWT : .directPost)
+
+		let queryId = try QueryId(value: "mdl")
+		let consent: ClientConsent = userAccepted
+		? .vpToken(
+			vpContent: .dcql(
+				verifiablePresentations: [
+					queryId: [.generic("presentation")]
+				]
+			)
+		)
+		: .negative(message: "access_denied")
+
+		if encrypted {
+			#expect(throws: WalletError.self) {
+				do {
+					_ = try service.buildAuthorizationResponse(resolved: resolved, consent: consent)
+				} catch let error as WalletError {
+					#expect(error.code == .responseEncryptionMissing)
+					throw error
+				}
+			}
+		} else {
+			let response = try service.buildAuthorizationResponse(resolved: resolved, consent: consent)
+			guard case let .directPost(url, payload) = response else {
+				Issue.record("Expected a direct POST response")
+				return
+			}
+
+			#expect(url.absoluteString == Self.responseURI)
+
+			let data = try JSONEncoder().encode(payload)
+			let fields = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+			#expect(fields["state"] as? String == "")
+
+			if userAccepted {
+				let presentations = try #require(fields["vp_token"] as? [String: [String]])
+				#expect(presentations == ["mdl": ["presentation"]])
+				#expect(fields["error"] == nil)
+			} else {
+				#expect(fields["error"] as? String == "access_denied")
+				#expect(fields["vp_token"] == nil)
+			}
+		}
+		#expect(await network.posts == 0)
+	}
+
 	private func assertRejected(
 		_ service: OpenId4VpService,
 		network: RequestNetworking,
