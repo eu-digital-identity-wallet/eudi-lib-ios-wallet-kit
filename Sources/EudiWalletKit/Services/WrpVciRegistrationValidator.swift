@@ -16,12 +16,21 @@
 import Foundation
 import MdocSecurity18013
 import X509
+import struct MdocDataModel18013.StatusList
+import enum StatiumSwift.CredentialStatus
 import OpenID4VCI
 import Logging
 import struct OpenID4VCI.PolicyViolation
 
+typealias WrprcStatusCheck = @Sendable (StatusList, TrustConfiguration) async throws -> CredentialStatus
+
+func checkWrprcStatus(_ statusList: StatusList, _ trustConfig: TrustConfiguration) async throws -> CredentialStatus {
+	try await DocumentStatusService(statusList: statusList, trustConfig: trustConfig).getStatus()
+}
+
 /// Validates the WRP registration certificate (WRPRC) of a credential issuer during OpenID4VCI issuance.
 public actor WrpVciRegistrationValidator {
+	private let statusCheck: WrprcStatusCheck
 	/// Trust configuration used to validate the issuer registration certificate.
 	public let trustConfig: TrustConfiguration
 	public let date: Date?
@@ -35,6 +44,13 @@ public actor WrpVciRegistrationValidator {
 	public init(date: Date = .now, trustConfig: TrustConfiguration) {
 		self.trustConfig = trustConfig
 		self.date = date
+		self.statusCheck = checkWrprcStatus
+	}
+
+	init(trustConfig: TrustConfiguration, statusCheck: @escaping WrprcStatusCheck) {
+		self.trustConfig = trustConfig
+		self.date = .now
+		self.statusCheck = statusCheck
 	}
 	/// Validate the WRP registration certificate (WRPRC) delivered in the issuer metadata
 	/// `issuer_info` during OpenID4VCI issuance.
@@ -59,7 +75,7 @@ public actor WrpVciRegistrationValidator {
 			let wrprcData = Data(base64Encoded: wrprc) ?? wrprc.data(using: .ascii)
 			guard let wrprcData else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
 			wrpVciRegistrationPolicy = try? Self.decodeWrprc(wrprcData)
-			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData)
+			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData, statusCheck: statusCheck)
 			wrpVciRegistrationPolicy = policy
 			wrpVciWarnings[""] = warns
 			var vciNotCoveredWarnings = [String: [RegistrationPolicyViolation]]()
@@ -92,7 +108,7 @@ public actor WrpVciRegistrationValidator {
 
 	/// Reasons that cause `.notGranted` when `wrprcTrustPolicy == .enforce`.
 	private static let enforceableReasons: Set<RegistrationFailureReason> = [
-		.expired, .statusRevoked, .statusSuspended, .statusApplicationSpecific, .statusMissing, .trustError, .invalidType
+		.expired, .statusRevoked, .statusSuspended, .statusApplicationSpecific, .statusMissing, .statusTrustError, .trustError, .invalidType
 	]
 
 	/// Check each offered credential configuration against the attestations the issuer is
@@ -164,7 +180,7 @@ extension WrpVciRegistrationValidator {
 	/// Parses the token, checks its type header, decodes the registration policy, and validates
 	/// expiration, access-certificate binding, status and trust chain.
 	/// - Returns: The decoded registration policy, together with typed violations for all issues found.
-	static func validateWrprcCore(_ trustConfig: TrustConfiguration, wrpac: Certificate?, wrprcData: Data) async throws -> (WrpRegistrationPolicy, [RegistrationPolicyViolation]) {
+	static func validateWrprcCore(_ trustConfig: TrustConfiguration, wrpac: Certificate?, wrprcData: Data, statusCheck: WrprcStatusCheck = checkWrprcStatus) async throws -> (WrpRegistrationPolicy, [RegistrationPolicyViolation]) {
 		var warnings = [RegistrationPolicyViolation]()
 		let wrprcToken = try x5cVerifyJwtOrCwt.parse(attestData: wrprcData, format: nil)
 		let wrprcPayload: Data
@@ -200,9 +216,8 @@ extension WrpVciRegistrationValidator {
 			warnings.append(RegistrationPolicyViolation(reason: .accessCertificateUnavailable, message: "Requester access certificate not available to check WRPRC binding"))
 		}
 		if let status = wrpIssuerPolicy.status {
-			let statusService = DocumentStatusService(statusList: status.statusList, trustConfig: trustConfig)
-			let credStatus = try? await statusService.getStatus()
-			if let credStatus {
+			do {
+				let credStatus = try await statusCheck(status.statusList, trustConfig)
 				switch credStatus {
 				case .valid: break
 				case .invalid:
@@ -214,7 +229,9 @@ extension WrpVciRegistrationValidator {
 				case .reserved(let code):
 					warnings.append(RegistrationPolicyViolation(reason: .statusApplicationSpecific, message: "WRPRC status: reserved (\(code))"))
 				}
-			} else {
+			} catch let error as WalletError where error.code == .trustError {
+				warnings.append(RegistrationPolicyViolation(reason: .statusTrustError, message: "WRPRC status-list token could not be authenticated: \(error.localizedDescription)"))
+			} catch {
 				Self.logger.warning("WRPRC status list could not be retrieved")
 				warnings.append(RegistrationPolicyViolation(reason: .statusRetrievalFailed, message: "WRPRC status list could not be retrieved"))
 			}

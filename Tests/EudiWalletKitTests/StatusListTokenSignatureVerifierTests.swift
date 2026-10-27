@@ -2,6 +2,8 @@ import CryptoKit
 import Foundation
 import JSONWebSignature
 import MdocSecurity18013
+import MdocDataModel18013
+import OpenID4VP
 import StatiumSwift
 import SwiftASN1
 import Testing
@@ -9,11 +11,11 @@ import X509
 @testable import EudiWalletKit
 
 struct StatusListTokenSignatureVerifierTests {
-    private func configuration(_ policy: TrustPolicy, anchors: [Data] = []) -> TrustConfiguration {
+    private func configuration(_ policy: TrustPolicy, anchors: [Data] = [], wrprcPolicy: TrustPolicy = .enforce) -> TrustConfiguration {
         #if canImport(EudiEtsi1196x2)
-        TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), statusTrustPolicy: policy)
+        TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), statusTrustPolicy: policy, wrprcVpTrustPolicy: wrprcPolicy, wrprcVciTrustPolicy: wrprcPolicy)
         #else
-        TrustConfiguration(rootIaca: anchors.map { [$0] }, statusTrustPolicy: policy)
+        TrustConfiguration(rootIaca: anchors.map { [$0] }, statusTrustPolicy: policy, wrprcVpTrustPolicy: wrprcPolicy, wrprcVciTrustPolicy: wrprcPolicy)
         #endif
     }
 
@@ -36,8 +38,8 @@ struct StatusListTokenSignatureVerifierTests {
         return (key, Data(serializer.serializedBytes))
     }
 
-    private func token(algorithm: String?, certificates: [String]?, payload: Data = Data("{}".utf8), signature: Data = Data()) throws -> Data {
-        var header: [String: Any] = ["typ": "statuslist+jwt"]
+    private func token(algorithm: String?, certificates: [String]?, payload: Data = Data("{}".utf8), signature: Data = Data(), type: String = "statuslist+jwt") throws -> Data {
+        var header: [String: Any] = ["typ": type]
         if let algorithm { header["alg"] = algorithm }
         if let certificates { header["x5c"] = certificates }
         let encodedHeader = try JSONSerialization.data(withJSONObject: header, options: .sortedKeys)
@@ -127,9 +129,92 @@ struct StatusListTokenSignatureVerifierTests {
         if case .success = unsignedResult { Issue.record("Unsigned token returned a credential status") }
     }
 
+
+    private func signedToken(key: P256.Signing.PrivateKey, certificate: Data, payload: Data, type: String = "statuslist+jwt") throws -> Data {
+        let unsigned = try token(algorithm: "ES256", certificates: [certificate.base64EncodedString()], payload: payload, type: type)
+        let signature = try key.signature(for: Data(unsigned.dropLast())).rawRepresentation
+        return try token(algorithm: "ES256", certificates: [certificate.base64EncodedString()], payload: payload, signature: signature, type: type)
+    }
+
+    @Test("Status token trust errors survive Statium's string conversion")
+    func statusServiceTrustFailure() async throws {
+        let signer = try fixture()
+        let now = Date()
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "sub": "https://status.example/list", "iat": floor(now.timeIntervalSince1970),
+            "status_list": ["bits": 1, "lst": "eJxjAgAAAwAD"]
+        ])
+        let signed = try signedToken(key: signer.key, certificate: signer.certificate, payload: payload)
+        let reference = MdocDataModel18013.StatusList(idx: 0, uri: "https://status.example/list")
+        let service = DocumentStatusService(statusList: reference, trustConfig: configuration(.enforce))
+        do {
+            _ = try await service.getStatus(networkingService: StubNetworking(data: signed))
+            Issue.record("Untrusted token returned status bits")
+        } catch let error as WalletError {
+            #expect(error.code == .trustError)
+            #expect((error.innerError as? WalletError)?.code == .trustError)
+        }
+        let warningService = DocumentStatusService(statusList: reference, trustConfig: configuration(.warning))
+        let status = try await warningService.getStatus(networkingService: StubNetworking(data: signed))
+        #expect(status == .valid)
+    }
+
+    @Test("WRPRC status trust failures block issuance and presentation under enforcement", arguments: [TrustPolicy.enforce, .warning])
+    func registrationStatusTrustFailure(wrprcPolicy: TrustPolicy) async throws {
+        try await checkRegistration(networkFailure: false, wrprcPolicy: wrprcPolicy)
+    }
+
+    @Test("Network failures remain retrieval warnings under enforcement")
+    func registrationNetworkFailure() async throws {
+        try await checkRegistration(networkFailure: true, wrprcPolicy: .enforce)
+    }
+
+    private func checkRegistration(networkFailure: Bool, wrprcPolicy: TrustPolicy) async throws {
+        let registrationSigner = try fixture()
+        let statusSigner = try fixture()
+        let trustConfig = configuration(.enforce, anchors: [registrationSigner.certificate], wrprcPolicy: wrprcPolicy)
+        let statusPayload = try JSONSerialization.data(withJSONObject: [
+            "sub": "https://status.example/list", "iat": floor(Date().timeIntervalSince1970),
+            "status_list": ["bits": 1, "lst": "eJxjAgAAAwAD"]
+        ])
+        let statusToken = try signedToken(key: statusSigner.key, certificate: statusSigner.certificate, payload: statusPayload)
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "sub": "registered-party", "credentials": [], "srv_description": [],
+            "status": ["status_list": ["idx": 0, "uri": "https://status.example/list"]]
+        ])
+        let wrprc = try signedToken(key: registrationSigner.key, certificate: registrationSigner.certificate, payload: payload, type: WRPRC_JWT_TYPE)
+        let statusCheck: WrprcStatusCheck = { reference, config in
+            let service = DocumentStatusService(statusList: reference, trustConfig: config)
+            return try await service.getStatus(networkingService: StubNetworking(data: statusToken, fails: networkFailure))
+        }
+        let issuer = WrpVciRegistrationValidator(trustConfig: trustConfig, statusCheck: statusCheck)
+        let issuance = await issuer.validateCertificate(wrpac: registrationSigner.certificate.base64EncodedString(), wrprc: String(decoding: wrprc, as: UTF8.self), offeredConfigurations: [:])
+        let issuanceWarnings = await issuer.wrpVciWarnings[""] ?? []
+        let expectedReason: RegistrationFailureReason = networkFailure ? .statusRetrievalFailed : .statusTrustError
+        #expect(issuanceWarnings.contains { $0.reason == expectedReason })
+        #expect(!issuanceWarnings.contains { $0.reason == .trustError })
+        #expect(!issuanceWarnings.contains { $0.reason == .statusRevoked })
+        let shouldBlock = !networkFailure && wrprcPolicy == .enforce
+        switch issuance {
+        case .notGranted: #expect(shouldBlock)
+        case .granted: #expect(!shouldBlock)
+        }
+        let verifier = WrpVpRegistrationValidator(trustConfig: trustConfig, dcqlQueryable: DefaultDcqlQueryable(credentials: ["credential": ("pid", .cbor)], claimPaths: ["credential": []]), statusCheck: statusCheck)
+        let dcql = try JSONDecoder().decode(DCQL.self, from: Data("{\"credentials\":[{\"id\":\"pid\",\"format\":\"mso_mdoc\",\"meta\":{\"doctype_value\":\"pid\"}}]}".utf8))
+        let presentation = await verifier.validateCertificate(wrpac: nil, wrprcData: wrprc, dcql: dcql)
+        let presentationWarnings = await verifier.wrpVpWarnings[""] ?? []
+        #expect(presentationWarnings.contains { $0.reason == PresentationFailureReason(registrationReason: expectedReason) })
+        #expect(!presentationWarnings.contains { $0.reason == .trustError })
+        switch presentation {
+        case .notGranted: #expect(shouldBlock)
+        case .granted: #expect(!shouldBlock)
+        }
+    }
+
     private struct StubNetworking: NetworkingServiceType {
         let data: Data
+        var fails = false
         let session = URLSession(configuration: .ephemeral)
-        func get(url: URL, headers: [String: String]) async -> Result<Data, NetworkingError> { .success(data) }
+        func get(url: URL, headers: [String: String]) async -> Result<Data, NetworkingError> { fails ? .failure(.error("offline")) : .success(data) }
     }
 }
