@@ -30,6 +30,8 @@ public enum RegistrationFailureReason: Sendable, Hashable {
 	case statusMissing
 	/// The WRPRC status list could not be retrieved.
 	case statusRetrievalFailed
+	/// The WRPRC status-list token could not be authenticated.
+	case statusTrustError
 	/// The WRPRC trust chain could not be validated.
 	case trustError
 	/// The WRPRC header type is not a registration certificate type.
