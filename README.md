@@ -192,7 +192,7 @@ The `statusTrustPolicy` parameter controls how the wallet handles trust failures
 
 The `readerTrustPolicy` parameter independently controls reader access certificate trust for OpenID4VP X.509 clients (`.x509SanDns` and `.x509Hash`). It defaults to `.enforce`, rejecting untrusted chains. Set it to `.warning` to allow a valid signed request with an untrusted chain to proceed with `readerAuthenticationStatus == .authenticatedWithUntrustedCertificate`. The chain must still be well formed and its evaluated leaf must match the request's signing certificate. This policy does not change BLE reader authentication, issuer trust, or WRPRC validation.
 
-Use `PresentationSession.readerAuthenticationStatus` instead of the deprecated `readerCertIssuerValid` and update exhaustive switches to handle `.authenticatedWithUntrustedCertificate`. For this status, display `readerCertValidationMessage` as a trust warning and do not show a trusted-reader badge; `readerLegalName` remains `nil`. See the [presentation guide](Sources/EudiWalletKit/EudiWalletKit.docc/PresentationService.md#reader-authentication-and-certificate-trust) for all authentication statuses.
+Use `PresentationSession.readerAuthenticationStatus` and update exhaustive switches to handle `.authenticatedWithUntrustedCertificate`. For this status, display `readerCertValidationMessage` as a trust warning and do not show a trusted-reader badge; `readerLegalName` remains `nil`. See the [presentation guide](Sources/EudiWalletKit/EudiWalletKit.docc/PresentationService.md#reader-authentication-and-certificate-trust) for all authentication statuses.
 
 ### OpenID4VCI Configuration
 
