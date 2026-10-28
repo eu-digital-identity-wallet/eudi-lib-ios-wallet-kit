@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import SwiftCBOR
 import MdocDataModel18013
 import MdocSecurity18013
 import MdocDataTransfer18013
@@ -52,6 +53,9 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 	public var zkpDocumentIds: [Document.ID]?
 	public var flow: FlowType { .ble }
 	public var deviceEngagement: DeviceEngagement?
+	/// The handover in the session transcript. QR engagement uses null (the default).
+	/// NFC static handover uses [Handover Select message, null] (ISO/IEC 18013-5, 9.1.5.1).
+	public var handOver: CBOR = BleTransferMode.QRHandover
 	public var deviceRequest: DeviceRequest?
 	public var sessionEncryption: SessionEncryption?
 	public var docs: [String: IssuerSigned]!
@@ -117,6 +121,7 @@ public final class BlePresentationService: @unchecked Sendable, PresentationServ
 		guard docs.values.allSatisfy({ $0.issuerNameSpaces != nil }) else {
 			throw MdocHelpers.makeError(code: .invalidInputDocument)
 		}
+		handOver = BleTransferMode.QRHandover
 		deviceEngagement = DeviceEngagement(supportsCentralClientMode: bleTransferMode == .client || bleTransferMode == .both, supportsPeripheralServerMode: bleTransferMode == .server || bleTransferMode == .both, rfus: rfus)
 		try await deviceEngagement!.makePrivateKey(secureArea: secureArea, keyOptions: keyOptions)
 		sessionEncryption = nil
@@ -160,7 +165,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 			bleTranport.stopBleAdvertising()
 			bleServer?.stopBleAdvertising()
 			let compactDocMetadata = docMetadata.compactMapValues { $0 }
-			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, signatureAlgorithm: deviceAlgorithm, unlockData: unlockData, readerKeyRawData: nil, handOver: BleTransferMode.QRHandover, authenticationContext: authenticationContext)
+			let decodedRes = await MdocHelpers.decodeRequestAndInformUser(deviceEngagement: deviceEngagement, docs: docs, docMetadata: compactDocMetadata, trustValidator: trustValidator, requestData: readBuffer, privateKeyObjects: privateKeyObjects, dauthMethod: dauthMethod, signatureAlgorithm: deviceAlgorithm, unlockData: unlockData, readerKeyRawData: nil, handOver: handOver, authenticationContext: authenticationContext)
 			switch decodedRes {
 			case .success(let decoded):
 				deviceRequest = decoded.deviceRequest

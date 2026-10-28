@@ -45,6 +45,7 @@ public actor OpenId4VciService {
 	var config: OpenId4VciConfiguration
 	static nonisolated(unsafe) var credentialOfferCache = [String: CredentialOffer]()
 	static nonisolated(unsafe) var issuerMetadataCache = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
+	static nonisolated(unsafe) var authorizationServerMetadataCache = [String: IdentityAndAccessManagementMetadata]()
 	var networking: Networking
 	var authRequested: AuthorizationRequested?
 	var keyBatchSize: Int { issueReq.credentialOptions.batchSize }
@@ -211,14 +212,10 @@ public actor OpenId4VciService {
 		_ = try await issueReq.createKeyBatch()
 	}
 
-	static func clearCachedOfferMetadata(offerUri: String? = nil) {
-		if let offerUri { Self.credentialOfferCache.removeValue(forKey: offerUri) }
-		else { Self.credentialOfferCache.removeAll() }
-	}
-
-	/// Clear the issuer metadata cache
-	static func clearIssuerMetadataCache() {
+	/// Clear the issuer and authorization server metadata caches
+	static func clearIssuerAndAuthorizationMetadataCache() {
 		Self.issuerMetadataCache.removeAll()
+		Self.authorizationServerMetadataCache.removeAll()
 	}
 
 	public nonisolated func beginIssueDocument(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, bDeferred: Bool = false) throws -> IssueRequest {
@@ -259,6 +256,9 @@ public actor OpenId4VciService {
 	public func resolveOfferDocTypes(offerUri: String, offer: CredentialOffer) async throws -> OfferedIssuanceModel {
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		Self.credentialOfferCache[offerUri] = offer
+		if let authorizationServer = offer.authorizationServerMetadata.issuerURL {
+			Self.authorizationServerMetadataCache[authorizationServer.absoluteString] = offer.authorizationServerMetadata
+		}
 		let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
 		let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
@@ -431,8 +431,7 @@ public actor OpenId4VciService {
 		guard let authorizationServer = issuerMetadata.authorizationServers?.first else {
 			throw WalletError(description: "Invalid authorization server - no authorization server found", code: .authorizationFailed)
 		}
-		let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)).resolve(url: authorizationServer)
-		let authorizationServerMetadata = try authServerMetadata.get()
+		let authorizationServerMetadata = try await Self.resolveAuthorizationServerMetadata(url: authorizationServer, networking: networking)
 		let issuer = try Issuer(authorizationServerMetadata: authorizationServerMetadata, issuerMetadata: .init(deferredCredentialEndpoint: data.deferredCredentialEndpoint), config: vciConfig, dpopConstructor: dpopConstructor, session: networking)
 		return (issuer, dpopConstructor)
 	}
@@ -495,6 +494,16 @@ public actor OpenId4VciService {
 
 	static func makeMetadataResolver(_ networking: any Networking) -> CredentialIssuerMetadataResolver {
 	 CredentialIssuerMetadataResolver(fetcher: MetadataFetcher(rawFetcher: RawDataFetcher(session: networking), processor: MetadataProcessor()))
+	}
+
+	static func resolveAuthorizationServerMetadata(url: URL, networking: any Networking) async throws -> IdentityAndAccessManagementMetadata {
+		if let cachedMetadata = authorizationServerMetadataCache[url.absoluteString] {
+			return cachedMetadata
+		}
+		let resolver = AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))
+		let metadata = try await resolver.resolve(url: url).get()
+		authorizationServerMetadataCache[url.absoluteString] = metadata
+		return metadata
 	}
 
 	func resolveIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
@@ -656,8 +665,7 @@ public actor OpenId4VciService {
 		guard let authorizationServer = metaData.authorizationServers?.first else {
 			throw WalletError(description: "Invalid authorization server - no authorization server found", code: .authorizationFailed)
 		}
-		let authServerMetadata = await AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking)).resolve(url: authorizationServer)
-		let authorizationServerMetadata = try authServerMetadata.get()
+		let authorizationServerMetadata = try await Self.resolveAuthorizationServerMetadata(url: authorizationServer, networking: networking)
 		var credentialConfigurations: [CredentialConfiguration] = []
 		var configurationIdentifiers: [CredentialConfigurationIdentifier] = []
 		for docTypeIdentifier in docTypeIdentifiers {
@@ -1255,13 +1263,12 @@ public actor OpenId4VciService {
 		} else {
 			let metadataFetcher = SdJwtVcIssuerMetaDataFetcher(session: URLSession.shared)
 			let metadata = try await metadataFetcher.fetchIssuerMetaData(issuer: expectedIssuer)
-			guard let kid = signedSdJwt.jwt.protectedHeader.keyID else {
-				throw WalletError(description: "Issued SD-JWT is missing both x5c chain and key identifier", code: .issuanceRequestFailed)
-			}
-			guard let issuerJwk = metadata?.jwks.first(where: { $0.keyID == kid }) else {
-				throw WalletError(description: "Unable to resolve issuer signing key for issued SD-JWT", code: .trustError)
-			}
-			issuerKey = issuerJwk
+			// A kid is recommended, not required (SD-JWT VC, JWT VC Issuer Metadata).
+			issuerKey = try SdJwtIssuerKeySelector.select(
+				from: metadata?.jwks ?? [],
+				keyID: signedSdJwt.jwt.protectedHeader.keyID,
+				headerKey: signedSdJwt.jwt.protectedHeader.jwk
+			)
 		}
 		let result = try verifier.verifyIssuance(
 			issuersSignatureVerifier: { jws in try SignatureVerifier(signedJWT: jws, publicKey: issuerKey) },

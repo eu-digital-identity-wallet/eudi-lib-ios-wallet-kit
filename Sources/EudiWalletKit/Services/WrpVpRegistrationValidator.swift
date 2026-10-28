@@ -29,6 +29,7 @@ import struct OpenID4VP.OpenId4VPSpec
 
 /// Validates the WRP registration certificate (WRPRC) of a verifier (relying party) during presentation.
 public actor WrpVpRegistrationValidator {
+	private let statusCheck: WrprcStatusCheck
 	/// Trust configuration used to validate the reader/relying-party registration certificate.
 	public let trustConfig: TrustConfiguration
 	public let date: Date?
@@ -46,6 +47,14 @@ public actor WrpVpRegistrationValidator {
 		self.trustConfig = trustConfig
 		self.date = date
 		self.dcqlQueryable = dcqlQueryable
+		self.statusCheck = checkWrprcStatus
+	}
+
+	init(trustConfig: TrustConfiguration, dcqlQueryable: DefaultDcqlQueryable, statusCheck: @escaping WrprcStatusCheck) {
+		self.trustConfig = trustConfig
+		self.date = .now
+		self.dcqlQueryable = dcqlQueryable
+		self.statusCheck = statusCheck
 	}
 	
 	public func set(dcqlQueryable: DefaultDcqlQueryable?) { self.dcqlQueryable = dcqlQueryable }
@@ -101,11 +110,11 @@ public actor WrpVpRegistrationValidator {
 	///   with the empty key used for request-wide warnings
 	public func validateCertificate(wrpac: Certificate?, wrprcData: Data, dcql: DCQL) async -> Authorization {
 		do {
-			let (policy, warns) = try await WrpVciRegistrationValidator.validateWrprcCore(trustConfig, wrpac: wrpac, wrprcData: wrprcData)
+			let (policy, warns) = try await WrpVciRegistrationValidator.validateWrprcCore(trustConfig, wrpac: wrpac, wrprcData: wrprcData, statusCheck: statusCheck)
 			wrpVpRegistrationPolicy = policy
 			wrpVpWarnings[""] = warns.map { PresentationPolicyViolation(from: $0) }
 			// Under .enforce, hard failures block presentation.
-			let enforceableReasons: Set<PresentationFailureReason> = [.expired, .statusRevoked, .statusSuspended, .statusApplicationSpecific, .statusMissing, .trustError, .invalidType]
+			let enforceableReasons: Set<PresentationFailureReason> = [.expired, .statusRevoked, .statusSuspended, .statusApplicationSpecific, .statusMissing, .statusTrustError, .trustError, .invalidType]
 			if trustConfig.wrprcVpTrustPolicy == .enforce,
 			   let enforceable = wrpVpWarnings[""]?.first(where: { enforceableReasons.contains($0.reason) }) {
 				return .notGranted(error: PolicyViolation(enforceable.message))
