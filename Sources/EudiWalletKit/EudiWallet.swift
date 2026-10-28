@@ -242,7 +242,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
 	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> IssuerResponse {
-		OpenId4VciService.clearIssuerMetadataCache()
+		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
 		let documents = try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
@@ -321,6 +321,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		promptMessage: String? = nil,
 		backgroundOnly: Bool = false
 	) async throws -> IssuerResponse {
+		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		let docMetadata = try await getDocumentMetadata(documentId: documentId)
 		let vciService = try await resolveVCIService(issuerName: docMetadata.credentialIssuerIdentifier)
 		let authorized: AuthorizedRequest? = docMetadata.authorizedRequestData
@@ -428,7 +429,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - uriOffer: url with offer
 	/// - Returns: Offered issue information model
 	public func resolveOfferUrlDocTypes(offerUri: String, authFlowRedirectionURI: URL?) async throws -> OfferedIssuanceModel {
-		OpenId4VciService.clearIssuerMetadataCache()
+		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciServiceFromOfferUri = await resolveVCIServiceFromOfferUri(offerUri)
 		let policy: IssuerMetadataPolicy = if let vciServiceFromOfferUri { await vciServiceFromOfferUri.config.issuerMetadataPolicy } else { trustConfig.issuerMetadataPolicy }

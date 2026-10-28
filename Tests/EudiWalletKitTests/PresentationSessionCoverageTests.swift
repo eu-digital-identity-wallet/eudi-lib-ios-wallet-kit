@@ -65,7 +65,7 @@ struct PresentationSessionCoverageTests {
 
         #expect(session.status == .requestReceived)
         #expect(session.readerCertIssuer == "Reader CA")
-        #expect(session.readerCertIssuerValid == true)
+        #expect(session.readerAuthenticationStatus == .authenticated)
         #expect(session.readerCertValidationMessage == "validated")
         #expect(session.readerLegalName == "Example Verifier")
         #expect(session.disclosedDocumentSets.count == 1)

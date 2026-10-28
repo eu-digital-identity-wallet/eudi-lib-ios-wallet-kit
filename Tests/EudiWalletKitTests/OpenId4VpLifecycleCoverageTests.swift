@@ -49,7 +49,7 @@ struct OpenId4VpLifecycleCoverageTests {
             )
             Issue.record("A response requires a resolved presentation request")
         } catch let error as WalletError {
-            #expect(error.code == .internalError)
+            #expect(error.code == .notSecuredRequest)
         }
     }
 

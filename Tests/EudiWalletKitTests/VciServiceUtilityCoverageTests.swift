@@ -70,7 +70,7 @@ struct VciServiceUtilityCoverageTests {
 
     @Test("Resolves issuer metadata once and reuses its cached value")
     func resolvesAndCachesIssuerMetadata() async throws {
-        OpenId4VciService.clearIssuerMetadataCache()
+        OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
         let (service, expected) = try loadService()
 
         let first = try await service.getIssuerMetadata()
