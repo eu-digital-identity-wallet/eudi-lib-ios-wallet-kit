@@ -8,7 +8,7 @@ import WalletStorage
 
 @Suite("OpenID4VCI service utility coverage")
 struct VciServiceUtilityCoverageTests {
-    private func loadService(validateRegistrationCertificate: Bool = false) throws -> (OpenId4VciService, CredentialIssuerMetadata) {
+    private func loadService(validateRegistrationCertificate: Bool = false, issuerURL: String? = nil) throws -> (OpenId4VciService, CredentialIssuerMetadata) {
         let metadataData = try #require(Data(name: "pid-demo-openid-credential-issuer", ext: "json", from: Bundle.module))
         let metadata = try JSONDecoder().decode(CredentialIssuerMetadata.self, from: metadataData)
         let storageService = TestDataStorageService()
@@ -21,7 +21,7 @@ struct VciServiceUtilityCoverageTests {
         let service = try OpenId4VciService(
             uiCulture: "en",
             config: OpenId4VciConfiguration(
-                credentialIssuerURL: metadata.credentialIssuerIdentifier.url.absoluteString,
+                credentialIssuerURL: issuerURL ?? metadata.credentialIssuerIdentifier.url.absoluteString,
                 clientId: "coverage-client",
                 requireDpop: false,
                 validateRegistrationCertificate: validateRegistrationCertificate
@@ -212,15 +212,16 @@ struct VciServiceUtilityCoverageTests {
 
     @Test("Registry and network adapter forward calls and preserve service identity")
     func registryAndNetworkAdapter() async throws {
-        let (service, metadata) = try loadService()
+        let issuerURL = "https://coverage-\(UUID().uuidString).example"
+        let (service, _) = try loadService(issuerURL: issuerURL)
         let registry = OpenId4VCIServiceRegistry.shared
         let name = "coverage-\(UUID().uuidString)"
         registry.register(name: name, service: service)
         #expect(registry.get(name: name) != nil)
         #expect(registry.getAllNames().contains(name))
         #expect(registry.getAllServices().contains { $0 === service })
-        #expect(await [service].getByIssuerURL(metadata.credentialIssuerIdentifier.url.absoluteString) === service)
-        #expect(await registry.getByIssuerURL(issuerURL: metadata.credentialIssuerIdentifier.url.absoluteString) === service)
+        #expect(await [service].getByIssuerURL(issuerURL) === service)
+        #expect(await registry.getByIssuerURL(issuerURL: issuerURL) === service)
 
         let payload = Data("adapter response".utf8)
         let adapter = OpenID4VCINetworking(networking: VciCoverageNetworkAdapter(data: payload))
