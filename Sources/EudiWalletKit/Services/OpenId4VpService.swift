@@ -184,7 +184,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		await wrpRegistrationValidator.resetValidations()
 		await wrpRegistrationValidator.set(dcqlQueryable: dcqlQ)
 		openId4Vp = OpenID4VP(walletConfiguration: getWalletConf(), authorizatinRequestResolver: WalletAuthorizationRequestResolver())
-		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI)  {
+		switch await openId4Vp.authorize(fetcher: Fetcher<String>(session: networking), poster: Poster(session: networking), url: openid4VPURI) {
 		case let .notSecured(data: rrd, warnings):
 			self.wrpVerifierWarnings = await wrpRegistrationValidator.wrpVpWarnings
 			if !warnings.isEmpty { logger.warning("Policy warnings: \(warnings.mapValues{$0.map(\.violation)})") }
@@ -214,12 +214,15 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					validatedCertificate == certificate else {
 					let message = "Required reader certificate authentication was not established"
 					readerCertificateValidationMessage = message
+					// tells the verifier it is not trusted
+					await dispatchRequestError(ValidationError.untrustedCertificateChain(message), resolved: rrd)
 					throw WalletError(description: message, code: .trustError)
 				}
 			case .preRegistered: isX509 = false // The selected registered key has verified the JAR.
 			default: throw WalletError(description: "Unsupported authenticated client", code: .notSecuredRequest)
 			}
-			let requests = try await handleRequestData(rrd)
+			// Add reporting of query and transaction data failures to the verifier
+			let requests = try await handleRequest(rrd)
 			readerAuthenticationStatus = isX509 && !readerAuthValidated ? .authenticatedWithUntrustedCertificate : .authenticated
 			return requests
 		}
