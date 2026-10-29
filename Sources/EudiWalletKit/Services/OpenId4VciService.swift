@@ -1168,13 +1168,18 @@ public actor OpenId4VciService {
 		}
 	}
 
+	/// Removes the characters that OpenID4VCI 1.0, section 11.1, does not allow in `event_description`.
+	static func notificationDescription(_ text: String?) -> String? {
+		text.map { String(String.UnicodeScalarView($0.unicodeScalars.filter { (0x20...0x7E).contains($0.value) && $0 != "\"" && $0 != "\\" })) }
+	}
+
 	private func sendIssuanceNotification(issuer: any IssuerType, authorized: AuthorizedRequest, notificationId: String, event: NotifiedEvent, eventDescription: String? = nil) {
 		Task {
 			do {
 				let notifId = try NotificationId(value: notificationId)
 				try await issuer.notify(
 					authorizedRequest: authorized,
-					notification: NotificationObject(id: notifId, event: event, eventDescription: eventDescription),
+					notification: NotificationObject(id: notifId, event: event, eventDescription: Self.notificationDescription(eventDescription)),
 					dPopNonce: nil
 				)
 				logger.info("Issuance notification sent: \(event) [\(notificationId)]")
@@ -1241,6 +1246,26 @@ public actor OpenId4VciService {
 			} else if doc.docDataFormat == .sdjwt {
 				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
+			let missing = Self.missingMandatoryClaims(doc, claims: DocMetadata(from: issued.metadata)?.claims ?? [])
+			guard missing.isEmpty else {
+				throw WalletError(description: "Issued credential is missing mandatory claims: \(missing.joined(separator: ", "))", code: .issuanceRequestFailed)
+			}
+		}
+	}
+
+	/// Returns the top-level claims that the issuer marks as mandatory and that the credential does not contain.
+	static func missingMandatoryClaims(_ doc: WalletStorage.Document, claims: [DocClaimMetadata]) -> [String] {
+		let mandatory = claims.filter { $0.isMandatory == true }.map(\.claimPath)
+		switch doc.docDataFormat {
+		case .cbor:
+			guard let issuerSigned = try? IssuerSigned(data: [UInt8](doc.data)) else { return [] }
+			let nameSpaces = issuerSigned.issuerNameSpaces?.nameSpaces ?? [:]
+			return mandatory.filter { $0.count == 2 }.filter { path in
+				!(nameSpaces[path[0]] ?? []).contains { $0.elementIdentifier == path[1] }
+			}.map { $0.joined(separator: ".") }
+		case .sdjwt:
+			guard let json = SdJwtUtils.recreateSdJwtClaims(docData: doc.data)?.json else { return [] }
+			return mandatory.filter { $0.count == 1 && !json[$0[0]].exists() }.map { $0[0] }
 		}
 	}
 
