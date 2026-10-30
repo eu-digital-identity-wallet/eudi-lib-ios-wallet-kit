@@ -267,6 +267,15 @@ extension OpenId4VciConfiguration {
 		return (Self.generatePopKeyId(popUsage: .dpop, credentialIssuerId: credentialIssuerId), dpopKeyOptions)
 	}
 
+	/// A missing or unknown stored key id selects the per-issuer DPoP key.
+	func deferredDpopKey(storedKeyId: String?, credentialIssuerId: String) -> (id: String, keyOptions: KeyOptions?) {
+		let attestationKeyId = Self.generatePopKeyId(popUsage: .clientAttestation, credentialIssuerId: credentialIssuerId)
+		if storedKeyId == attestationKeyId, let keyAttestationsConfig {
+			return (attestationKeyId, keyAttestationsConfig.popKeyOptions)
+		}
+		return (Self.generatePopKeyId(popUsage: .dpop, credentialIssuerId: credentialIssuerId), dpopKeyOptions)
+	}
+
 	static func generatePopKeyId(popUsage: PopUsage, credentialIssuerId: String) -> String {
 		// Create a hash of the issuer ID to get a stable, URL-safe identifier
 		let data = Data(credentialIssuerId.utf8)

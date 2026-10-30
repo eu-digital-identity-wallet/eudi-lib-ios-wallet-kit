@@ -81,6 +81,8 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let publicKeys: [Data]
 	let derKeyData: Data?
 	let timeStamp: TimeInterval
+	/// The key that signs the DPoP proofs of the transaction. If nil, the per-issuer DPoP key signs them.
+	let dpopKeyId: String?
 }
 
 struct PendingIssuanceModel: Codable {
