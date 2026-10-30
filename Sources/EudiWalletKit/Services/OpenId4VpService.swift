@@ -180,6 +180,9 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 
 	private func resolveRequest() async throws -> [UserRequestInfo] {
 		guard status != .error, let openid4VPURI = URL(string: openid4VPlink) else { throw WalletError(description: "Invalid link \(openid4VPlink)", code: .invalidQueryResolution) }
+		if openID4VpConfig.jarSigningAlgorithms?.isEmpty == true {
+			throw WalletError(description: "jarSigningAlgorithms must not be empty", code: .unsupportedAlgorithm)
+		}
 		let dcqlQ = decodeDocuments()
 		await wrpRegistrationValidator.resetValidations()
 		await wrpRegistrationValidator.set(dcqlQueryable: dcqlQ)

@@ -116,11 +116,18 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// Defaults to `true`: a verifier answering with a plain signed request object (JWS) is rejected.
 	/// Setting `false` lets the wallet accept a signed, unencrypted request object. The signature and the
 	/// verifier certificate are validated in both modes; only the confidentiality of the request object in transit is lowered.
-	public let requiresJarEncryption: Bool
-	/// JWS algorithms the wallet accepts for a signed request object.
 	///
-	/// `nil` keeps the library default (ES256). The list is also advertised to the verifier in
-	/// `wallet_metadata.request_object_signing_alg_values_supported`. The signature is always verified.
+	/// - Note: With `false`, OpenID4VP does not currently include `authorization_encryption_alg_values_supported` and
+	///   `authorization_encryption_enc_values_supported` in `wallet_metadata`, even if response encryption is configured.
+	public let requiresJarEncryption: Bool
+	/// JWS algorithms the wallet accepts for a signed request object fetched through `request_uri`.
+	///
+	/// `nil` keeps the library default (ES256). An empty list is invalid: the presentation request fails with
+	/// ``WalletError/Code/unsupportedAlgorithm``. The list is also advertised to the verifier in
+	/// `wallet_metadata.request_object_signing_alg_values_supported`.
+	///
+	/// - Note: OpenID4VP does not currently apply this list to a request object passed by value (`request`).
+	///   The signature of such a request is still verified.
 	public let jarSigningAlgorithms: [JWSAlgorithm]?
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
