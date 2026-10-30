@@ -77,7 +77,7 @@ public actor WrpVpRegistrationValidator {
 
 	public func validateCertificate(wrpac: Certificate, wrprc: String, dcql: DCQL) async -> Authorization {
 		resetValidations()
-		guard let wrprcData = wrprc.data(using: .ascii) else {
+		guard let wrprcData = SerializedRegistrationCertificate.decode(wrprc) else {
 			wrpVpWarnings["", default: []].append(PresentationPolicyViolation(reason: .invalidCertificate, message: "WRPRC cannot be decoded"))
 			let policyViolationWarnings = wrpVpWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
 			return trustConfig.wrprcVpTrustPolicy == .enforce ?

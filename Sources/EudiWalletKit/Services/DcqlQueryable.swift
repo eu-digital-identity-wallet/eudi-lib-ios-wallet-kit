@@ -28,15 +28,15 @@ public protocol DcqlQueryable {
 	/// check if a claim exists for a given credential identifier and claim path
 	func hasClaim(id: Document.ID, claimPath: ClaimPath) -> Bool
 	/// check if a claim exists for a given credential identifier and claim path and value
-	func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [String]) -> Bool
+	func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [DCQLClaimValue]) -> Bool
 }
 
 public final class DefaultDcqlQueryable: DcqlQueryable, Sendable {
 	private let credentials: [Document.ID: (docType: DocType, format: DocDataFormat)]
 	private let claimPaths: [Document.ID: [ClaimPath]]
-	private let claimValues: [Document.ID: [ClaimPath: [String]]]
+	private let claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 
-	public init(credentials: [Document.ID: (DocType, DocDataFormat)], claimPaths: [Document.ID: [ClaimPath]], claimValues: [Document.ID: [ClaimPath: [String]]] = [:]) {
+	public init(credentials: [Document.ID: (DocType, DocDataFormat)], claimPaths: [Document.ID: [ClaimPath]], claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]] = [:]) {
 		self.credentials = credentials
 		self.claimPaths = claimPaths
 		self.claimValues = claimValues
@@ -57,7 +57,7 @@ public final class DefaultDcqlQueryable: DcqlQueryable, Sendable {
 		return paths.contains { $0.value == claimPath.value || claimPath.contains2($0) }
 	}
 
-	public func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [String]) -> Bool {
+	public func hasClaimWithValue(id: Document.ID, claimPath: ClaimPath, values: [DCQLClaimValue]) -> Bool {
 		guard let claimValueMap = claimValues[id] else { return false }
 		// Use contains2 for wildcard-aware matching (e.g., allArrayElements matches any element)
 		// instead of exact ClaimPath dictionary lookup
