@@ -111,6 +111,12 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// `.onlyAuthenticatedClients` to restrict these notifications to authenticated verifiers.
 	/// Responses are only attempted when the OpenID4VP library provides dispatch details.
 	public let errorDispatchPolicy: ErrorDispatchPolicy
+	/// Whether the wallet requires the request object fetched with `request_uri_method=post` to be encrypted (JWE).
+	///
+	/// Defaults to `true`: a verifier answering with a plain signed request object (JWS) is rejected.
+	/// Setting `false` lets the wallet accept a signed, unencrypted request object. The signature and the
+	/// verifier certificate are validated in both modes; only the confidentiality of the request object in transit is lowered.
+	public let requiresJarEncryption: Bool
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -121,15 +127,17 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.preferredResponseMode = nil
 		self.validateRegistrationCertificate = true
 		self.errorDispatchPolicy = .allClients
+		self.requiresJarEncryption = true
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients, requiresJarEncryption: Bool = true) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.preferredResponseMode = preferredResponseMode
 		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 		self.validateRegistrationCertificate = validateRegistrationCertificate
 		self.errorDispatchPolicy = errorDispatchPolicy
+		self.requiresJarEncryption = requiresJarEncryption
 	}
 }
 

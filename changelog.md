@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add `OpenId4VpConfiguration.requiresJarEncryption`, defaulting to `true` (current behavior). With `false`, the wallet accepts a signed, unencrypted request object fetched with `request_uri_method=post`; the signature and verifier certificate are still validated.
+
 - Add `TrustConfiguration.readerTrustPolicy` for OpenID4VP reader access certificates, defaulting to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted certificate chain; signature verification and certificate-chain parsing remain required.
 
 - Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` for reader authentication

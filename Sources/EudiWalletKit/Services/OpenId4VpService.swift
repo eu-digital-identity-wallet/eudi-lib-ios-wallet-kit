@@ -620,7 +620,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			publicWebKeySet: keySet,
 			supportedClientIdSchemes: supportedClientIdPrefixes,
 			vpFormatsSupported: [],
-			jarConfiguration: .encryptionOption,
+			jarConfiguration: openID4VpConfig.requiresJarEncryption ? .encryptionOption : .noEncryptionOption,
 			vpConfiguration: try! .init(vpFormatsSupported: .default(), supportedTransactionDataTypes: openID4VpConfig.supportedTransactionDataTypes),
 			errorDispatchPolicy: openID4VpConfig.errorDispatchPolicy,
 			session: networking,
