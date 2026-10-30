@@ -117,6 +117,11 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// Setting `false` lets the wallet accept a signed, unencrypted request object. The signature and the
 	/// verifier certificate are validated in both modes; only the confidentiality of the request object in transit is lowered.
 	public let requiresJarEncryption: Bool
+	/// JWS algorithms the wallet accepts for a signed request object.
+	///
+	/// `nil` keeps the library default (ES256). The list is also advertised to the verifier in
+	/// `wallet_metadata.request_object_signing_alg_values_supported`. The signature is always verified.
+	public let jarSigningAlgorithms: [JWSAlgorithm]?
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -128,9 +133,10 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.validateRegistrationCertificate = true
 		self.errorDispatchPolicy = .allClients
 		self.requiresJarEncryption = true
+		self.jarSigningAlgorithms = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients, requiresJarEncryption: Bool = true) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients, requiresJarEncryption: Bool = true, jarSigningAlgorithms: [JWSAlgorithm]? = nil) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.preferredResponseMode = preferredResponseMode
@@ -138,6 +144,7 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.validateRegistrationCertificate = validateRegistrationCertificate
 		self.errorDispatchPolicy = errorDispatchPolicy
 		self.requiresJarEncryption = requiresJarEncryption
+		self.jarSigningAlgorithms = jarSigningAlgorithms
 	}
 }
 
