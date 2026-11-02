@@ -95,7 +95,7 @@ On view appearance the attestations are presented with the ``PresentationService
 
 ## Reader Authentication and Certificate Trust
 
-Use ``PresentationSession/readerAuthenticationStatus`` to display authentication of the current request. This replaces the deprecated ``PresentationSession/readerCertIssuerValid`` property.
+Use ``PresentationSession/readerAuthenticationStatus`` to display authentication of the current request.
 
 | Status | Meaning |
 | --- | --- |

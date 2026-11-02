@@ -51,7 +51,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 
 	func refreshPublishedVars() async {
 		await MainActor.run {
-			hasData = !docModels.isEmpty || !deferredDocuments.isEmpty
+			hasData = !docModels.isEmpty || !deferredDocuments.isEmpty || !pendingDocuments.isEmpty
 			docCount = docModels.count
 		}
 	}
@@ -106,6 +106,7 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 	func removePendingOrDeferredDoc(id: String) async throws {
 		if let index = pendingDocuments.firstIndex(where: { $0.id == id }) {
 			_ = await MainActor.run { pendingDocuments.remove(at: index) }
+			await refreshPublishedVars()
 		}
 		if deferredDocuments.firstIndex(where: { $0.id == id }) != nil {
 			try await deleteDocument(id: id, status: .deferred)
@@ -328,10 +329,10 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			try await storageService.deleteDocument(id: id, status: status)
 			if status == .issued {
 				_ = await MainActor.run { docModels.remove(at: index) }
-				await refreshPublishedVars()
 			}
 			else if status == .pending { _ = await MainActor.run { pendingDocuments.remove(at: index) }}
 			else if status == .deferred { _ = await MainActor.run { deferredDocuments.remove(at: index) }}
+			await refreshPublishedVars()
 		} catch {
 			await setError(error)
 			throw error
@@ -345,12 +346,12 @@ public final class StorageManager: ObservableObject, @unchecked Sendable {
 			try await storageService.deleteDocuments(status: status)
 			if status == .issued {
 				await MainActor.run { docModels = [] }
-				await refreshPublishedVars()
 			} else if status == .pending {
 				await MainActor.run { pendingDocuments.removeAll(keepingCapacity:false) }
 			} else if status == .deferred {
 				await MainActor.run { deferredDocuments.removeAll(keepingCapacity:false) }
 			}
+			await refreshPublishedVars()
 		} catch {
 			await setError(error)
 			throw error

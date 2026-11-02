@@ -26,7 +26,7 @@ import struct MdocDataModel18013.StatusList
 
 public actor DocumentStatusService {
 	let statusList: StatusList
-	/// Trust configuration used to validate the reader/relying-party access certificate chain.
+	/// Trust configuration used to validate the status-list token certificate chain.
 	public let trustConfig: TrustConfiguration
 	let dateProvider: @Sendable () -> Date
 	private static let logger = Logger(label: "DocumentStatusService")
@@ -44,27 +44,55 @@ public actor DocumentStatusService {
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
+		try await getStatus(networkingService: NetworkingService())
+	}
+
+	func getStatus(networkingService: any NetworkingServiceType) async throws -> CredentialStatus {
 		guard let statusReference: StatusReference = .init(idx: statusList.idx, uriString: statusList.uri) else {
 			throw WalletError(description: "Invalid status identifier", code: .invalidStatusToken)
 		}
 		let getStatus = GetStatus()
+		let verifier = StatusListTokenSignatureVerifier(trustConfig: trustConfig)
 		let tokenFetcher = StatusListTokenFetcher(
-			verifier: StatusListTokenSignatureVerifier(trustConfig: trustConfig),
+			networkingService: networkingService,
+			verifier: verifier,
 			dateProvider: dateProvider
 		)
 		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew)
 		switch result {
 			case .success(let status): return status
-			case .failure(let error): throw WalletError(description: "Status check failed", code: .statusCheckFailed, innerError: error)
+			case .failure(let error):
+				// Statium converts verifier errors into strings. Recover the original failure
+				// from this check's verifier so authentication failures remain enforceable.
+				if let verificationError = await verifier.verificationError {
+					throw WalletError(description: "Status token verification failed", code: .trustError, innerError: verificationError)
+				}
+				throw WalletError(description: "Status check failed", code: .statusCheckFailed, innerError: error)
 		}
 	}
 }
 
-struct StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
+actor StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 	let trustConfig: TrustConfiguration
+	private(set) var verificationError: (any Error)?
+
+	init(trustConfig: TrustConfiguration) {
+		self.trustConfig = trustConfig
+	}
+
 	private static let logger = Logger(label: "StatusListTokenSignatureVerifier")
 
 	func verify(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
+		verificationError = nil
+		do {
+			try await verifyToken(statusListToken: statusListToken, format: format, at: at)
+		} catch {
+			verificationError = error
+			throw error
+		}
+	}
+
+	private func verifyToken(statusListToken: Data, format: StatusListTokenFormat, at: Date) async throws {
 		let attTF: AttestToken.Format = switch format { case .jwt: .jwt; case .cwt: .cwt }
 		let att = try x5cVerifyJwtOrCwt.parse(attestData: statusListToken, format: attTF)
 		if case let .jwt(jws) = att {

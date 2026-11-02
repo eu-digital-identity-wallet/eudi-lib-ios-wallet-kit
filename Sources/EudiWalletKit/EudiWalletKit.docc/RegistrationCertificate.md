@@ -80,6 +80,8 @@ OpenID4VP reader access certificate trust is controlled separately by ``TrustCon
 - **`.enforce`** (default) — a failed check causes the request to fail with ``WalletError/Code/invalidWrprc``.
 - **`.warning`** — a failed check is added to the warnings list and the request continues.
 
+Status-list authentication is controlled by ``TrustConfiguration/statusTrustPolicy``. Under `.enforce`, a rejected status-list token produces a `statusTrustError` violation rather than `statusRetrievalFailed`. This blocks issuance or presentation when the corresponding WRPRC policy is `.enforce`; under a WRPRC `.warning` policy it is returned as a typed warning. Transient retrieval failures remain warnings. Setting `statusTrustPolicy` to `.warning` explicitly permits a cryptographically signed token whose certificate chain is untrusted.
+
 ## Validation flow
 
 Both validators share the same core token validation, followed by a flow-specific scope check:

@@ -142,7 +142,7 @@ struct DcqlQueryTests {
 		let credentials = OpenId4VpUtils.makeCredentialMap(
 			idsToDocTypes: idsToDocTypes, formatsRequested: formatsRequested)
 		var claimPaths = [WalletStorage.Document.ID: [ClaimPath]]()
-		var claimValues = [WalletStorage.Document.ID: [ClaimPath: [String]]]()
+		var claimValues = [WalletStorage.Document.ID: [ClaimPath: [DCQLClaimValue]]]()
 		OpenId4VpUtils.makeCborClaimData(
 			from: docsCbor, claimPaths: &claimPaths, claimValues: &claimValues)
 		OpenId4VpUtils.makeSdJwtClaimData(

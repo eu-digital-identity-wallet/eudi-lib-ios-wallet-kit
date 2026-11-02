@@ -37,10 +37,6 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	@Published public private(set) var readerAuthenticationStatus: ReaderAuthenticationStatus = .notEvaluated
 	/// Reader certificate validation message
 	@Published public var readerCertValidationMessage: String?
-	/// Validation result from the default reader authentication result.
-	/// Use ``readerAuthenticationStatus`` for authentication of the current request.
-	@available(*, deprecated, message: "Use readerAuthenticationStatus to distinguish trusted authentication from policy-accepted untrusted certificates.")
-	@Published public var readerCertIssuerValid: Bool?
 	/// Error message when the ``status`` is in the error state.
 	@Published public var uiError: WalletError?
 	/// Request items selected by the user to be sent to verifier.
@@ -132,7 +128,6 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			}
 			let authResult = request.defaultReaderAuthResult
 			readerCertIssuer = authResult?.certificateIssuer
-			readerCertIssuerValid = authResult?.isValidated
 			readerCertValidationMessage = authResult?.validationMessage
 			readerLegalName = readerAuthenticationStatus == .authenticated ? authResult?.legalName : nil
 			// TODO: localizationKey is kept for backward compatibility — clients can migrate to use `code` instead
@@ -194,7 +189,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	public func receiveRequest() async -> [UserRequestInfo]? {
 		await MainActor.run {
 			readerAuthenticationStatus = .notEvaluated
-			readerCertIssuer = nil; readerCertIssuerValid = nil; readerCertValidationMessage = nil; readerLegalName = nil
+			readerCertIssuer = nil; readerCertValidationMessage = nil; readerLegalName = nil
 			disclosedDocumentSets.removeAll()
 			wrpVerifierPolicy = nil; wrpVerifierWarnings = nil
 			uiError = nil
@@ -215,7 +210,6 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 				disclosedDocumentSets.removeAll()
 				if let service = presentationService as? OpenId4VpService {
 					readerCertIssuer = service.readerCertificateIssuer.map(MdocHelpers.getCN(from:))
-					readerCertIssuerValid = service.readerAuthValidated
 					readerCertValidationMessage = service.readerCertificateValidationMessage
 				}
 			}
