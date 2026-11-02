@@ -83,6 +83,8 @@ struct DeferredIssuanceModel: Codable, Sendable {
 	let timeStamp: TimeInterval
 	/// Seconds the issuer asks the wallet to wait before the next deferred credential request.
 	let interval: TimeInterval?
+	/// The key that signs the DPoP proofs of the transaction. If nil, the per-issuer DPoP key signs them.
+	let dpopKeyId: String?
 }
 
 public extension WalletStorage.Document {
