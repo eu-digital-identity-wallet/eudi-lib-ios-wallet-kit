@@ -159,9 +159,9 @@ struct StatusListTokenSignatureVerifierTests {
         #expect(status == .valid)
     }
 
-    @Test("WRPRC status trust failures block issuance and presentation under enforcement", arguments: [TrustPolicy.enforce, .warning])
-    func registrationStatusTrustFailure(wrprcPolicy: TrustPolicy) async throws {
-        try await checkRegistration(networkFailure: false, wrprcPolicy: wrprcPolicy)
+    @Test("WRPRC status trust failures block issuance and presentation under enforcement", arguments: [TrustPolicy.enforce, .warning], [false, true])
+    func registrationStatusTrustFailure(wrprcPolicy: TrustPolicy, encoded: Bool) async throws {
+        try await checkRegistration(networkFailure: false, wrprcPolicy: wrprcPolicy, encoded: encoded)
     }
 
     @Test("Network failures remain retrieval warnings under enforcement")
@@ -169,7 +169,7 @@ struct StatusListTokenSignatureVerifierTests {
         try await checkRegistration(networkFailure: true, wrprcPolicy: .enforce)
     }
 
-    private func checkRegistration(networkFailure: Bool, wrprcPolicy: TrustPolicy) async throws {
+    private func checkRegistration(networkFailure: Bool, wrprcPolicy: TrustPolicy, encoded: Bool = false) async throws {
         let registrationSigner = try fixture()
         let statusSigner = try fixture()
         let trustConfig = configuration(.enforce, anchors: [registrationSigner.certificate], wrprcPolicy: wrprcPolicy)
@@ -183,12 +183,14 @@ struct StatusListTokenSignatureVerifierTests {
             "status": ["status_list": ["idx": 0, "uri": "https://status.example/list"]]
         ])
         let wrprc = try signedToken(key: registrationSigner.key, certificate: registrationSigner.certificate, payload: payload, type: WRPRC_JWT_TYPE)
+        let serializedCertificate = encoded ? base64URL(wrprc) : String(decoding: wrprc, as: UTF8.self)
         let statusCheck: WrprcStatusCheck = { reference, config in
             let service = DocumentStatusService(statusList: reference, trustConfig: config)
             return try await service.getStatus(networkingService: StubNetworking(data: statusToken, fails: networkFailure))
         }
         let issuer = WrpVciRegistrationValidator(trustConfig: trustConfig, statusCheck: statusCheck)
-        let issuance = await issuer.validateCertificate(wrpac: registrationSigner.certificate.base64EncodedString(), wrprc: String(decoding: wrprc, as: UTF8.self), offeredConfigurations: [:])
+        let issuance = await issuer.validateCertificate(wrpac: registrationSigner.certificate.base64EncodedString(), wrprc: serializedCertificate, offeredConfigurations: [:])
+        #expect(await issuer.wrpVciRegistrationPolicy?.sub == "registered-party")
         let issuanceWarnings = await issuer.wrpVciWarnings[""] ?? []
         let expectedReason: RegistrationFailureReason = networkFailure ? .statusRetrievalFailed : .statusTrustError
         #expect(issuanceWarnings.contains { $0.reason == expectedReason })
@@ -201,7 +203,9 @@ struct StatusListTokenSignatureVerifierTests {
         }
         let verifier = WrpVpRegistrationValidator(trustConfig: trustConfig, dcqlQueryable: DefaultDcqlQueryable(credentials: ["credential": ("pid", .cbor)], claimPaths: ["credential": []]), statusCheck: statusCheck)
         let dcql = try JSONDecoder().decode(DCQL.self, from: Data("{\"credentials\":[{\"id\":\"pid\",\"format\":\"mso_mdoc\",\"meta\":{\"doctype_value\":\"pid\"}}]}".utf8))
-        let presentation = await verifier.validateCertificate(wrpac: nil, wrprcData: wrprc, dcql: dcql)
+        let accessCertificate = try Certificate(derEncoded: Array(registrationSigner.certificate))
+        let presentation = await verifier.validateCertificate(wrpac: accessCertificate, wrprc: serializedCertificate, dcql: dcql)
+        #expect(await verifier.wrpVpRegistrationPolicy?.sub == "registered-party")
         let presentationWarnings = await verifier.wrpVpWarnings[""] ?? []
         #expect(presentationWarnings.contains { $0.reason == PresentationFailureReason(registrationReason: expectedReason) })
         #expect(!presentationWarnings.contains { $0.reason == .trustError })

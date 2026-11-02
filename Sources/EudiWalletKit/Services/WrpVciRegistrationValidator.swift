@@ -59,7 +59,7 @@ public actor WrpVciRegistrationValidator {
 	/// OpenID4VCI library, which supplies the WRPAC and WRPRC as opaque strings.
 	/// - Parameters:
 	///   - wrpac: The WRP access certificate that signed the issuer metadata (base64 DER, single X.509 leaf)
-	///   - wrprc: The raw WRPRC value as delivered in `issuer_info` (typically a compact-serialized JWT)
+	///   - wrprc: The base64url-encoded WRPRC from `issuer_info`, or a raw compact JWT for compatibility
 	///   - offeredConfigurations: The credential configurations referenced by the resolved credential offer
 	/// - Returns: The authorization result; warnings are keyed by credential configuration identifier,
 	///   with the empty key used for request-wide warnings
@@ -72,7 +72,7 @@ public actor WrpVciRegistrationValidator {
 				wrpacCertificate = nil
 				wrpVciWarnings["", default: []].append(RegistrationPolicyViolation(reason: .wrpacDecodingFailed, message: "WRPAC cannot be decoded"))
 			}
-			let wrprcData = Data(base64Encoded: wrprc) ?? wrprc.data(using: .ascii)
+			let wrprcData = SerializedRegistrationCertificate.decode(wrprc)
 			guard let wrprcData else { throw WalletError(description: "WRPRC cannot be decoded", code: .invalidWrprc) }
 			wrpVciRegistrationPolicy = try? Self.decodeWrprc(wrprcData)
 			let (policy, warns) = try await Self.validateWrprcCore(trustConfig, wrpac: wrpacCertificate, wrprcData: wrprcData, statusCheck: statusCheck)
