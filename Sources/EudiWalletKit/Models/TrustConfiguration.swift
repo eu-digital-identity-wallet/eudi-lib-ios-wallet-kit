@@ -54,6 +54,8 @@ public struct TrustConfiguration: Sendable {
 	let accessTrustManager: EtsiTrustManager
 	/// Trust manager for reader/relying-party registration certificates. Uses the WRPRC verification context.
 	let registrationTrustManager: EtsiTrustManager
+	/// Preserve the ETSI trust context used for status-token signing certificates.
+	var statusTrustManager: EtsiTrustManager { accessTrustManager }
 
 	public init(
 		trustSource: TrustSource,
@@ -104,6 +106,11 @@ public struct TrustConfiguration: Sendable {
 	var issuerTrustManager: SecTrustSource
 	/// Trust manager for reader/relying-party access certificates backed by platform `SecTrust`.
 	let accessTrustManager: SecTrustSource
+	/// Status signers use the configured anchors without the mdoc reader certificate profile.
+	var statusTrustManager: SecTrustSource {
+		SecTrustSource(rootIaca: accessTrustManager.rootIaca, usage: .mdocAuth,
+			revocationPolicy: accessTrustManager.revocationPolicy)
+	}
 
 	public init(
 		rootIaca: [[Data]],

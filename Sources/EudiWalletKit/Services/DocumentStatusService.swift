@@ -117,7 +117,7 @@ actor StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 				throw WalletError(description: "Unsupported status JWT signature algorithm: \(algorithm.rawValue)", code: .unsupportedAlgorithm)
 			}
 		}
-		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.accessTrustManager)
+		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.statusTrustManager)
 		guard isValid else {
 			let message = "\(format) status token trust error: \(reason ?? "")"
 			switch trustConfig.statusTrustPolicy {
