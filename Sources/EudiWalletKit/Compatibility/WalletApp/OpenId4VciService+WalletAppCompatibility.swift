@@ -370,6 +370,7 @@ extension OpenId4VciService {
 			requesterPoster: Poster(session: networking),
 			deferredRequesterPoster: Poster(session: networking),
 			notificationPoster: Poster(session: networking),
+			challengePoster: Poster(session: networking),
 			noncePoster: Poster(session: networking),
 			dpopConstructor: dpopConstructor
 		)
