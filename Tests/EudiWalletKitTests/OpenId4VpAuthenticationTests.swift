@@ -667,12 +667,26 @@ struct OpenId4VpAuthenticationTests {
         }
         init() throws {
             let name = try DistinguishedName { CommonName("verifier.example"); OrganizationName("Test Verifier") }
+            let publicKey = Certificate.PublicKey(key.publicKey)
+            let keyIdentifier = Array(Insecure.SHA1.hash(data: publicKey.subjectPublicKeyInfoBytes))[...]
+            // DistributionPoint -> distributionPoint -> fullName -> URI.
+            let crlURI = Array("https://example.invalid/reader.crl".utf8)
+            let crlDistributionPoints: [UInt8] = [
+                0x30, UInt8(crlURI.count + 8), 0x30, UInt8(crlURI.count + 6),
+                0xa0, UInt8(crlURI.count + 4), 0xa0, UInt8(crlURI.count + 2),
+                0x86, UInt8(crlURI.count)
+            ] + crlURI
             let certificate = try Certificate(version: .v3, serialNumber: .init(bytes: [1]), publicKey: .init(key.publicKey),
                 notValidBefore: Date().addingTimeInterval(-3600), notValidAfter: Date().addingTimeInterval(86400),
                 issuer: name, subject: name, signatureAlgorithm: .ecdsaWithSHA256,
                 extensions: Certificate.Extensions {
                     Critical(BasicConstraints.isCertificateAuthority(maxPathLength: nil))
                     KeyUsage(digitalSignature: true, keyCertSign: true)
+                    AuthorityKeyIdentifier(keyIdentifier: keyIdentifier)
+                    SubjectKeyIdentifier(keyIdentifier: keyIdentifier)
+                    try ExtendedKeyUsage([.init(oid: [1, 0, 18013, 5, 1, 6])])
+                    Certificate.Extension(oid: [2, 5, 29, 31], critical: false,
+                        value: crlDistributionPoints[...])
                     SubjectAlternativeNames([.dnsName("verifier.example")])
                 }, issuerPrivateKey: .init(key))
             var serializer = DER.Serializer()
