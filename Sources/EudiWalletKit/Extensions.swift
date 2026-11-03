@@ -690,6 +690,9 @@ extension RegistrationCertificatePolicy {
 	  RegistrationCertificatePolicy(
 		validatePolicy: { wrpac, wrprc, dcql in
 			return await validator.validateCertificate(wrpac: wrpac, wrprc: wrprc, dcql: dcql)
+		},
+		missingCertificate: {
+			return await validator.missingCertificate()
 		}
 	  )
 	}
