@@ -100,6 +100,12 @@ struct StatusListTokenSignatureVerifierTests {
         let signature = try fixture.key.signature(for: signingInput).rawRepresentation
         let signed = try token(algorithm: "ES256", certificates: [fixture.certificate.base64EncodedString()], payload: payload, signature: signature)
         let trusted = configuration(.enforce, anchors: [fixture.certificate])
+        #if !canImport(EudiEtsi1196x2)
+        // A trusted status signer must not also qualify as an mdoc reader.
+        let readerTrust = await trusted.accessTrustManager.validateCertTrustPath(chain: [fixture.certificate])
+        #expect(!readerTrust.0)
+        #expect(readerTrust.1?.contains("mdlReaderAuth") == true)
+        #endif
         try await StatusListTokenSignatureVerifier(trustConfig: trusted).verify(statusListToken: signed, format: .jwt, at: now)
         let warningVerifier = StatusListTokenSignatureVerifier(trustConfig: configuration(.warning))
         try await warningVerifier.verify(statusListToken: signed, format: .jwt, at: now)
