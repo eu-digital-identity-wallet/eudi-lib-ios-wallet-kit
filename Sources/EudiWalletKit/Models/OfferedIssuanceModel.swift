@@ -24,7 +24,8 @@ import Copyable
 /// This information is returned from ``EudiWallet/resolveOfferUrlDocTypes(uriOffer:)``
 public struct OfferedIssuanceModel: Sendable {
 	/// public initializer
-	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], grants: Grants? = nil, txCodeSpec: TxCode? = nil, wrpVciRegistrationPolicy: WrpRegistrationPolicy? = nil, wrpVciWarnings: [String: [RegistrationPolicyViolation]]? = nil) {
+	public init(issuerName: String, issuerLogoUrl: String? = nil, docModels: [OfferedDocModel], grants: Grants? = nil, txCodeSpec: TxCode? = nil, wrpVciRegistrationPolicy: WrpRegistrationPolicy? = nil, wrpVciWarnings: [String: [RegistrationPolicyViolation]]? = nil, issuerMetadata: CredentialIssuerMetadata? = nil) {
+		self.issuerMetadata = issuerMetadata
 		self.issuerName = issuerName
 		self.issuerLogoUrl = issuerLogoUrl
 		self.docModels = docModels
@@ -33,6 +34,9 @@ public struct OfferedIssuanceModel: Sendable {
 		self.wrpVciRegistrationPolicy = wrpVciRegistrationPolicy
 		self.wrpVciWarnings = wrpVciWarnings
 	}
+	/// Complete issuer metadata used when resolving this offer, before locale selection.
+	/// Nil only for models constructed without metadata by older callers.
+	public let issuerMetadata: CredentialIssuerMetadata?
 	/// Issuer name
 	public let issuerName: String
 	/// Issuer logo URL
