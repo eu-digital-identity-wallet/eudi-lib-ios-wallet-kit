@@ -176,6 +176,8 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 				sessionEncryption = decoded.sessionEncryption
 				if decoded.isValidRequest {
 					do {
+						try await Self.validateReaderAuthentication(deviceRequest: decoded.deviceRequest, deviceRequestBytes: decoded.userRequestInfo.deviceRequestBytes ?? Data(), sessionTranscript: decoded.sessionEncryption.sessionTranscript, trustValidator: trustValidator)
+						request = decoded.userRequestInfo
 						try await validateWrpRegistration(deviceRequest: decoded.deviceRequest, userRequestInfo: decoded.userRequestInfo)
 					} catch {
 						didFinishedWithError(error)
@@ -205,6 +207,29 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		}
 	}
 
+	/// Enforce reader authentication when present. Check every DocRequest rather than the
+	/// docType-keyed summary, which can overwrite results for duplicate document types.
+	static func validateReaderAuthentication(deviceRequest: DeviceRequest, deviceRequestBytes: Data, sessionTranscript: SessionTranscript, trustValidator: any CertificateTrustValidator) async throws {
+		// Check the original map: the model drops malformed readerAuthAll values.
+		guard let cbor = try CBOR.decode(deviceRequestBytes.bytes), case let .map(rawRequest) = cbor else {
+			throw WalletError(description: "Invalid BLE request", code: .notSecuredRequest)
+		}
+		guard rawRequest["readerAuthAll"] == nil else {
+			throw WalletError(description: "Unsupported readerAuthAll authentication", code: .notSecuredRequest)
+		}
+		let authentication = MdocReaderAuthentication(transcript: sessionTranscript)
+		for docRequest in deviceRequest.docRequests {
+			guard let readerAuth = docRequest.readerAuthRawCBOR else { continue }
+			guard let itemsRequest = docRequest.itemsRequestRawData else {
+				throw WalletError(description: "Missing authenticated reader request", code: .notSecuredRequest)
+			}
+			let (validated, reason) = try await authentication.validateReaderAuth(readerAuthCBOR: readerAuth, readerAuthX5c: docRequest.readerCertificates, itemsRequestRawData: itemsRequest, trustValidator: trustValidator)
+			guard validated else {
+				throw WalletError(description: reason ?? "Reader authentication failed", code: .notSecuredRequest)
+			}
+		}
+	}
+
 	/// Validate the relying party registration certificate (WRPRC) carried in the BLE device request.
 	///
 	/// According to ETSI TS 119 472-2 (clause 5.3.2), the WRPRC is repeated in the `requestInfo` member
@@ -216,7 +241,7 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		let dcql = try OpenId4VpUtils.makeDcql(itemsRequested: userRequestInfo.itemsRequested)
 		await wrpRegistrationValidator.set(dcqlQueryable: makeDcqlQueryable())
 		// The relying party access certificate is the reader authentication leaf certificate
-		let wrpac: Certificate? = if let der = userRequestInfo.defaultReaderAuthResult?.certificateChain?.first { try? Certificate(derEncoded: [UInt8](der)) } else { nil }
+		let wrpac = Self.validatedAccessCertificate(from: userRequestInfo.defaultReaderAuthResult)
 		guard let authorization = await wrpRegistrationValidator.validateDeviceRequestCertificate(wrpac: wrpac, deviceRequest: deviceRequest, dcql: dcql) else {
 			logger.info("No relying party registration certificate present in the device request")
 			return
@@ -229,6 +254,11 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		case .notGranted(let error):
 			throw WalletError(description: "WRP registration certificate validation failed: \(error.violation)", code: .invalidWrprc)
 		}
+	}
+
+	static func validatedAccessCertificate(from result: ReaderAuthenticationResult?) -> Certificate? {
+		guard let result, result.isValidated, let der = result.certificateChain?.first else { return nil }
+		return try? Certificate(derEncoded: der.bytes)
 	}
 
 	/// Make a DCQL queryable from the wallet documents of this session, used to resolve the request scope against the registration policy
@@ -282,11 +312,15 @@ func handleStatusChange(_ newValue: TransferStatus) async {
 		}
 		if let items {
 			do {
-				let docTypeReq = deviceRequest?.docRequests.first?.itemsRequest.docType ?? ""
+				guard let deviceRequest, let sessionEncryption, let deviceRequestBytes = request?.deviceRequestBytes else {
+					throw WalletError(description: "No validated BLE request", code: .notSecuredRequest)
+				}
+				try await Self.validateReaderAuthentication(deviceRequest: deviceRequest, deviceRequestBytes: deviceRequestBytes, sessionTranscript: sessionEncryption.sessionTranscript, trustValidator: trustValidator)
+				let docTypeReq = deviceRequest.docRequests.first?.itemsRequest.docType ?? ""
 				let compactDocMetadata = docMetadata.compactMapValues { $0 }
-				let eReaderKey = sessionEncryption!.sessionKeys.publicKey
+				let eReaderKey = sessionEncryption.sessionKeys.publicKey
 				guard let (drToSend, validItems, errorItems, resMetadata, resDocIds, resZkpDocIds) = try await MdocHelpers.getDeviceResponseToSend(
-					deviceRequest: deviceRequest!,
+					deviceRequest: deviceRequest,
 					issuerSigned: docs,
 					docMetadata: compactDocMetadata,
 					selectedItems: items,
