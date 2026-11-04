@@ -849,16 +849,16 @@ public actor OpenId4VciService {
 			errorMessage: "Issuance deferred")
 		do {
 			guard deferredDoc.status == .deferred else { throw WalletError(description: "Invalid document status for deferred issuance: \(deferredDoc.status)", code: .internalError) }
-			let data = try await requestDeferredIssuanceInternal(deferredDoc: deferredDoc, credentialOptions: credentialOptions)
+			let (data, issuer) = try await requestDeferredIssuanceInternal(deferredDoc: deferredDoc, credentialOptions: credentialOptions)
 			guard case .issued(_, _, _, _) = data else { return deferredDoc }
-			return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, deleteId: nil)
+			return try await finalizeIssuing(issueOutcome: data, docType: deferredDoc.docType, format: deferredDoc.docDataFormat, issueReq: issueReq, deleteId: nil, issuer: issuer)
 		} catch {
 			await logIssuanceFailure(ids: [deferredDoc.id], error: error)
 			throw error
 		}
 	}
 
-	func requestDeferredIssuanceInternal(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> IssuanceOutcome {
+	func requestDeferredIssuanceInternal(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> (IssuanceOutcome, Issuer) {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		guard let docMetadata = DocMetadata(from: deferredDoc.metadata) else {
 			throw WalletError(description: "Deferred issuance document metadata is missing", code: .internalError)
@@ -876,10 +876,11 @@ public actor OpenId4VciService {
 		guard let configuration = credentialConfigurations.first else {
 			throw WalletError(description: "Deferred issuance credential configuration could not be resolved", code: .internalError)
 		}
-		let deferredAction: (Bool) async throws -> IssuanceOutcome = { forceRefreshToken in
+		let deferredAction: (Bool) async throws -> (IssuanceOutcome, Issuer) = { forceRefreshToken in
 			let issuer = try await self.getIssuerForDeferred(data: model, configuration: configuration)
 			let refreshedAuthorized = try await self.refreshAuthorization(issuer: issuer, authorized: authorized, configuration: configuration, forceRefreshToken: forceRefreshToken)
-			return try await self.deferredCredentialUseCase(issuer: issuer, authorized: refreshedAuthorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, dpopKeyId: model.dpopKeyId, configuration: configuration)
+			let outcome = try await self.deferredCredentialUseCase(issuer: issuer, authorized: refreshedAuthorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, dpopKeyId: model.dpopKeyId, configuration: configuration)
+			return (outcome, issuer)
 		}
 		do {
 			return try await deferredAction(false)
@@ -924,9 +925,9 @@ public actor OpenId4VciService {
 			guard pendingDoc.status == .pending, let docTypeIdentifier = pendingDoc.docTypeIdentifier else { throw WalletError(description: "Invalid document status for pending issuance: \(pendingDoc.status)", code: .internalError)}
 			let usedCredentialOptions = try await validateCredentialOptions(docTypeIdentifier: docTypeIdentifier, credentialOptions: credentialOptions)
 			try await prepareIssuing(id: pendingDoc.id, docTypeIdentifier: docTypeIdentifier, displayName: nil, credentialOptions: usedCredentialOptions, keyOptions: keyOptions, disablePrompt: true, promptMessage: nil)
-			let outcome = try await resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
+			let (outcome, issuer) = try await resumePendingIssuance(pendingDoc: pendingDoc, webUrl: webUrl)
 			if case .pending(_) = outcome { return pendingDoc }
-			let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: issueReq, deleteId: nil)
+			let res = try await finalizeIssuing(issueOutcome: outcome, docType: pendingDoc.docType, format: pendingDoc.docDataFormat, issueReq: issueReq, deleteId: nil, issuer: issuer)
 			return res
 		} catch {
 			await logIssuanceFailure(ids: [pendingDoc.id], error: error)
@@ -934,7 +935,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> IssuanceOutcome {
+	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> (IssuanceOutcome, Issuer) {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else {
 			throw WalletError(description: "Unknown pending reason: \(model.pendingReason)", code: .internalError)
@@ -978,7 +979,7 @@ public actor OpenId4VciService {
 		)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration, clientId: clientId)
 		let res = try await Self.submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys, publicKeys: publicKeys, dpopKeyId: dpopKeyId(configuration: model.configuration), logger: logger)
-		return res
+		return (res, issuer)
 	}
 
 	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, publicKeys: [Data], derKeyData: Data?, dpopKeyId: String?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
@@ -1270,7 +1271,8 @@ public actor OpenId4VciService {
 		}
 	}
 
-	/// Returns the top-level claims that the issuer marks as mandatory and that the credential does not contain.
+	/// Returns the claims that the issuer marks as mandatory and that the credential does not contain.
+	/// An SD-JWT claim path can be nested. An mso_mdoc claim path is a namespace and an element.
 	static func missingMandatoryClaims(_ doc: WalletStorage.Document, claims: [DocClaimMetadata]) -> [String] {
 		let mandatory = claims.filter { $0.isMandatory == true }.map(\.claimPath)
 		switch doc.docDataFormat {
@@ -1282,7 +1284,7 @@ public actor OpenId4VciService {
 			}.map { $0.joined(separator: ".") }
 		case .sdjwt:
 			guard let json = SdJwtUtils.recreateSdJwtClaims(docData: doc.data)?.json else { return [] }
-			return mandatory.filter { $0.count == 1 && !json[$0[0]].exists() }.map { $0[0] }
+			return mandatory.filter { !$0.isEmpty && !json[$0.map { $0 as JSONSubscriptType }].exists() }.map { $0.joined(separator: ".") }
 		}
 	}
 

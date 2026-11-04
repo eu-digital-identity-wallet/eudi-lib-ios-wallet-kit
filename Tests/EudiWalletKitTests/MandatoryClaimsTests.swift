@@ -49,9 +49,14 @@ struct MandatoryClaimsTests {
 		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: claims) == ["not_issued"])
 	}
 
-	@Test func sdJwtIgnoresNestedPaths() throws {
+	@Test func sdJwtNestedMandatoryClaimPasses() throws {
 		let doc = try document("sjwt-pid-python", format: .sdjwt)
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: [claim(["address", "not_issued"])]).isEmpty)
+		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: [claim(["address", "postal_code"])]).isEmpty)
+	}
+
+	@Test func sdJwtMissingNestedMandatoryClaimFails() throws {
+		let doc = try document("sjwt-pid-python", format: .sdjwt)
+		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: [claim(["address", "not_issued"])]) == ["address.not_issued"])
 	}
 
 	@Test func mdocWithAllMandatoryClaimsPasses() throws {
