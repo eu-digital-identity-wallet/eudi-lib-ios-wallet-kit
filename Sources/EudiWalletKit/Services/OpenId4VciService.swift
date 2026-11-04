@@ -274,7 +274,7 @@ public actor OpenId4VciService {
 			warnings = nil
 			registrationPolicy = nil
 		}
-		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), grants: offer.grants, txCodeSpec: code?.txCode, wrpVciRegistrationPolicy: registrationPolicy, wrpVciWarnings: warnings)
+		return OfferedIssuanceModel(issuerName: issuerName, issuerLogoUrl: issuerLogoUrl, docModels: credentialInfo.map(\.offered), grants: offer.grants, txCodeSpec: code?.txCode, wrpVciRegistrationPolicy: registrationPolicy, wrpVciWarnings: warnings, issuerMetadata: offer.credentialIssuerMetadata)
 	}
 
 	/// Resolve the issuer's WRP registration certificate for a set of credential configuration identifiers
