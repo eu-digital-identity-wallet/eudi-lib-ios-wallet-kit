@@ -30,7 +30,11 @@ struct DeferredIssuerMetadataTests {
 		let networking = MetadataNetworking(issuerURL: issuerURL)
 		let storageService = TestDataStorageService()
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, clientId: "wallet-dev", requireDpop: false, issuerMetadataPolicy: .ignoreSigned)
+		#if canImport(EudiEtsi1196x2)
+		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+		#else
 		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
+		#endif
 		let service = try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: StorageManager(storageService: storageService), storageService: storageService, trustConfig: trustConfig, localAuthenticationContext: ThreadSafeAuthContext())
 		OpenId4VciService.issuerMetadataCache.removeAll()
 		let endpoint = try JSONDecoder().decode(CredentialIssuerEndpoint.self, from: Data("\"\(issuerURL)/deferred_credential\"".utf8))
