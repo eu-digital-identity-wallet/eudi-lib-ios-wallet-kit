@@ -612,6 +612,7 @@ public actor OpenId4VciService {
 		}
 		var openId4VCIServices = [OpenId4VciService]()
 		var transactionIds = [String]()
+		let operations: [@Sendable () async throws -> WalletStorage.Document]
 		do {
 			for (i, docTypeModel) in docTypes.enumerated() {
 				guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else {
@@ -636,7 +637,7 @@ public actor OpenId4VciService {
 			let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 			let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? issuerIdentifier
 			let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
-			let operations: [@Sendable () async throws -> WalletStorage.Document] = openId4VCIServices.enumerated().map { i, openId4VCIService in
+			operations = openId4VCIServices.enumerated().map { i, openId4VCIService in
 				let transactionId = transactionIds[i]
 				return {
 					do {
@@ -649,12 +650,14 @@ public actor OpenId4VciService {
 					}
 				}
 			}
-			let outcomes = await Self.collectIssuanceOutcomes(operations)
-			return try DocumentIssuanceResult(outcomes: outcomes, configurations: docTypes.map(\.credentialConfigurationIdentifier), docTypes: docTypes.map(\.docTypeOrVct))
 		} catch {
 			await logIssuanceFailure(ids: transactionIds, error: error)
 			throw error
 		}
+		// Each operation logs its own failure. Keep aggregation outside the setup catch
+		// so an all-failed result cannot replace those errors with the first failure.
+		let outcomes = await Self.collectIssuanceOutcomes(operations)
+		return try DocumentIssuanceResult(outcomes: outcomes, configurations: docTypes.map(\.credentialConfigurationIdentifier), docTypes: docTypes.map(\.docTypeOrVct))
 	}
 
 	/// A document failure must not cancel siblings that may already have stored credentials.
