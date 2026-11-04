@@ -550,7 +550,7 @@ public actor OpenId4VciService {
 		// Background retries for the same stored document update one transaction, and interactive calls create separate transactions.
 		let transactionId = backgroundOnly ? "background-reissuance:" + documentId : UUID().uuidString
 		let reissueAction: (Bool) async throws -> [WalletStorage.Document] = { forceRefreshToken in
-			return try await self.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, forceRefreshToken: forceRefreshToken, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage, backgroundOnly: backgroundOnly, issuanceTransactionIds: [transactionId])
+			return try await self.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: authorized, forceRefreshToken: forceRefreshToken, documentId: documentId, txCodeValue: nil, promptMessage: promptMessage, backgroundOnly: backgroundOnly, issuanceTransactionIds: [transactionId]).documents
 		}
 		do {
 			return try await reissueAction(false)
@@ -574,7 +574,13 @@ public actor OpenId4VciService {
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
 	@discardableResult public func issueDocuments(docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		if docTypeIdentifiers.isEmpty { return [] }
+		try await issueDocumentsWithResults(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage).documents
+	}
+
+	/// Issues documents and reports individual failures alongside stored successes.
+	/// Throws the original error when every document fails, or setup/authorization fails.
+	public func issueDocumentsWithResults(docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> DocumentIssuanceResult {
+		if docTypeIdentifiers.isEmpty { return DocumentIssuanceResult(documents: [], failures: []) }
 		let (credentialConfigurations, offer) = try await buildCredentialOffer(for: docTypeIdentifiers)
 		// Cache the offer with a generated UUID
 		let offerUri = UUID().uuidString
@@ -595,19 +601,22 @@ public actor OpenId4VciService {
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///   - issuanceTransactionIds: Stable log IDs per offered document, shared across retries. When omitted, each attempt uses its document IDs.
 	/// - Returns: Array of issued and stored documents
-	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, forceRefreshToken: Bool = false, documentId: String?, txCodeValue: String? = nil, promptMessage: String? = nil, backgroundOnly: Bool = false, issuanceTransactionIds: [String]? = nil) async throws -> [WalletStorage.Document] {
+	func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], authorized: AuthorizedRequest?, forceRefreshToken: Bool = false, documentId: String?, txCodeValue: String? = nil, promptMessage: String? = nil, backgroundOnly: Bool = false, issuanceTransactionIds: [String]? = nil) async throws -> DocumentIssuanceResult {
 		if let issuanceTransactionIds, issuanceTransactionIds.count != docTypes.count {
 			throw WalletError(description: "Expected one issuance transaction ID per offered document", code: .internalError)
 		}
-		if docTypes.isEmpty { return [] }
+		if docTypes.isEmpty { return DocumentIssuanceResult(documents: [], failures: []) }
 		guard let offer = Self.credentialOfferCache[offerUri] else {
 			throw WalletError(description: "Offer URI not resolved: \(offerUri)", code: .offerResolutionFailed)
 		}
 		var openId4VCIServices = [OpenId4VciService]()
 		var transactionIds = [String]()
+		let operations: [@Sendable () async throws -> WalletStorage.Document]
 		do {
 			for (i, docTypeModel) in docTypes.enumerated() {
-				guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else { continue }
+				guard let docTypeIdentifier = docTypeModel.docTypeIdentifier else {
+					throw WalletError(description: "Invalid offered document: \(docTypeModel.credentialConfigurationIdentifier)", code: .invalidQueryResolution)
+				}
 				let svc = try OpenId4VciService(uiCulture: uiCulture,  config: config, networking: networking, storage: storage, storageService: storageService, trustConfig: trustConfig, localAuthenticationContext: localAuthenticationContext)
 				if let documentId { logger.info("Resolve offer to update document with id \(documentId)") }
 				let id = UUID().uuidString
@@ -627,23 +636,41 @@ public actor OpenId4VciService {
 			let issuerIdentifier = offer.credentialIssuerIdentifier.url.absoluteString
 			let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? issuerIdentifier
 			let issuerLogoUrl = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getLogo(uiCulture)?.uri?.absoluteString
-			let documents = try await withThrowingTaskGroup(of: WalletStorage.Document.self) { group in
-				for (i, openId4VCIService) in openId4VCIServices.enumerated() {
-					let transactionId = transactionIds[i]
-					group.addTask {
+			operations = openId4VCIServices.enumerated().map { i, openId4VCIService in
+				let transactionId = transactionIds[i]
+				return {
+					do {
 						let (bindingKeys, publicKeys) = try await openId4VCIService.initSecurityKeys(credentialInfos[i], clientId: clientId)
 						let docData = try await openId4VCIService.issueDocumentByOfferUrl(issuer: issuer, offer: offer, authorizedOutcome: auth, configuration: credentialInfos[i], bindingKeys: bindingKeys, publicKeys: publicKeys, promptMessage: promptMessage)
 						return try await self.finalizeIssuing(issueOutcome: docData, docType: docTypes[i].docTypeOrVct, format: credentialInfos[i].format, issueReq: openId4VCIService.issueReq, deleteId: documentId, issuer: issuer, issuerName: issuerName, issuerIdentifier: issuerIdentifier, issuerLogoUrl: issuerLogoUrl, transactionId: transactionId)
+					} catch {
+						await self.logIssuanceFailure(ids: [transactionId], error: error)
+						throw error
 					}
 				}
-				var result =  [WalletStorage.Document]()
-				for try await doc in group { result.append(doc) }
-				return result
 			}
-			return documents
 		} catch {
 			await logIssuanceFailure(ids: transactionIds, error: error)
 			throw error
+		}
+		// Each operation logs its own failure. Keep aggregation outside the setup catch
+		// so an all-failed result cannot replace those errors with the first failure.
+		let outcomes = await Self.collectIssuanceOutcomes(operations)
+		return try DocumentIssuanceResult(outcomes: outcomes, configurations: docTypes.map(\.credentialConfigurationIdentifier), docTypes: docTypes.map(\.docTypeOrVct))
+	}
+
+	/// A document failure must not cancel siblings that may already have stored credentials.
+	static func collectIssuanceOutcomes<Value: Sendable>(_ operations: [@Sendable () async throws -> Value]) async -> [Result<Value, Error>] {
+		await withTaskGroup(of: (Int, Result<Value, Error>).self) { group in
+			for (index, operation) in operations.enumerated() {
+				group.addTask {
+					do { return (index, .success(try await operation())) }
+					catch { return (index, .failure(error)) }
+				}
+			}
+			var outcomes = [Int: Result<Value, Error>]()
+			for await (index, outcome) in group { outcomes[index] = outcome }
+			return operations.indices.map { outcomes[$0]! }
 		}
 	}
 
