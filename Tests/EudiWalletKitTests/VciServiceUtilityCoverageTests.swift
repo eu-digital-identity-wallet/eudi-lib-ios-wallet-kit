@@ -168,7 +168,8 @@ struct VciServiceUtilityCoverageTests {
             authorized: nil,
             documentId: nil
         )
-        #expect(noDocuments.isEmpty)
+        #expect(noDocuments.documents.isEmpty)
+        #expect(noDocuments.failures.isEmpty)
         do {
             _ = try await service.issueDocumentsByOfferUrl(
                 offerUri: "missing-offer",

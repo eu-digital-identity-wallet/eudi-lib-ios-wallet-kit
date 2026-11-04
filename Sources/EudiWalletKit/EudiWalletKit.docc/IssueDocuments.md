@@ -103,6 +103,17 @@ catch {
 
 This method efficiently issues multiple documents from the same issuer by creating a single credential offer with all requested document types.
 
+If one credential configuration fails, the other issuance tasks continue. `response.documents` contains the documents already saved in the wallet, and `response.failures` identifies each failed configuration with its document type (or VCT) and original error. Run post-issuance registration for the returned documents and retry only the failed configurations to avoid duplicates.
+
+```swift
+for failure in response.failures {
+  print("Not issued: \(failure.configurationIdentifier): \(failure.error.localizedDescription)")
+}
+```
+
+Setup and authorization failures still throw. If every issuance task fails, the original error for the first requested configuration is thrown. Callers using `OpenId4VciService` directly can use `issueDocumentsWithResults` to receive the same per-configuration results; the existing `issueDocuments` method continues to return the successfully stored documents.
+
+
 #### Get Default Credential Options
 
 You can retrieve issuer-recommended credential options before issuing:

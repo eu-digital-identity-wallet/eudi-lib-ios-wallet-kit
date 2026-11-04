@@ -25,6 +25,8 @@ import WalletStorage
 public struct IssuerResponse: Sendable {
 	/// The issued documents. They are already saved in storage.
 	public let documents: [WalletStorage.Document]
+	/// Documents that failed during issuance; successes are still returned and stored.
+	public let failures: [DocumentIssuanceFailure]
 	/// Typed violations produced by the WRP registration certificate policy, keyed by credential
 	/// configuration identifier; the empty key holds request-wide violations.
 	/// `nil` when registration certificate validation is not enabled.
@@ -34,8 +36,9 @@ public struct IssuerResponse: Sendable {
 	/// Preserved even when validation fails (expiry, revocation, trust) so the issuer identity can be inspected.
 	public let wrpIssuerPolicy: WrpRegistrationPolicy?
 
-	public init(documents: [WalletStorage.Document], wrpIssuerWarnings: [String: [RegistrationPolicyViolation]]?, wrpIssuerPolicy: WrpRegistrationPolicy? = nil) {
+	public init(documents: [WalletStorage.Document], failures: [DocumentIssuanceFailure] = [], wrpIssuerWarnings: [String: [RegistrationPolicyViolation]]?, wrpIssuerPolicy: WrpRegistrationPolicy? = nil) {
 		self.documents = documents
+		self.failures = failures
 		self.wrpIssuerWarnings = wrpIssuerWarnings
 		self.wrpIssuerPolicy = wrpIssuerPolicy
 		if let warns = wrpIssuerWarnings, !warns.isEmpty { logger.info("Issuer registration warnings: \(warns)") }
