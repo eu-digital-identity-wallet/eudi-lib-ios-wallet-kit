@@ -763,9 +763,17 @@ public actor OpenId4VciService {
 		}
 	}
 
+	/// Returns the state of the authorization response. RFC 6749 Section 4.1.2 requires it, because the wallet always sends a state.
+	static func authorizationResponseState(_ serverState: String?) throws -> String {
+		guard let serverState else {
+			throw WalletError(description: "Authorization response does not include a state", code: .authorizationFailed)
+		}
+		return serverState
+	}
+
 	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String, serverState: String?, iss: String?) async throws -> AuthorizedRequest {
 		let typedAuthorizationCode = try AuthorizationCode(value: authorizationCode)
-		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: serverState ?? request.state, request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)), issuerFromRedirect: iss.flatMap(URL.init(string:)))
+		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: try Self.authorizationResponseState(serverState), request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)), issuerFromRedirect: iss.flatMap(URL.init(string:)))
 		let at = authorized.accessToken
 		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
@@ -974,7 +982,7 @@ public actor OpenId4VciService {
 			issParameterRequired: offer.authorizationServerMetadata.issParameterSupported
 		)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(
-			serverState: serverState ?? request.state, request: request,
+			serverState: try Self.authorizationResponseState(serverState), request: request,
 			authorizationCode: try AuthorizationCode(value: authorizationCode),
 			grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)),
 			issuerFromRedirect: iss.flatMap(URL.init(string:))
