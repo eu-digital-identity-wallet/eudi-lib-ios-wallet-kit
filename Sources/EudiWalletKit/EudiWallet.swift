@@ -45,7 +45,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Wallet configuration
 	public var eudiWalletConfig: EudiWalletConfiguration { didSet { try? initializeLogging() } }
 	/// Trust configuration describing where trust anchors come from and how trust failures are handled.
-	public var trustConfig: TrustConfiguration
+	public var trustConfig: TrustConfiguration {
+		didSet { statusTokenCache = StatusListTokenCache() }
+	}
+	/// Status list tokens verified with the current `trustConfig`.
+	private var statusTokenCache = StatusListTokenCache()
 	/// OpenID4VP configuration
 	public var openID4VpConfig: OpenId4VpConfiguration
 	public var wrpRegistrationValidator: WrpVpRegistrationValidator
@@ -746,7 +750,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Get document status
 	public func getDocumentStatus(for statusList: StatusList) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig)
+		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig, cache: statusTokenCache)
 		let status = try await actor.getStatus()
 		return status
 	}
