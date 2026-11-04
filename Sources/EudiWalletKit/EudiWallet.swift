@@ -249,8 +249,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
-		let documents = try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
-		return IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
+		let documents = try await vciService.issueDocumentsWithResults(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
+		return IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
 	/// Resolve the issuer's WRP registration certificate for a set of credential configuration
@@ -462,7 +462,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let vciService = try await resolveVCIService(issuerName: urlString)
 		if let configuration {	await vciService.setConfiguration(configuration) }
 		let documents = try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
-		let issuerResponse = IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
+		let issuerResponse = IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 		return issuerResponse
 	}
 
