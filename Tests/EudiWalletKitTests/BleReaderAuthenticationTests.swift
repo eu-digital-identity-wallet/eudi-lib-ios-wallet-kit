@@ -48,6 +48,14 @@ struct BleReaderAuthenticationTests {
 		}
 	}
 
+	@Test func warningPolicyAllowsUntrustedReader() async throws {
+		try await BlePresentationService.validateReaderAuthentication(deviceRequest: DeviceRequest(data: Self.request_d411.bytes), deviceRequestBytes: Self.request_d411, sessionTranscript: transcript(), trustValidator: ReaderTrust(trusted: false), readerPolicy: .warning)
+	}
+
+	@Test func warningPolicyDoesNotEnforceReaderAuthentication() async throws {
+		try await BlePresentationService.validateReaderAuthentication(deviceRequest: DeviceRequest(data: Self.request_d411.bytes), deviceRequestBytes: Self.request_d411, sessionTranscript: SessionTranscript(handOver: .null), trustValidator: ReaderTrust(trusted: true), readerPolicy: .warning)
+	}
+
 	@Test func acceptsAbsentAuthentication() async throws {
 		let request = DeviceRequest(mdl: [.familyName], agesOver: [], intentToRetain: false)
 		try await BlePresentationService.validateReaderAuthentication(deviceRequest: request, deviceRequestBytes: Data(request.encode(options: CBOROptions())), sessionTranscript: transcript(), trustValidator: ReaderTrust(trusted: false))
