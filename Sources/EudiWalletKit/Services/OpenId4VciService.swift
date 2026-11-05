@@ -563,7 +563,7 @@ public actor OpenId4VciService {
 			return try await reissueAction(true)
 		}
 	}
-
+	
 	/// Issue multiple documents using OpenId4Vci protocol
 	///
 	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
@@ -573,21 +573,57 @@ public actor OpenId4VciService {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: Array of issued documents. They are saved in storage.
+	@available(*, deprecated, message: "Use issueDocuments(configuration:, promptMessage:)")
 	@discardableResult public func issueDocuments(docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
-		try await issueDocumentsWithResults(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage).documents
+		
+		let configuration: [DocumentIssuanceConfiguration] = docTypeIdentifiers.map {
+			.init(docTypeIdentifier: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
+		}
+		
+		return try await issueDocuments(configuration: configuration, promptMessage: promptMessage)
+	}
+	
+
+	/// Issue multiple documents using OpenId4Vci protocol
+	///
+	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	/// - Parameters:
+	///   - configuration: Per issuance document configuration defining ``DocTypeIdentifier``, CredentialOptions and KeyOptions
+	///   - promptMessage: Prompt message for biometric authentication (optional)
+	/// - Returns: Array of issued documents. They are saved in storage.
+	@discardableResult public func issueDocuments(configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil) async throws -> [WalletStorage.Document] {
+		try await issueDocumentsWithResults(configuration: configuration, promptMessage: promptMessage).documents
+	}
+	
+	/// Issues documents and reports individual failures alongside stored successes.
+	/// Throws the original error when every document fails, or setup/authorization fails.
+	@available(*, deprecated, message: "Use issueDocumentsWithResults(configuration:, promptMessage:)")
+	public func issueDocumentsWithResults(docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> DocumentIssuanceResult {
+		let configuration: [DocumentIssuanceConfiguration] = docTypeIdentifiers.map {
+			.init(docTypeIdentifier: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
+		}
+		
+		return try await issueDocumentsWithResults(configuration: configuration, promptMessage: promptMessage)
 	}
 
 	/// Issues documents and reports individual failures alongside stored successes.
 	/// Throws the original error when every document fails, or setup/authorization fails.
-	public func issueDocumentsWithResults(docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> DocumentIssuanceResult {
-		if docTypeIdentifiers.isEmpty { return DocumentIssuanceResult(documents: [], failures: []) }
-		let (credentialConfigurations, offer) = try await buildCredentialOffer(for: docTypeIdentifiers)
+	public func issueDocumentsWithResults(configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil) async throws -> DocumentIssuanceResult {
+		if configuration.isEmpty { return DocumentIssuanceResult(documents: [], failures: []) }
+		let (credentialConfigurations, offer) = try await buildCredentialOffer(
+			for: configuration.map { $0.docTypeIdentifier
+			})
 		// Cache the offer with a generated UUID
 		let offerUri = UUID().uuidString
 		Self.credentialOfferCache[offerUri] = offer
 		// Build OfferedDocModel array from configurations
-		let docTypes: [OfferedDocModel] = credentialConfigurations.map {
-			makeOfferedDocModel(from: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
+		let docTypes: [OfferedDocModel] = zip(credentialConfigurations, configuration).map { credentialConfiguration, documentIssuanceConfiguration in
+			
+			return makeOfferedDocModel(
+				from: credentialConfiguration,
+				credentialOptions: documentIssuanceConfiguration.credentialOptions,
+				keyOptions: documentIssuanceConfiguration.keyOptions
+			)
 		}
 		// Delegate to issueDocumentsByOfferUrl
 		return try await issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil,  txCodeValue: nil, promptMessage: promptMessage)
