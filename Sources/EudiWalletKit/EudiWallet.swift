@@ -245,11 +245,31 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
+	@available(*, deprecated, message: "Use issueDocuments(issuerName:, configuration:, promptMessage:)")
 	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> IssuerResponse {
+		let configuration: [DocumentIssuanceConfiguration] = docTypeIdentifiers.map {
+			.init(docTypeIdentifier: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
+		}
+		
+		return try await issueDocuments(issuerName: issuerName, configuration: configuration, promptMessage: promptMessage)
+	}
+	
+	/// Issue multiple documents using OpenId4Vci protocol
+	///
+	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	/// - Parameters:
+	///   - issuerName: The name of the issuer service
+	///   - configuration: Per issuance document configuration defining ``DocTypeIdentifier``, CredentialOptions and KeyOptions
+	///   - promptMessage: Prompt message for biometric authentication (optional)
+	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
+	@discardableResult public func issueDocuments(issuerName: String, configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil) async throws -> IssuerResponse {
 		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
-		let documents = try await vciService.issueDocumentsWithResults(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
+		let documents = try await vciService.issueDocumentsWithResults(
+			configuration: configuration,
+			promptMessage: promptMessage
+		)
 		return IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
