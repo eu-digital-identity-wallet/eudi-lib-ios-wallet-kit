@@ -264,7 +264,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		self.resolvedRequestData = rrd
 		let vp = rrd.request
 		var jwkThumbprint: Data?  = nil
-		if let key = vp.clientMetaData?.jwkSet?.keys.first(where: { $0.use == "enc"}),
+		// The key that encrypts the response. OpenID4VP 1.0 does not require `use` on it.
+		if let key = vp.responseEncryptionSpecification?.clientKey.keys.first,
 			let x = key.x, let xd = Data(base64URLEncoded: x), let y = key.y, let yd = Data(base64URLEncoded: y),
 			let crv = key.crv, let crvType = MdocDataModel18013.CoseEcCurve(crvName: crv), let ecCrvType = ECCurveType(rawValue: crv) {
 			eReaderPub = CoseKey(x: [UInt8](xd), y: [UInt8](yd), crv: crvType)
