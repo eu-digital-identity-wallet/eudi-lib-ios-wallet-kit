@@ -29,9 +29,10 @@ public struct TrustConfiguration: Sendable {
 	/// The trust policy applied to document status token validation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow status checks to succeed even when the status token trust chain cannot be validated.
 	public let statusTrustPolicy: TrustPolicy
-	/// Trust policy for OpenID4VP reader access certificates, independent of issuer and registration policies.
-	/// Defaults to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted
-	/// certificate chain and report `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate`.
+	/// Trust policy for reader authentication, independent of issuer and registration policies.
+	/// Defaults to `.enforce`. With `.warning`, OpenID4VP valid signed requests may proceed with an
+	/// untrusted certificate chain and report `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate`.
+	/// BLE reports reader authentication results without enforcing them under `.warning`.
 	public let readerTrustPolicy: TrustPolicy
 	/// The trust policy applied to WRPRC validation during OpenID4VP and BLE presentation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow presentation to proceed even when the WRPRC trust chain cannot be validated.
