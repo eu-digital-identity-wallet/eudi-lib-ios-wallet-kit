@@ -226,7 +226,7 @@ The user is redirected in an authorization web view to the issuer's authorizatio
 
 #### Client-driven web authorization
 
-By default the library presents the authorization flow in an `ASWebAuthenticationSession`. An application can take over this step by providing its own ``AuthorizationFlowHandler`` in the ``OpenId4VciConfiguration/authorizationFlowHandler`` property. The handler receives the authorization URL and the configured redirect URI, presents the authorization flow however it wants (external browser, `SFSafariViewController`, or in any other custom way) and returns the full redirect URL once the authorization server redirects back. The redirect URL may alternatively contain a presentation request in case of [Dynamic issuance](#Dynamic-issuance).
+By default the library presents the authorization flow in an `ASWebAuthenticationSession`. An application can take over this step by providing its own ``AuthorizationFlowHandler`` in the ``OpenId4VciConfiguration/authorizationFlowHandler`` property. The handler receives the authorization URL and the configured redirect URI, presents the authorization flow however it wants (external browser, `SFSafariViewController`, or in any other custom way) and returns the full redirect URL once the authorization server redirects back. The redirect URL may alternatively contain a presentation request in case of <doc:IssueDocuments#Dynamic-issuance>.
 
 ### Pre-Authorization code flow
 
