@@ -828,7 +828,7 @@ public actor OpenId4VciService {
 			payload = .configurationBased(credentialConfigurationIdentifier: configuration.configurationIdentifier)
 		}
 		
-		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload) { Issuer.createResponseEncryptionSpec($0) }
+		let requestOutcome = try await issuer.requestCredential(request: authorized, bindingKeys: bindingKeys, requestPayload: payload)
 		switch requestOutcome {
 		case .success(let response):
 			if let result = response.credentialResponses.first {
@@ -939,7 +939,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	private func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
+	func refreshAuthorization(issuer: Issuer, authorized: AuthorizedRequest, configuration: CredentialConfiguration, forceRefreshToken: Bool) async throws -> AuthorizedRequest {
 		guard authorized.isAccessTokenExpired() || forceRefreshToken else { return authorized }
 		if let refreshTokenExpiresIn = authorized.refreshToken?.expiresIn,
 		   authorized.isRefreshTokenExpired(clock: Date.now.timeIntervalSinceReferenceDate) {
@@ -1032,7 +1032,7 @@ public actor OpenId4VciService {
 		logger.info("--> [ISSUANCE] Got a deferred issuance response from server with transaction_id \(transactionId.value). Retrying issuance...")
 		let isResponseEncryptionSupported = if case .notSupported = await issuer.issuerMetadata.credentialResponseEncryption { false } else { true }
 		if let derKeyData, isResponseEncryptionSupported {
-			await issuer.setDeferredResponseEncryptionSpec(Issuer.createResponseEncryptionSpec(issuer.issuerMetadata.credentialResponseEncryption, privateKeyData: derKeyData))
+			await issuer.setDeferredResponseEncryptionSpec(issuer.responseEncryptionSpec(privateKeyData: derKeyData))
 		}
 		// The library encrypts the request with the key from the issuer metadata, as for the credential request.
 		let deferredRequestResponse = try await issuer.requestDeferredCredential(request: authorized, transactionId: transactionId, dPopNonce: nil)
