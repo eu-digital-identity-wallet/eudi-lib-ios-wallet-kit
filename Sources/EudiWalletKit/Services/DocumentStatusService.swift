@@ -29,13 +29,16 @@ public actor DocumentStatusService {
 	/// Trust configuration used to validate the status-list token certificate chain.
 	public let trustConfig: TrustConfiguration
 	let dateProvider: @Sendable () -> Date
+	/// Reuses verified tokens until their `ttl` or `exp` ends. Nil fetches the token on each check.
+	let cache: StatusListTokenCache?
 	private static let logger = Logger(label: "DocumentStatusService")
 
 	/// Supplies a fresh validation time for each status check by default.
-	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration) {
+	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration, cache: StatusListTokenCache? = nil) {
 		self.statusList = statusList
 		self.trustConfig = trustConfig
 		self.dateProvider = dateProvider
+		self.cache = cache
 	}
 
 	/// Uses a fixed validation time, for callers that explicitly supply a date.
@@ -58,7 +61,12 @@ public actor DocumentStatusService {
 			verifier: verifier,
 			dateProvider: dateProvider
 		)
-		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: tokenFetcher.getStatusClaims, clockSkew: trustConfig.clockSkew)
+		let fetchClaims: FetchClaimsHandler = if let cache {
+			{ format, url, clockSkew in await cache.claims(format: format, url: url, clockSkew: clockSkew, fetch: tokenFetcher.getStatusClaims) }
+		} else {
+			tokenFetcher.getStatusClaims
+		}
+		let result = await getStatus.getStatus(index: statusReference.idx, url: statusReference.uri, fetchClaims: fetchClaims, clockSkew: trustConfig.clockSkew)
 		switch result {
 			case .success(let status): return status
 			case .failure(let error):

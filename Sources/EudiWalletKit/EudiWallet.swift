@@ -45,7 +45,11 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	/// Wallet configuration
 	public var eudiWalletConfig: EudiWalletConfiguration { didSet { try? initializeLogging() } }
 	/// Trust configuration describing where trust anchors come from and how trust failures are handled.
-	public var trustConfig: TrustConfiguration
+	public var trustConfig: TrustConfiguration {
+		didSet { statusTokenCache = StatusListTokenCache() }
+	}
+	/// Status list tokens verified with the current `trustConfig`.
+	private var statusTokenCache = StatusListTokenCache()
 	/// OpenID4VP configuration
 	public var openID4VpConfig: OpenId4VpConfiguration
 	public var wrpRegistrationValidator: WrpVpRegistrationValidator
@@ -241,12 +245,32 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
+	@available(*, deprecated, message: "Use issueDocuments(issuerName:, configuration:, promptMessage:)")
 	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> IssuerResponse {
+		let configuration: [DocumentIssuanceConfiguration] = docTypeIdentifiers.map {
+			.init(docTypeIdentifier: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
+		}
+		
+		return try await issueDocuments(issuerName: issuerName, configuration: configuration, promptMessage: promptMessage)
+	}
+	
+	/// Issue multiple documents using OpenId4Vci protocol
+	///
+	/// If ``userAuthenticationRequired`` is true, user authentication is required. The authentication prompt message has localisation key "issue_document"
+	/// - Parameters:
+	///   - issuerName: The name of the issuer service
+	///   - configuration: Per issuance document configuration defining ``DocTypeIdentifier``, CredentialOptions and KeyOptions
+	///   - promptMessage: Prompt message for biometric authentication (optional)
+	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
+	@discardableResult public func issueDocuments(issuerName: String, configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil) async throws -> IssuerResponse {
 		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
-		let documents = try await vciService.issueDocuments(docTypeIdentifiers: docTypeIdentifiers, credentialOptions: credentialOptions, keyOptions: keyOptions, promptMessage: promptMessage)
-		return IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
+		let documents = try await vciService.issueDocumentsWithResults(
+			configuration: configuration,
+			promptMessage: promptMessage
+		)
+		return IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
 	/// Resolve the issuer's WRP registration certificate for a set of credential configuration
@@ -458,7 +482,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		let vciService = try await resolveVCIService(issuerName: urlString)
 		if let configuration {	await vciService.setConfiguration(configuration) }
 		let documents = try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
-		let issuerResponse = IssuerResponse(documents: documents, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
+		let issuerResponse = IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 		return issuerResponse
 	}
 
@@ -693,7 +717,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 			let storageService = storage.storageService
 			switch flow {
 			case .ble:
-				let bleSvc = try await BlePresentationService(parameters: parameters, authenticationContext: localAuthenticationContext, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator, deviceAlgorithm: eudiWalletConfig.deviceAlgorithm)
+				let bleSvc = try await BlePresentationService(parameters: parameters, authenticationContext: localAuthenticationContext, transportFactory: bleTransportFactory, wrpRegistrationValidator: wrpRegistrationValidator, deviceAlgorithm: eudiWalletConfig.deviceAlgorithm, readerPolicy: trustConfig.readerTrustPolicy)
 				return PresentationSession(presentationService: bleSvc, storageManager: storage, storageService: storageService, docIdToPresentInfo: docIdToPresentInfo, documentKeyIndexes: parameters.documentKeyIndexes, userAuthenticationRequired: eudiWalletConfig.userAuthenticationRequired, localAuthenticationContext: localAuthenticationContext, transactionLogger: mergedTransactionLogger)
 			case .openid4vp(let qrCode):
 				let docTypeDisplayNames: [String: String] = Dictionary(documents.compactMap { doc in
@@ -746,7 +770,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 
 	/// Get document status
 	public func getDocumentStatus(for statusList: StatusList) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig)
+		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig, cache: statusTokenCache)
 		let status = try await actor.getStatus()
 		return status
 	}
