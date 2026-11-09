@@ -121,17 +121,8 @@ extension OpenId4VciService {
 			)
 		}
 
-		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, nonce: nonce, dpopKeyOptions: keyOptions.map { KeyOptions(curve: $0.curve, secureAreaName: $0.secureAreaName) })
-		let pkceVerifier = try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod)
-		let authorizationCodeURL = try AuthorizationCodeURL(urlString: pendingDoc.authorizePresentationUrl ?? "")
-		let request = AuthorizationRequested(
-			credentials: [try .init(value: model.configuration.configurationIdentifier.value)],
-			authorizationCodeURL: authorizationCodeURL,
-			pkceVerifier: pkceVerifier,
-			state: model.state,
-			configurationIds: [model.configuration.configurationIdentifier],
-			dpopNonce: nil
-		)
+		let issuer = try await getIssuerForWalletAppCompatibility(offer: offer, dpopKeyOptions: keyOptions.map { KeyOptions(curve: $0.curve, secureAreaName: $0.secureAreaName) })
+		let request = try Self.makeResumeAuthorizationRequest(model: model, authorizePresentationUrl: pendingDoc.authorizePresentationUrl, nonce: nonce)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(
 			serverState: request.state,
 			request: request,
@@ -335,7 +326,18 @@ extension OpenId4VciService {
 		return (documents, refreshed)
 	}
 
-	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, nonce: String? = nil, useDpop: Bool? = nil, dpopKeyOptions: KeyOptions? = nil) async throws -> Issuer {
+	static func makeResumeAuthorizationRequest(model: PendingIssuanceModel, authorizePresentationUrl: String?, nonce: String?) throws -> AuthorizationRequested {
+		AuthorizationRequested(
+			credentials: [try .init(value: model.configuration.configurationIdentifier.value)],
+			authorizationCodeURL: try AuthorizationCodeURL(urlString: authorizePresentationUrl ?? ""),
+			pkceVerifier: try PKCEVerifier(codeVerifier: model.pckeCodeVerifier, codeVerifierMethod: model.pckeCodeVerifierMethod),
+			state: model.state,
+			configurationIds: [model.configuration.configurationIdentifier],
+			dpopNonce: nonce.map(Nonce.init(value:))
+		)
+	}
+
+	private func getIssuerForWalletAppCompatibility(offer: CredentialOffer, useDpop: Bool? = nil, dpopKeyOptions: KeyOptions? = nil) async throws -> Issuer {
 		var dpopConstructor: DPoPConstructorType? = nil
 		if useDpop ?? config.requireDpop {
 			let popConstructor = try await config.makePoPConstructor(
@@ -360,7 +362,6 @@ extension OpenId4VciService {
 			clientAttestationPopSigningAlgValuesSupported: offer.authorizationServerMetadata.clientAttestationPopSigningAlgValuesSupported,
 			context: localAuthenticationContext
 		)
-		_ = nonce
 		return try Issuer(
 			authorizationServerMetadata: offer.authorizationServerMetadata,
 			issuerMetadata: offer.credentialIssuerMetadata,
