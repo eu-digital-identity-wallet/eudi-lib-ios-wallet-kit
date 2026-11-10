@@ -905,7 +905,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func requestDeferredIssuanceInternal(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> (IssuanceOutcome, Issuer) {
+	func requestDeferredIssuanceInternal(deferredDoc: WalletStorage.Document, credentialOptions: CredentialOptions, keyOptions: KeyOptions? = nil) async throws -> (outcome: IssuanceOutcome, issuer: Issuer) {
 		let model = try JSONDecoder().decode(DeferredIssuanceModel.self, from: deferredDoc.data)
 		guard let docMetadata = DocMetadata(from: deferredDoc.metadata) else {
 			throw WalletError(description: "Deferred issuance document metadata is missing", code: .internalError)
@@ -923,11 +923,11 @@ public actor OpenId4VciService {
 		guard let configuration = credentialConfigurations.first else {
 			throw WalletError(description: "Deferred issuance credential configuration could not be resolved", code: .internalError)
 		}
-		let deferredAction: (Bool) async throws -> (IssuanceOutcome, Issuer) = { forceRefreshToken in
+		let deferredAction: (Bool) async throws -> (outcome: IssuanceOutcome, issuer: Issuer) = { forceRefreshToken in
 			let issuer = try await self.getIssuerForDeferred(data: model, configuration: configuration)
 			let refreshedAuthorized = try await self.refreshAuthorization(issuer: issuer, authorized: authorized, configuration: configuration, forceRefreshToken: forceRefreshToken)
 			let outcome = try await self.deferredCredentialUseCase(issuer: issuer, authorized: refreshedAuthorized, transactionId: model.transactionId, publicKeys: model.publicKeys, derKeyData: model.derKeyData, dpopKeyId: model.dpopKeyId, configuration: configuration)
-			return (outcome, issuer)
+			return (outcome: outcome, issuer: issuer)
 		}
 		do {
 			return try await deferredAction(false)
@@ -982,7 +982,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> (IssuanceOutcome, Issuer) {
+	func resumePendingIssuance(pendingDoc: WalletStorage.Document, webUrl: URL?) async throws -> (outcome: IssuanceOutcome, issuer: Issuer) {
 		let model = try JSONDecoder().decode(PendingIssuanceModel.self, from: pendingDoc.data)
 		guard case .presentation_request_url(_) = model.pendingReason else {
 			throw WalletError(description: "Unknown pending reason: \(model.pendingReason)", code: .internalError)
@@ -1026,7 +1026,7 @@ public actor OpenId4VciService {
 		)
 		let (bindingKeys, publicKeys) = try await initSecurityKeys(model.configuration, clientId: clientId)
 		let res = try await Self.submissionUseCase(authorized, issuer: issuer, configuration: model.configuration, bindingKeys: bindingKeys, publicKeys: publicKeys, dpopKeyId: dpopKeyId(configuration: model.configuration), logger: logger)
-		return (res, issuer)
+		return (outcome: res, issuer: issuer)
 	}
 
 	private func deferredCredentialUseCase(issuer: Issuer, authorized: AuthorizedRequest, transactionId: TransactionId, publicKeys: [Data], derKeyData: Data?, dpopKeyId: String?, configuration: CredentialConfiguration) async throws -> IssuanceOutcome {
@@ -1278,11 +1278,16 @@ public actor OpenId4VciService {
 			} else if doc.docDataFormat == .sdjwt {
 				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
-			guard config.rejectMissingMandatoryClaims else { continue }
-			let missing = Self.missingMandatoryClaims(doc, mandatoryClaims: mandatoryClaims)
-			guard missing.isEmpty else {
-				throw WalletError(description: "Issued credential is missing mandatory claims: \(missing.map { $0.value.map(\.description).joined(separator: ".") }.joined(separator: ", "))", code: .issuanceRequestFailed)
-			}
+			if config.rejectMissingMandatoryClaims { try Self.requireMandatoryClaims(mandatoryClaims, in: doc) }
+		}
+	}
+
+	/// Throws ``WalletError`` with code `.issuanceRequestFailed` when the credential does not contain a mandatory claim.
+	static func requireMandatoryClaims(_ mandatoryClaims: [ClaimPath], in doc: WalletStorage.Document) throws {
+		let missing = missingMandatoryClaims(doc, mandatoryClaims: mandatoryClaims)
+		guard missing.isEmpty else {
+			let names = missing.map(\.dottedName).joined(separator: ", ")
+			throw WalletError(description: "Issued credential is missing mandatory claims: \(names)", code: .issuanceRequestFailed)
 		}
 	}
 
@@ -1588,4 +1593,9 @@ public final class OpenId4VCIServiceRegistry: @unchecked Sendable {
 	public func getByIssuerURL(issuerURL: String) async -> OpenId4VciService? {
 		return await getAllServices().getByIssuerURL(issuerURL)
 	}
+}
+
+fileprivate extension ClaimPath {
+	/// The path components joined with a dot, for example `address.postal_code`.
+	var dottedName: String { value.map(\.description).joined(separator: ".") }
 }

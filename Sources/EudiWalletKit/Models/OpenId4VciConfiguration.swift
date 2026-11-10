@@ -56,11 +56,10 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// wallet trust configuration. Requires `issuerMetadataPolicy` to be `.requireSigned`, since WRPRC
 	/// enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
 	public let validateRegistrationCertificate: Bool
-	/// Whether to reject an issued credential that does not contain a claim that the issuer metadata marks as `mandatory`.
+	/// Rejects an issued credential that does not contain a claim with `mandatory: true` in the issuer metadata (OpenID4VCI 1.0, Appendix B.2).
 	///
-	/// OpenID4VCI 1.0, Appendix B.2, makes `mandatory` a statement of the issuer. It does not require the wallet to check it.
-	/// When enabled, the wallet does not store such a credential, throws ``WalletError`` with code `.issuanceRequestFailed`
-	/// and sends `credential_failure` to the issuer.
+	/// When `true`, the wallet does not store the credential, throws ``WalletError`` with code `.issuanceRequestFailed`
+	/// and sends `credential_failure` to the issuer. The default is `false`.
 	public let rejectMissingMandatoryClaims: Bool
 	/// Whether user authentication is required for credential issuance
 	public let userAuthenticationRequired: Bool

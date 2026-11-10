@@ -80,6 +80,12 @@ struct MandatoryClaimsTests {
 		#expect(missing(doc, outOfBounds, notAnArray) == [outOfBounds, notAnArray])
 	}
 
+	@Test func requireMandatoryClaimsThrowsOnlyForAMissingClaim() throws {
+		let doc = try document("sjwt-pid-python", format: .sdjwt)
+		#expect(throws: Never.self) { try OpenId4VciService.requireMandatoryClaims([path(key("family_name"))], in: doc) }
+		#expect(throws: WalletError.self) { try OpenId4VciService.requireMandatoryClaims([path(key("not_issued"))], in: doc) }
+	}
+
 	@Test func mdocWithAllMandatoryClaimsPasses() throws {
 		let doc = try document("mdoc-mdl", format: .cbor)
 		#expect(missing(doc, path(key("org.iso.18013.5.1"), key("family_name")), path(key("org.iso.18013.5.1"), key("given_name"))).isEmpty)
