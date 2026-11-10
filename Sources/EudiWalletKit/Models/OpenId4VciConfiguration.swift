@@ -56,6 +56,12 @@ public struct OpenId4VciConfiguration: Sendable {
 	/// wallet trust configuration. Requires `issuerMetadataPolicy` to be `.requireSigned`, since WRPRC
 	/// enforcement needs a cryptographically bound issuer metadata signer to supply the WRPAC.
 	public let validateRegistrationCertificate: Bool
+	/// Whether to reject an issued credential that does not contain a claim that the issuer metadata marks as `mandatory`.
+	///
+	/// OpenID4VCI 1.0, Appendix B.2, makes `mandatory` a statement of the issuer. It does not require the wallet to check it.
+	/// When enabled, the wallet does not store such a credential, throws ``WalletError`` with code `.issuanceRequestFailed`
+	/// and sends `credential_failure` to the issuer.
+	public let rejectMissingMandatoryClaims: Bool
 	/// Whether user authentication is required for credential issuance
 	public let userAuthenticationRequired: Bool
 	/// Key options for generating DPoP keys, if DPoP is used
@@ -83,6 +89,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
 		validateRegistrationCertificate: Bool = false,
+		rejectMissingMandatoryClaims: Bool = false,
 		userAuthenticationRequired: Bool = false,
 		dpopKeyOptions: KeyOptions? = nil,
 		dpopUsesClientAttestationKey: Bool = false,
@@ -101,6 +108,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.requireDpop = requireDpop
 		self.issuerMetadataPolicy = issuerMetadataPolicy
 		self.validateRegistrationCertificate = validateRegistrationCertificate
+		self.rejectMissingMandatoryClaims = rejectMissingMandatoryClaims
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
 		self.dpopUsesClientAttestationKey = dpopUsesClientAttestationKey

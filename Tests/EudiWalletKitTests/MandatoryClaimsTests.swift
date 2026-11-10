@@ -20,6 +20,9 @@ import Foundation
 import MdocDataModel18013
 import WalletStorage
 import SwiftCBOR
+import OpenID4VCI
+import struct OpenID4VCI.ClaimPath
+import enum OpenID4VCI.ClaimPathElement
 
 struct MandatoryClaimsTests {
 
@@ -33,43 +36,68 @@ struct MandatoryClaimsTests {
 			docKeyInfo: nil, createdAt: .now, metadata: nil, displayName: nil, status: .issued)
 	}
 
-	private func claim(_ path: [String], mandatory: Bool? = true) -> DocClaimMetadata {
-		DocClaimMetadata(display: nil, isMandatory: mandatory, claimPath: path, valueType: nil)
+	private func path(_ components: ClaimPathElement...) -> ClaimPath { ClaimPath(components) }
+	private func key(_ name: String) -> ClaimPathElement { .claim(name: name) }
+
+	private func missing(_ doc: WalletStorage.Document, _ paths: ClaimPath...) -> [ClaimPath] {
+		OpenId4VciService.missingMandatoryClaims(doc, mandatoryClaims: paths)
+	}
+
+	@Test func rejectionIsOffByDefault() {
+		#expect(OpenId4VciConfiguration(credentialIssuerURL: "https://issuer.example").rejectMissingMandatoryClaims == false)
+		#expect(OpenId4VciConfiguration(credentialIssuerURL: "https://issuer.example", rejectMissingMandatoryClaims: true).rejectMissingMandatoryClaims)
 	}
 
 	@Test func sdJwtWithAllMandatoryClaimsPasses() throws {
 		let doc = try document("sjwt-pid-python", format: .sdjwt)
-		let claims = [claim(["family_name"]), claim(["given_name"]), claim(["birthdate"])]
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: claims).isEmpty)
+		#expect(missing(doc, path(key("family_name")), path(key("given_name")), path(key("birthdate"))).isEmpty)
 	}
 
 	@Test func sdJwtMissingMandatoryClaimFails() throws {
 		let doc = try document("sjwt-pid-python", format: .sdjwt)
-		let claims = [claim(["family_name"]), claim(["not_issued"]), claim(["also_not_issued"], mandatory: false)]
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: claims) == ["not_issued"])
+		#expect(missing(doc, path(key("family_name")), path(key("not_issued"))) == [path(key("not_issued"))])
 	}
 
 	@Test func sdJwtNestedMandatoryClaimPasses() throws {
 		let doc = try document("sjwt-pid-python", format: .sdjwt)
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: [claim(["address", "postal_code"])]).isEmpty)
+		#expect(missing(doc, path(key("address"), key("postal_code"))).isEmpty)
 	}
 
 	@Test func sdJwtMissingNestedMandatoryClaimFails() throws {
 		let doc = try document("sjwt-pid-python", format: .sdjwt)
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: [claim(["address", "not_issued"])]) == ["address.not_issued"])
+		#expect(missing(doc, path(key("address"), key("not_issued"))) == [path(key("address"), key("not_issued"))])
+	}
+
+	@Test func sdJwtArraySelectorsSelectTheElements() throws {
+		let doc = try document("sjwt-pid-python", format: .sdjwt)
+		#expect(missing(doc, path(key("nationalities"), .arrayElement(index: 0)), path(key("nationalities"), .allArrayElements)).isEmpty)
+	}
+
+	@Test func sdJwtArraySelectorsFailOnAMissingIndexOrAWrongType() throws {
+		let doc = try document("sjwt-pid-python", format: .sdjwt)
+		let outOfBounds = path(key("nationalities"), .arrayElement(index: 5))
+		let notAnArray = path(key("family_name"), .allArrayElements)
+		#expect(missing(doc, outOfBounds, notAnArray) == [outOfBounds, notAnArray])
 	}
 
 	@Test func mdocWithAllMandatoryClaimsPasses() throws {
 		let doc = try document("mdoc-mdl", format: .cbor)
-		let claims = [claim(["org.iso.18013.5.1", "family_name"]), claim(["org.iso.18013.5.1", "given_name"])]
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: claims).isEmpty)
+		#expect(missing(doc, path(key("org.iso.18013.5.1"), key("family_name")), path(key("org.iso.18013.5.1"), key("given_name"))).isEmpty)
 	}
 
 	@Test func mdocMissingMandatoryClaimFails() throws {
 		let doc = try document("mdoc-mdl", format: .cbor)
-		let claims = [claim(["org.iso.18013.5.1", "not_issued"]), claim(["other.namespace", "family_name"])]
-		#expect(OpenId4VciService.missingMandatoryClaims(doc, claims: claims)
-			== ["org.iso.18013.5.1.not_issued", "other.namespace.family_name"])
+		let notIssued = path(key("org.iso.18013.5.1"), key("not_issued"))
+		let otherNameSpace = path(key("other.namespace"), key("family_name"))
+		#expect(missing(doc, notIssued, otherNameSpace) == [notIssued, otherNameSpace])
+	}
+
+	@Test func mdocPathIntoADataElementSelectsTheNestedClaim() throws {
+		let doc = try document("mdoc-mdl", format: .cbor)
+		let category = path(key("org.iso.18013.5.1"), key("driving_privileges"), .allArrayElements, key("vehicle_category_code"))
+		let first = path(key("org.iso.18013.5.1"), key("driving_privileges"), .arrayElement(index: 0))
+		let notIssued = path(key("org.iso.18013.5.1"), key("driving_privileges"), .allArrayElements, key("not_issued"))
+		#expect(missing(doc, category, first, notIssued) == [notIssued])
 	}
 
 	@Test func mdocWithoutNameSpacesFailsAllMandatoryClaims() throws {
@@ -79,8 +107,8 @@ struct MandatoryClaimsTests {
 		let stripped = WalletStorage.Document(id: doc.id, docType: "", docDataFormat: .cbor,
 			data: Data(withoutNameSpaces.encode(options: CBOROptions())), docKeyInfo: nil, createdAt: .now,
 			metadata: nil, displayName: nil, status: .issued)
-		let claims = [claim(["org.iso.18013.5.1", "family_name"]), claim(["org.iso.18013.5.1", "given_name"], mandatory: false)]
-		#expect(OpenId4VciService.missingMandatoryClaims(stripped, claims: claims) == ["org.iso.18013.5.1.family_name"])
+		let familyName = path(key("org.iso.18013.5.1"), key("family_name"))
+		#expect(missing(stripped, familyName) == [familyName])
 	}
 
 	@Test func notificationDescriptionRemovesCharactersOutsideTheAllowedSet() {

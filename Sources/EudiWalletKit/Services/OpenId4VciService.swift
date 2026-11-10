@@ -26,6 +26,8 @@ import WalletStorage
 import SwiftCBOR
 import JOSESwift
 import SwiftyJSON
+import struct OpenID4VCI.ClaimPath
+import enum OpenID4VCI.ClaimPathElement
 @preconcurrency import LocalAuthentication
 import X509
 import class eudi_lib_sdjwt_swift.ClaimsVerifier
@@ -1130,6 +1132,7 @@ public actor OpenId4VciService {
 			let pds = issueOutcome.pendingOrDeferredStatus
 			var batch: [WalletStorage.Document]?
 			var publicKeys: [Data] = []
+			var mandatoryClaims: [ClaimPath] = []
 			var dkInfo = DocKeyInfo(secureAreaName: issueReq.secureAreaName, batchSize: 0, credentialPolicy: issueReq.credentialOptions.credentialPolicy)
 			switch issueOutcome {
 			case .issued(let dataPairs, let cc, let authorized, let notificationId):
@@ -1139,6 +1142,7 @@ public actor OpenId4VciService {
 				guard dataPairs.first != nil else { throw WalletError(description: "Empty issued data array", code: .internalError) }
 				dataToSave = issueOutcome.getDataToSave(index: 0, format: format)
 				docMetadata = cc.convertToDocMetadata(authorized: authorized, keyOptions: issueReq.keyOptions, credentialOptions: issueReq.credentialOptions)
+				mandatoryClaims = cc.claims.filter { $0.mandatory == true }.map(\.path)
 				let docTypeOrVctOrScope = docType ?? cc.docType ?? cc.scope ?? ""
 				dkInfo.batchSize = dataPairs.count
 				docTypeToSave = if format == .cbor, dataToSave.count > 0 { (try IssuerSigned(data: [UInt8](dataToSave))).issuerAuth.mso.docType } else if format == .sdjwt, dataToSave.count > 0 { SdJwtUtils.getVctFromSdJwt(docData: dataToSave) ?? docTypeOrVctOrScope } else { docTypeOrVctOrScope }
@@ -1168,7 +1172,7 @@ public actor OpenId4VciService {
 				await storage.appendDocModel(newDocument, uiCulture: uiCulture)
 				return newDocument
 			}
-			if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys) }
+			if newDocStatus == .issued { try await validateIssuedDocuments(newDocument, batch: batch, publicKeys: publicKeys, mandatoryClaims: mandatoryClaims) }
 			if let deleteId, storage.getDocumentModel(id: deleteId) != nil { try await storage.deleteDocument(id: deleteId, status: .issued) }
 			try await endIssueDocument(newDocument, batch: batch)
 			await storage.appendDocModel(newDocument, uiCulture: uiCulture)
@@ -1263,7 +1267,7 @@ public actor OpenId4VciService {
 		}
 	}
 
-	func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data]) async throws {
+	func validateIssuedDocuments(_ issued: WalletStorage.Document, batch: [WalletStorage.Document]?, publicKeys: [Data], mandatoryClaims: [ClaimPath] = []) async throws {
 		var pkCoseKeys = publicKeys.compactMap { try? CoseKey(data: [UInt8]($0)) }
 		guard pkCoseKeys.count == publicKeys.count else { throw WalletError(description: "Failed to parse public keys", code: .internalError) }
 		for doc in (batch ?? [issued]) {
@@ -1274,28 +1278,73 @@ public actor OpenId4VciService {
 			} else if doc.docDataFormat == .sdjwt {
 				try await validateIssuedSdJwt(doc, publicCoseKeys: &pkCoseKeys)
 			}
-			let missing = Self.missingMandatoryClaims(doc, claims: DocMetadata(from: issued.metadata)?.claims ?? [])
+			guard config.rejectMissingMandatoryClaims else { continue }
+			let missing = Self.missingMandatoryClaims(doc, mandatoryClaims: mandatoryClaims)
 			guard missing.isEmpty else {
-				throw WalletError(description: "Issued credential is missing mandatory claims: \(missing.joined(separator: ", "))", code: .issuanceRequestFailed)
+				throw WalletError(description: "Issued credential is missing mandatory claims: \(missing.map { $0.value.map(\.description).joined(separator: ".") }.joined(separator: ", "))", code: .issuanceRequestFailed)
 			}
 		}
 	}
 
-	/// Returns the claims that the issuer marks as mandatory and that the credential does not contain.
-	/// An SD-JWT claim path can be nested. An mso_mdoc claim path is a namespace and an element.
-	static func missingMandatoryClaims(_ doc: WalletStorage.Document, claims: [DocClaimMetadata]) -> [String] {
-		let mandatory = claims.filter { $0.isMandatory == true }.map(\.claimPath)
+	/// Returns the mandatory claim paths that select no claim in the credential.
+	/// Processing follows OpenID4VCI 1.0, Appendix C.1.1 (SD-JWT VC) and Appendix C.2.1 (mso_mdoc).
+	static func missingMandatoryClaims(_ doc: WalletStorage.Document, mandatoryClaims: [ClaimPath]) -> [ClaimPath] {
 		switch doc.docDataFormat {
 		case .cbor:
-			guard let issuerSigned = try? IssuerSigned(data: [UInt8](doc.data)) else { return [] }
+			guard let issuerSigned = try? IssuerSigned(data: [UInt8](doc.data)) else { return mandatoryClaims }
 			let nameSpaces = issuerSigned.issuerNameSpaces?.nameSpaces ?? [:]
-			return mandatory.filter { $0.count == 2 }.filter { path in
-				!(nameSpaces[path[0]] ?? []).contains { $0.elementIdentifier == path[1] }
-			}.map { $0.joined(separator: ".") }
+			return mandatoryClaims.filter { !selectsClaim($0, in: nameSpaces) }
 		case .sdjwt:
-			guard let json = SdJwtUtils.recreateSdJwtClaims(docData: doc.data)?.json else { return [] }
-			return mandatory.filter { !$0.isEmpty && !json[$0.map { $0 as JSONSubscriptType }].exists() }.map { $0.joined(separator: ".") }
+			guard let json = SdJwtUtils.recreateSdJwtClaims(docData: doc.data)?.json else { return mandatoryClaims }
+			return mandatoryClaims.filter { !selectsClaim($0, in: json) }
 		}
+	}
+
+	/// Processes a claims path pointer on a JSON-based credential (OpenID4VCI 1.0, Appendix C.1.1).
+	/// Returns false when the processing returns an error.
+	static func selectsClaim(_ path: ClaimPath, in root: JSON) -> Bool {
+		var selected = [root]
+		for component in path.value {
+			switch component {
+			case .claim(let name):
+				guard selected.allSatisfy({ $0.type == .dictionary }) else { return false }
+				selected = selected.compactMap { $0.dictionaryValue[name] }
+			case .allArrayElements:
+				guard selected.allSatisfy({ $0.type == .array }) else { return false }
+				selected = selected.flatMap(\.arrayValue)
+			case .arrayElement(let index):
+				guard index >= 0, selected.allSatisfy({ $0.type == .array }) else { return false }
+				selected = selected.compactMap { index < $0.arrayValue.count ? $0.arrayValue[index] : nil }
+			}
+			if selected.isEmpty { return false }
+		}
+		return true
+	}
+
+	/// Processes a claims path pointer on an mso_mdoc credential (OpenID4VCI 1.0, Appendix C.2.1).
+	/// Returns false when the processing returns an error.
+	static func selectsClaim(_ path: ClaimPath, in nameSpaces: [NameSpace: [IssuerSignedItem]]) -> Bool {
+		guard path.value.count >= 2, case .claim(let nameSpace) = path.value[0], case .claim(let identifier) = path.value[1],
+			let item = nameSpaces[nameSpace]?.first(where: { $0.elementIdentifier == identifier }) else { return false }
+		var selected = [item.elementValue]
+		for component in path.value.dropFirst(2) {
+			let arrays = selected.compactMap { if case .array(let array) = $0 { array } else { nil } }
+			let maps = selected.compactMap { if case .map(let map) = $0 { map } else { nil } }
+			switch component {
+			case .arrayElement(let index) where index >= 0 && arrays.count == selected.count:
+				selected = arrays.compactMap { index < $0.count ? $0[index] : nil }
+			case .arrayElement(let index) where index >= 0 && maps.count == selected.count:
+				selected = maps.compactMap { $0[.unsignedInt(UInt64(index))] }
+			case .claim(let key) where maps.count == selected.count:
+				selected = maps.compactMap { $0[.utf8String(key)] }
+			case .allArrayElements where arrays.count == selected.count:
+				selected = arrays.flatMap { $0 }
+			default:
+				return false
+			}
+			if selected.isEmpty { return false }
+		}
+		return true
 	}
 
 	private func validateIssuedSdJwt(_ document: WalletStorage.Document, publicCoseKeys: inout [CoseKey]) async throws {
