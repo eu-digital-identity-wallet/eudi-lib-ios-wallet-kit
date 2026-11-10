@@ -69,6 +69,8 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let clientAttestationPoPBuilder: (any ClientAttestationPoPBuilder)
 	/// Wallet-side configuration of credential request / response encryption.
 	public let encryptionSupportConfig: EncryptionSupportConfig
+	/// Presents the authorization URL to the user during the authorization code flow and returns the redirect.
+	public let authorizationFlowHandler: (any AuthorizationFlowHandler)
 
 	public init(
 		credentialIssuerURL: String?,
@@ -86,7 +88,8 @@ public struct OpenId4VciConfiguration: Sendable {
 		dpopUsesClientAttestationKey: Bool = false,
 		trustedIssuerCertificates: [x5chain]? = nil,
 		clientAttestationPoPBuilder: any ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder(),
-		encryptionSupportConfig: EncryptionSupportConfig = .init()
+		encryptionSupportConfig: EncryptionSupportConfig = .init(),
+		authorizationFlowHandler: (any AuthorizationFlowHandler)? = nil
 	) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId
@@ -103,6 +106,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.dpopUsesClientAttestationKey = dpopUsesClientAttestationKey
 		self.clientAttestationPoPBuilder = clientAttestationPoPBuilder
 		self.encryptionSupportConfig = encryptionSupportConfig
+		self.authorizationFlowHandler = authorizationFlowHandler ?? ASWebAuthenticationSessionFlowHandler()
 	}
 }
 
