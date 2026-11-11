@@ -70,12 +70,13 @@ class OpenId4VpUtils {
 		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
-			guard let docType = credQuery.docTypeOrVct else { continue }
-			if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
-			inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
-			if let zkSpecs = credQuery.zkSpecs {
-				if zkSpecsRequested == nil { zkSpecsRequested = [:] }
-				zkSpecsRequested![docType] = zkSpecs
+			for docType in credQuery.docTypesOrVcts {
+				if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
+				inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
+				if let zkSpecs = credQuery.zkSpecs {
+					if zkSpecsRequested == nil { zkSpecsRequested = [:] }
+					zkSpecsRequested![docType] = zkSpecs
+				}
 			}
 		}
 		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
@@ -250,12 +251,26 @@ extension ClaimPathElement {
 }
 
 extension CredentialQuery {
-	public var docTypeOrVct: String? {
+	/// The first requested type, retained for callers that need a single display value.
+	public var docTypeOrVct: String? { docTypesOrVcts.first }
+
+	/// All accepted document types or SD-JWT VC types for this query.
+	public var docTypesOrVcts: [String] {
 		let mdocTypeValue = meta.dictionaryObject?["doctype_value"]
 		let vctValues = meta.dictionaryObject?["vct_values"]
 		let metaDocType = mdocTypeValue ?? vctValues ?? meta.dictionaryObject?.first?.value
-		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
-		return docType
+		if let docType = metaDocType as? String { return [docType] }
+		return metaDocType as? [String] ?? []
+	}
+
+	/// Matches every accepted type while preserving each credential's actual type.
+	func matchingCredentials(queryable: any DcqlQueryable) -> [(id: Document.ID, docType: DocType)] {
+		var seen = Set<Document.ID>()
+		return docTypesOrVcts.flatMap { docType in
+			queryable.getCredentials(docOrVctType: docType, docDataFormat: dataFormat)
+				.filter { seen.insert($0).inserted }
+				.map { (id: $0, docType: docType) }
+		}
 	}
 
 	// https://developers.google.com/wallet/identity/verify/accepting-ids-from-wallet-online#zkp
@@ -337,14 +352,14 @@ extension OpenId4VpUtils {
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docTypeOrVct else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type", code: .invalidQueryResolution) }
-			let format = credQuery.dataFormat
 			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
-			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
-			let docTypeDisplayName = docTypeDisplayNames[docType] ?? docType
-			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential of type \(docTypeDisplayName) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
+			let matchingCredentials = credQuery.matchingCredentials(queryable: queryable)
+			let docTypeDisplayName = credQuery.docTypesOrVcts.map { docTypeDisplayNames[$0] ?? $0 }.joined(separator: ", ")
+			if matchingCredentials.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential of type \(docTypeDisplayName) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
 			// Try to find credentials that satisfy the claim requirements
-			for (credIndex, credId) in matchingCredIds.enumerated() {
+			for (credIndex, credential) in matchingCredentials.enumerated() {
+				let (credId, docType) = credential
 				do {
 					let optionId = !isMultiple ? "\(credQuery.id.value)-\(credIndex)" : credQuery.id.value
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable)
@@ -462,7 +477,7 @@ extension OpenId4VpUtils {
 		}
 		if resultDict.isEmpty {
 			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
-			if let notFoundCred {logger.warning("No credential found matching docType/vct: \(notFoundCred.docTypeOrVct ?? "") with format: \(notFoundCred.format)")}
+			if let notFoundCred {logger.warning("No credential found matching docType/vct: \(notFoundCred.docTypesOrVcts.joined(separator: ", ")) with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
 		return resultDict
