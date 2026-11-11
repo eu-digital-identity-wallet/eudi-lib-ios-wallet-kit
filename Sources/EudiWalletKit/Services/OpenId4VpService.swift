@@ -306,9 +306,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 				var available = false
 				for query in dcql.credentials where transaction.credentialIds.contains(query.id.value) {
 					try requireQes(query.requireCryptographicHolderBinding != false, "Transaction data requires holder binding")
-					let format = query.dataFormat
-					guard let docType = query.docTypeOrVct else { continue }
-					for id in dcqlQueryable.getCredentials(docOrVctType: docType, docDataFormat: format) where eligibleIds.contains(id) &&
+					for id in query.matchingCredentials(queryable: dcqlQueryable).map(\.id) where eligibleIds.contains(id) &&
 						TransactionDataProcessor.canAuthorize(transaction, documentId: id, mdocKeyAuthorizations: mdocKeyAuthorizations, supportedTypes: openID4VpConfig.supportedTransactionDataTypes) {
 						if (try? OpenId4VpUtils.resolveClaimsForCredential(credQuery: query, credId: id, queryable: dcqlQueryable)) != nil { available = true }
 					}
