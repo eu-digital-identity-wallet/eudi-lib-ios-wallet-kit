@@ -224,6 +224,16 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
 For the authorization code flow to work, the redirect URI must be specified via the `authFlowRedirectionURI` parameter of ``OpenId4VciConfiguration``.
 The user is redirected in an authorization web view to the issuer's authorization endpoint. After the user authenticates and authorizes the request, the issuer redirects the user back to the application with an authorization code. The library exchanges the authorization code for an access token and issues the document.
 
+Use ``OpenId4VciConfiguration/authResponseIssChecking`` to control validation of the authorization response `iss` parameter (RFC 9207). The default, `.never`, skips validation. With `.ifSupported`, `iss` is required when the authorization server advertises support, and any received `iss` must match the server's issuer. With `.required`, issuance also fails if the server does not advertise support.
+
+```swift
+let config = OpenId4VciConfiguration(
+    credentialIssuerURL: "https://issuer.example",
+    clientId: "wallet-client",
+    authResponseIssChecking: .required
+)
+```
+
 #### Client-driven web authorization
 
 By default the library presents the authorization flow in an `ASWebAuthenticationSession`. An application can take over this step by providing its own ``AuthorizationFlowHandler`` in the ``OpenId4VciConfiguration/authorizationFlowHandler`` property. The handler receives the authorization URL and the configured redirect URI, presents the authorization flow however it wants (external browser, `SFSafariViewController`, or in any other custom way) and returns the full redirect URL once the authorization server redirects back. The redirect URL may alternatively contain a presentation request in case of <doc:IssueDocuments#Dynamic-issuance>.
