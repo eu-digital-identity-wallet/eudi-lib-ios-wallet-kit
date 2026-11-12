@@ -135,7 +135,11 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 			let warningsKey = if presentationService.flow == .ble { presentationService.wrpVerifierWarnings?.keys.first(where: { !$0.isEmpty }) } else { request.requestName }
 			let warningSet: [PresentationPolicyViolation]? = if let warnings = presentationService.wrpVerifierWarnings, let warningsKey { warnings[warningsKey] } else { nil }
 			let transactions = (presentationService as? OpenId4VpService)?.transactionDataByRequest[request.requestName ?? ""] ?? [:]
-			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet, transactionData: transactions, requestName: request.requestName))
+			let openIdService = presentationService as? OpenId4VpService
+			let selections = openIdService?.credentialSelections[request.requestName ?? ""] ?? []
+			disclosedDocumentSets.append(DisclosedDocumentSet(docElements: disclosedElements, warnings: warningSet, transactionData: transactions, requestName: request.requestName,
+				credentialSelections: selections, credentialQueries: openIdService?.dcql.map { CredentialQuerySelection.metadata($0, option: selections) } ?? [],
+				credentialSets: openIdService?.dcql?.credentialSets))
 		} // next request
 		wrpVerifierPolicy = presentationService.wrpVerifierPolicy
 		wrpVerifierWarnings = presentationService.wrpVerifierWarnings

@@ -5,6 +5,8 @@
 //  Created by PHILIP SAKELLAROPOULOS on 7/30/26.
 //
 import Foundation
+import OpenID4VP
+import OrderedCollections
 
 /// A set of documents that can be disclosed in response to a single presentation request.
 ///
@@ -23,14 +25,25 @@ public struct DisclosedDocumentSet {
 	/// Violations of the relying party's registration policy detected for this request.
 	/// The presentation can still proceed; these are surfaced to the user as warnings.
 	public let warnings: [PresentationPolicyViolation]?
-	/// Transactions to show before consent, keyed by the wallet document authorizing them.
+	/// Transactions to show before consent, keyed by the initially assigned wallet document.
+	/// After a credential subset is chosen, authorization is reassigned to the documents sent.
 	public let transactionData: [String: [PresentationTransactionData]]
+
+	/// Maps wallet document IDs to every DCQL query they answer in this option.
+	public let credentialSelections: CredentialSelectionSet
+	/// DCQL query constraints. Empty for proximity presentations.
+	public let credentialQueries: [CredentialQuerySelection]
+	/// Original credential-set alternatives and their required flags, when present.
+	public let credentialSets: [CredentialSetQuery]?
 
 	/// Creates a disclosed document set.
 	/// - Parameters:
 	///   - docElements: The requested elements of each matching document.
 	///   - warnings: Registration-policy violations to surface to the user.
-	public init(docElements: [DocElements], warnings: [PresentationPolicyViolation]?, transactionData: [String: [PresentationTransactionData]] = [:], requestName: String? = nil) {
+	public init(docElements: [DocElements], warnings: [PresentationPolicyViolation]?, transactionData: [String: [PresentationTransactionData]] = [:], requestName: String? = nil, credentialSelections: CredentialSelectionSet = [], credentialQueries: [CredentialQuerySelection] = [], credentialSets: [CredentialSetQuery]? = nil) {
+		self.credentialSelections = credentialSelections
+		self.credentialQueries = credentialQueries
+		self.credentialSets = credentialSets
 		self.docElements = docElements
 		self.requestName = requestName
 		self.warnings = warnings

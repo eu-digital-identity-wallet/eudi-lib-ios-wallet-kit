@@ -53,6 +53,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 	var transactionData: [TransactionData]?
 	var parsedTransactionData: [PresentationTransactionData] = []
 	var credentialSelections: CredentialSelectionSetOptions = [:]
+	var transactionEligibleDocumentIds: Set<String> = []
 	var transactionAssignments: [String: [TransactionDataProcessor.Assignment]] = [:]
 	/// Typed transaction data for each presentation option and wallet document.
 	public private(set) var transactionDataByRequest: [String: [String: [PresentationTransactionData]]] = [:]
@@ -161,6 +162,8 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		wrpVerifierPolicy = nil; wrpVerifierWarnings = nil
 		formatsRequested = nil; inputDescriptorMap = nil; zkSpecsRequested = nil
 		transactionData = nil; verifierInfo = nil; dcqlQueryable = nil; mdocGeneratedNonce = nil
+		credentialSelections = [:]; transactionAssignments = [:]; transactionDataByRequest = [:]
+		transactionEligibleDocumentIds = []
 		presentedDocumentIds = []
 	}
 
@@ -300,6 +303,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					let keys = try? SdJwtUtils.parseCnfBindingKeys(fromDocumentData: data), !keys.isEmpty else { return nil }
 				return id
 			})
+			transactionEligibleDocumentIds = eligibleIds
 			// Check referenced credentials separately so their absence is invalid_transaction_data,
 			// even when DCQL resolution would otherwise return a general access-denied error.
 			for transaction in parsedTransactionData {
@@ -439,7 +443,10 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 			authenticationContext: authenticationContext, requestName: nil, onSuccess: onSuccess)
 	}
 
-	/// Sends the chosen consent option, preserving its credential-query and transaction assignments.
+	/// Sends the chosen consent option, preserving its credential-query associations.
+	/// With `requestName`, multiple queries accept a non-empty subset of their credentials.
+	/// Required credential sets must remain satisfied. Transaction data is assigned to the
+	/// selected documents before signing. Without a name, an exact, unambiguous option is required.
 	public func sendResponse(userAccepted: Bool, itemsToSend: RequestItems, deviceNameSpacesToSend: RequestDeviceNameSpaces? = nil,
 		authenticationContext: ThreadSafeAuthContext, requestName: String?, onSuccess: ((URL?) -> Void)?) async throws {
 		try beginRequestOperation()
@@ -451,17 +458,19 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		guard dcql != nil, let resolved = resolvedRequestData else {
 			throw WalletError(description: "Unexpected error", code: .internalError)
 		}
-		guard userAccepted, itemsToSend.count > 0 else {
+		guard userAccepted else {
 			try await SendVpTokens(nil, dcql, resolved, onSuccess)
 			return
 		}
-		let options = credentialSelections.filter { (requestName == nil || $0.key == requestName) && Set($0.value.map(\.credentialId)) == Set(itemsToSend.keys) }
-		let selectedOption = options.first(where: { _ in true })
-		let assignments = selectedOption.flatMap { transactionAssignments[$0.key] } ?? []
-		let assignmentVariants = Set(options.map { option in
-			(transactionAssignments[option.key] ?? []).map { "\($0.documentId):\($0.queryId):\($0.transaction.encodedValue)" }
-		})
-		if !parsedTransactionData.isEmpty && (assignments.count != parsedTransactionData.count || assignmentVariants.count > 1) {
+		let selected = try CredentialQuerySelection.select(dcql: dcql!, options: credentialSelections,
+			documentIds: Set(itemsToSend.keys), requestName: requestName)
+		let assignments: [TransactionDataProcessor.Assignment]
+		do {
+			assignments = try TransactionDataProcessor.assign(parsedTransactionData, selections: selected,
+				eligibleDocumentIds: transactionEligibleDocumentIds,
+				mdocKeyAuthorizations: (docsCbor ?? [:]).compactMapValues { $0.issuerAuth.mso.deviceKeyInfo.keyAuthorizations },
+				supportedTypes: openID4VpConfig.supportedTransactionDataTypes)
+		} catch {
 			let error = ValidationError.invalidTransactionData("Selected credentials cannot authorize all transaction data")
 			await dispatchRequestError(error, resolved: resolved)
 			throw WalletError(description: error.localizedDescription, code: .invalidTransactionData, innerError: error)
@@ -478,8 +487,7 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		// support sd-jwt documents
 		for (docId, nsItems) in itemsToSend {
 			guard let docType = transferInfo.idsToDocTypes[docId] else { continue }
-			let queryIds = selectedOption?.value.first(where: { $0.credentialId == docId })?.queryIds.map(\.value)
-				?? inputDescriptorMap[docType].map { [$0] } ?? []
+			let queryIds = selected.first(where: { $0.credentialId == docId })?.queryIds.map(\.value) ?? []
 			for inputDescrId in queryIds {
 				let assignedTransactions = assignments.filter { $0.documentId == docId && $0.queryId == inputDescrId }.map(\.transaction)
 				if transferInfo.dataFormats[docId] == .cbor {
