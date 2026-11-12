@@ -36,7 +36,7 @@ struct DeferredIssuerMetadataTests {
 		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
 		#endif
 		let service = try OpenId4VciService(uiCulture: nil, config: config, networking: networking, storage: StorageManager(storageService: storageService), storageService: storageService, trustConfig: trustConfig, localAuthenticationContext: ThreadSafeAuthContext())
-		OpenId4VciService.issuerMetadataCache.removeAll()
+		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		let endpoint = try JSONDecoder().decode(CredentialIssuerEndpoint.self, from: Data("\"\(issuerURL)/deferred_credential\"".utf8))
 		let model = DeferredIssuanceModel(deferredCredentialEndpoint: endpoint, transactionId: try TransactionId(value: "tx-1"), publicKeys: [], derKeyData: nil, timeStamp: 0, interval: nil, dpopKeyId: nil)
 		let configuration = CredentialConfiguration(
