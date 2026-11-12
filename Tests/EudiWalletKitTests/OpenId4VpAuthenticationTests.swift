@@ -204,10 +204,11 @@ struct OpenId4VpAuthenticationTests {
         let session = try makeSession(service)
         session.presentationService = FaultPresentationService(msg: "Test service")
         let invalid = ReaderAuthenticationResult(isValidated: false, validationMessage: "Invalid signature", authBytes: Data([0]))
-        var results = ["first-document": invalid, "second-document": invalid]
-        // One valid entry and one invalid entry: the documents share no reader identity.
-        results[try #require(results.keys.first)] = ReaderAuthenticationResult(isValidated: true, legalName: "Verified name")
-        requests[0].readerAuthResults = results
+        requests[0].readerAuthResults = [
+            "first-document": ReaderAuthenticationResult(isValidated: true, legalName: "Verified name"),
+            "second-document": invalid
+        ]
+        // A valid document cannot supply a shared reader identity when another fails authentication.
         #expect(requests[0].defaultReaderAuthResult == nil)
         try session.decodeRequest(requests)
         #expect(session.readerAuthenticationStatus == .failed)

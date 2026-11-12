@@ -4,6 +4,7 @@ import Testing
 import OpenID4VP
 import MdocDataModel18013
 import MdocDataTransfer18013
+import MdocSecurity18013
 import protocol OpenID4VP.Networking
 import SwiftyJSON
 @testable import EudiWalletKit
@@ -155,8 +156,72 @@ struct TransactionDataTests {
     }
 }
 
-@Suite("Transaction data service errors")
+@Suite("Transaction data service")
 struct TransactionDataServiceTests {
+    @Test func acceptsTransactionForCredentialMatchingLaterVct() async throws {
+        let id = UUID().uuidString
+        let heldVct = "urn:eu.europa.ec.eudi:pid:1"
+        let area = KeyAttestationTestSecureArea.shared
+        SecureAreaRegistry.shared.register(secureArea: area)
+        let publicKey = try #require(try await area.createKeyBatch(id: id,
+            credentialOptions: .init(credentialPolicy: .rotateUse, batchSize: 1), keyOptions: .init(curve: .P256)).first)
+        let keyBytes = publicKey.x963Representation
+        let jwk = ["kty": "EC", "crv": "P-256",
+                   "x": Data(keyBytes.dropFirst().prefix(32)).base64URLEncodedString(),
+                   "y": Data(keyBytes.suffix(32)).base64URLEncodedString()]
+        let source = try #require(Data(name: "sjwt-pid-python", ext: "txt", from: Bundle.module))
+        var parts = String(decoding: source, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: "~")
+        var jwt = parts[0].components(separatedBy: ".")
+        let payloadData = try #require(Data(base64URLEncoded: jwt[1]))
+        var payload = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+        // Synthetic stored credential: retain the fixture's disclosures, but bind it to
+        // our holder key. Request reception does not reverify the issuer signature.
+        payload["vct"] = heldVct
+        payload["cnf"] = ["jwk": jwk]
+        jwt[1] = try JSONSerialization.data(withJSONObject: payload).base64URLEncodedString()
+        parts[0] = jwt.joined(separator: ".")
+        let credential = Data(parts.joined(separator: "~").utf8)
+        #expect(try SdJwtUtils.parseCnfBindingKeys(fromDocumentData: credential).count == 1)
+
+        let object: [String: Any] = ["type": QesApprovalRequest.typeIdentifier, "credential_ids": ["pid"],
+            "signatureQualifier": "eu_eidas_qes", "numSignatures": 1,
+            "documentDigests": [["hash": "YWJj"]], "hashAlgorithmOID": "2.16.840.1.101.3.4.2.1"]
+        let transaction = try JSONSerialization.data(withJSONObject: object).base64URLEncodedString()
+        var url = URLComponents(string: "openid4vp://authorize")!
+        url.queryItems = [
+            .init(name: "client_id", value: "redirect_uri:https://example.org/response"),
+            .init(name: "response_uri", value: "https://example.org/response"),
+            .init(name: "response_type", value: "vp_token"), .init(name: "response_mode", value: "direct_post"),
+            .init(name: "nonce", value: "nonce"),
+            .init(name: "dcql_query", value: #"{"credentials":[{"id":"pid","format":"dc+sd-jwt","meta":{"vct_values":["urn:eudi:pid:1","urn:eu.europa.ec.eudi:pid:1"]},"claims":[{"path":["family_name"]}]}]}"#),
+            .init(name: "transaction_data", value: String(decoding: try JSONEncoder().encode([transaction]), as: UTF8.self))
+        ]
+        #if canImport(EudiEtsi1196x2)
+        let trust = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        #else
+        let trust = TrustConfiguration(rootIaca: [])
+        #endif
+        let parameters = InitializeTransferData(dataFormats: [id: DocDataFormat.sdjwt.rawValue], documentData: [id: credential],
+            documentKeyIndexes: [id: 0], docMetadata: [:], docDisplayNames: [:],
+            docKeyInfos: [id: DocKeyInfo(secureAreaName: KeyAttestationTestSecureArea.name, batchSize: 1, credentialPolicy: .rotateUse).toData()],
+            trustValidator: trust.accessTrustManager, deviceAuthMethod: "deviceSignature", idsToDocTypes: [id: heldVct],
+            hashingAlgs: [id: "sha-256"], bleTransferMode: .server)
+        let network = TransactionServiceNetwork()
+        let service = try await OpenId4VpService(parameters: parameters, qrCode: Data(url.string!.utf8),
+            openID4VpConfig: .init(supportedTransactionDataTypes: [.qesApprovalRequest], validateRegistrationCertificate: false),
+            networking: network, trustConfig: trust, wrpRegistrationValidator: .init(trustConfig: trust))
+        let options = try await service.receiveRequest()
+        #expect(options.count == 1)
+        let option = try #require(options.first)
+        let name = try #require(option.requestName)
+        #expect(option.itemsRequested[id] != nil)
+        #expect(service.transactionDataByRequest[name]?[id]?.map(\.encodedValue) == [transaction])
+        #expect(await network.bodies.isEmpty)
+        try await area.deleteKeyBatch(id: id, startIndex: 0, batchSize: 1)
+        try await area.deleteKeyInfo(id: id)
+    }
+
     @Test(arguments: [false, true])
     func reportsMissingOrMalformedTransactionToVerifier(malformed: Bool) async throws {
         var object: [String: Any] = ["type": QesApprovalRequest.typeIdentifier, "credential_ids": ["pid"],

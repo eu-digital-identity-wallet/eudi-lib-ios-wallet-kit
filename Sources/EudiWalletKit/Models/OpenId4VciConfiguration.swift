@@ -38,6 +38,12 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let authFlowRedirectionURI: URL
 	/// Configuration that determines how authorization issuance should be handled
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
+	/// Policy for validating the authorization response `iss` parameter (RFC 9207).
+	///
+	/// - `.never` (default): skips issuer validation.
+	/// - `.ifSupported`: requires `iss` when the authorization server advertises support; any received `iss` must match its issuer.
+	/// - `.required`: additionally fails issuance if the authorization server does not advertise support.
+	public let authResponseIssChecking: AuthorizationResponseIssChecking
 	/// Whether to use Pushed Authorization Request (PAR) for enhanced security
 	public let parUsage: ParUsage
 	/// Whether to accept plain JWT proofs without key attestation; otherwise only attested proofs are accepted
@@ -83,6 +89,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		keyAttestationsConfig: KeyAttestationConfiguration? = nil,
 		authFlowRedirectionURI: URL? = nil,
 		authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes,
+		authResponseIssChecking: AuthorizationResponseIssChecking = .never,
 		parUsage: ParUsage = .required(authorizationCodeDPoPBinding: true),
 		allowPlainJwtProof: Bool = false,
 		requireDpop: Bool = true,
@@ -102,6 +109,7 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.keyAttestationsConfig = keyAttestationsConfig
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
+		self.authResponseIssChecking = authResponseIssChecking
 		self.parUsage = parUsage
 		self.allowPlainJwtProof = allowPlainJwtProof
 		self.requireDpop = requireDpop
@@ -226,7 +234,8 @@ extension OpenId4VciConfiguration {
 			requireDpop: requireDpop,
 			supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies,
 			registrationCertificatePolicy: registrationCertificatePolicy,
-			encryptionSupportConfig: encryptionSupportConfig
+			encryptionSupportConfig: encryptionSupportConfig,
+			authResponseIssChecking: authResponseIssChecking
 		)
 	}
 
