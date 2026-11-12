@@ -101,6 +101,22 @@ struct TransactionDataTests {
         #expect(throws: (any Error).self) { try TransactionDataProcessor.assign([transaction], selections: selections, eligibleDocumentIds: [], supportedTypes: [.qesApprovalRequest]) }
     }
 
+    @Test func reassignsTransactionToSelectedSubset() throws {
+        let transaction = try parse(approval(ids: ["pid"]))
+        let option: CredentialSelectionSet = [
+            try .init(credentialId: "a", docType: "pid", queryId: .init(value: "pid"), optionId: "option", claimQueries: []),
+            try .init(credentialId: "b", docType: "pid", queryId: .init(value: "pid"), optionId: "option", claimQueries: [])
+        ]
+        let dcql = try JSONDecoder().decode(DCQL.self, from: Data(#"{"credentials":[{"id":"pid","format":"dc+sd-jwt","multiple":true,"meta":{"vct_values":["pid"]}}]}"#.utf8))
+        let selected = try CredentialQuerySelection.select(dcql: dcql, options: ["option": option], documentIds: ["b"], requestName: "option")
+        let assignments = try TransactionDataProcessor.assign([transaction], selections: selected, eligibleDocumentIds: ["a", "b"], supportedTypes: [.qesApprovalRequest])
+        #expect(assignments.map(\.documentId) == ["b"])
+        #expect(assignments.map(\.queryId) == ["pid"])
+        #expect(throws: (any Error).self) {
+            try TransactionDataProcessor.assign([transaction], selections: selected, eligibleDocumentIds: ["a"], supportedTypes: [.qesApprovalRequest])
+        }
+    }
+
     @Test func differentQueriesGetDifferentProofsEvenForOneDocument() throws {
         let first = try parse(approval(ids: ["pid"]))
         let second = try parse(approval(ids: ["other"]))
