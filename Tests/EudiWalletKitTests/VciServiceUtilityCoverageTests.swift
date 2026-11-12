@@ -6,8 +6,7 @@ import Testing
 import WalletStorage
 @testable import EudiWalletKit
 
-@Suite("OpenID4VCI service utility coverage")
-struct VciServiceUtilityCoverageTests {
+extension MetadataCacheTests.VciServiceUtilityCoverageTests {
     private func loadService(validateRegistrationCertificate: Bool = false, issuerURL: String? = nil) throws -> (OpenId4VciService, CredentialIssuerMetadata) {
         let metadataData = try #require(Data(name: "pid-demo-openid-credential-issuer", ext: "json", from: Bundle.module))
         let metadata = try JSONDecoder().decode(CredentialIssuerMetadata.self, from: metadataData)

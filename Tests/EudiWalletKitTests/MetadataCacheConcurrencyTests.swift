@@ -20,9 +20,11 @@ import OpenID4VCI
 import Testing
 @testable import EudiWalletKit
 
-/// Run with Thread Sanitizer to detect unsynchronized access across service actors.
-@Suite(.serialized)
-struct MetadataCacheConcurrencyTests {
+/// Run these stress tests with Thread Sanitizer for data-race diagnostics:
+/// `swift test --sanitize thread --filter MetadataCacheConcurrencyTests`.
+/// The default CI lane runs without TSan and only checks observable behavior;
+/// these stress tests alone do not reliably detect a race in an unprotected cache.
+extension MetadataCacheTests.MetadataCacheConcurrencyTests {
     @Test("Separate issuer services can resolve metadata while both caches are cleared")
     func concurrentIssuerResolutionAndClearing() async throws {
         OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()

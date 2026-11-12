@@ -21,9 +21,8 @@ import MdocDataModel18013
 
 @testable import EudiWalletKit
 
-@Suite("Issuer of a deferred credential request")
-struct DeferredIssuerMetadataTests {
-	let issuerURL = "https://ec.dev.issuer.eudiw.dev"
+extension MetadataCacheTests.DeferredIssuerMetadataTests {
+	var issuerURL: String { "https://ec.dev.issuer.eudiw.dev" }
 
 	@Test("The deferred issuer carries the issuer metadata with the request encryption keys")
 	func deferredIssuerHasRequestEncryption() async throws {
