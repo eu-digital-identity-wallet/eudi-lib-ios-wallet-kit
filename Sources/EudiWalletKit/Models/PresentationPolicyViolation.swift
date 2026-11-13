@@ -31,6 +31,8 @@ public enum PresentationFailureReason: Sendable, Hashable {
 	case statusMissing
 	/// The WRPRC status list could not be retrieved.
 	case statusRetrievalFailed
+	/// The WRPRC status-list token could not be authenticated.
+	case statusTrustError
 	/// The WRPRC trust chain could not be validated.
 	case trustError
 	/// The WRPRC header type is not a registration certificate type.
@@ -53,6 +55,8 @@ public enum PresentationFailureReason: Sendable, Hashable {
 	case wrprcMismatch
 	/// The WRPRC entitlements do not include the expected operation.
 	case entitlementMissing(expected: String)
+	/// The request has no WRPRC.
+	case wrprcMissing
 	/// An unclassified failure.
 	case other
 
@@ -65,6 +69,7 @@ public enum PresentationFailureReason: Sendable, Hashable {
 		case .statusApplicationSpecific: self = .statusApplicationSpecific
 		case .statusMissing: self = .statusMissing
 		case .statusRetrievalFailed: self = .statusRetrievalFailed
+		case .statusTrustError: self = .statusTrustError
 		case .trustError: self = .trustError
 		case .invalidType: self = .invalidType
 		case .payloadDecodingFailed: self = .payloadDecodingFailed

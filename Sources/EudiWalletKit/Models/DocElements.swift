@@ -131,8 +131,8 @@ public final class SdJwtElements: Identifiable, @unchecked Sendable {
 
 extension IssuerSigned {
 	public func extractMsoMdocElements(docId: String, docType: String, displayName: String?, docClaims: [DocClaim], itemsRequested: [NameSpace: [RequestItem]]) -> MsoMdocElements {
-		let itemsReq = if itemsRequested.count > 0 { itemsRequested } else { Dictionary(grouping: docClaims, by: { $0.path.first! }).mapValues { $0.map { RequestItem(elementPath: Array($0.path.dropFirst())) } } }
-		return MsoMdocElements(docId: docId, docType: docType, displayName: displayName, nameSpacedElements: itemsReq.compactMap { ns, requestItems in
+		// A request without items asks for no selectively disclosable claims (OpenID4VP 1.0 section 6.4.1).
+		return MsoMdocElements(docId: docId, docType: docType, displayName: displayName, nameSpacedElements: itemsRequested.compactMap { ns, requestItems in
 			extractNameSpacedElements(docType: docType, ns: ns, docClaims: docClaims, requestItems: requestItems)
 		})
 	}
@@ -150,7 +150,7 @@ extension SignedSDJWT {
 		guard let allPathsDict = (try? recreateClaims())?.disclosuresPerClaimPath else { return nil }
 		let allPaths = OrderedSet(allPathsDict.keys).union(docClaims.flatMap(\.claimPaths))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
-		let itemsReq = itemsRequested[""] ?? allPaths.map { RequestItem(elementPath: $0.value.map(\.claimName)) }
+		let itemsReq = itemsRequested[""] ?? []
 		let sdJwtArray = Self.buildSdJwtElementTree(itemsReq: itemsReq, allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory, parentPath: [])
 		return SdJwtElements(docId: docId, vct: vct, displayName: displayName, sdJwtElements: sdJwtArray)
 	}

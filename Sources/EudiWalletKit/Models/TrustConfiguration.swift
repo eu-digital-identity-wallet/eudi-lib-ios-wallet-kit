@@ -29,6 +29,11 @@ public struct TrustConfiguration: Sendable {
 	/// The trust policy applied to document status token validation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow status checks to succeed even when the status token trust chain cannot be validated.
 	public let statusTrustPolicy: TrustPolicy
+	/// Trust policy for reader authentication, independent of issuer and registration policies.
+	/// Defaults to `.enforce`. With `.warning`, OpenID4VP valid signed requests may proceed with an
+	/// untrusted certificate chain and report `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate`.
+	/// BLE reports reader authentication results without enforcing them under `.warning`.
+	public let readerTrustPolicy: TrustPolicy
 	/// The trust policy applied to WRPRC validation during OpenID4VP and BLE presentation.
 	/// Defaults to `.enforce`. Set to `.warning` to allow presentation to proceed even when the WRPRC trust chain cannot be validated.
 	public let wrprcVpTrustPolicy: TrustPolicy
@@ -50,6 +55,8 @@ public struct TrustConfiguration: Sendable {
 	let accessTrustManager: EtsiTrustManager
 	/// Trust manager for reader/relying-party registration certificates. Uses the WRPRC verification context.
 	let registrationTrustManager: EtsiTrustManager
+	/// Preserve the ETSI trust context used for status-token signing certificates.
+	var statusTrustManager: EtsiTrustManager { accessTrustManager }
 
 	public init(
 		trustSource: TrustSource,
@@ -58,6 +65,7 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		readerTrustPolicy: TrustPolicy = .enforce,
 		wrprcVpTrustPolicy: TrustPolicy = .warning,
 		wrprcVciTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
@@ -66,6 +74,7 @@ public struct TrustConfiguration: Sendable {
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.readerTrustPolicy = readerTrustPolicy
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew
@@ -98,6 +107,11 @@ public struct TrustConfiguration: Sendable {
 	var issuerTrustManager: SecTrustSource
 	/// Trust manager for reader/relying-party access certificates backed by platform `SecTrust`.
 	let accessTrustManager: SecTrustSource
+	/// Status signers use the configured anchors without the mdoc reader certificate profile.
+	var statusTrustManager: SecTrustSource {
+		SecTrustSource(rootIaca: accessTrustManager.rootIaca, usage: .mdocAuth,
+			revocationPolicy: accessTrustManager.revocationPolicy)
+	}
 
 	public init(
 		rootIaca: [[Data]],
@@ -105,6 +119,7 @@ public struct TrustConfiguration: Sendable {
 		docTypePolicies: [String: TrustPolicy] = [:],
 		requireSignedMetadata: Bool = true,
 		statusTrustPolicy: TrustPolicy = .enforce,
+		readerTrustPolicy: TrustPolicy = .enforce,
 		wrprcVpTrustPolicy: TrustPolicy = .enforce,
 		wrprcVciTrustPolicy: TrustPolicy = .enforce,
 		clockSkew: TimeInterval = 60
@@ -113,6 +128,7 @@ public struct TrustConfiguration: Sendable {
 		self.docTypePolicies = docTypePolicies
 		self.requireSignedMetadata = requireSignedMetadata
 		self.statusTrustPolicy = statusTrustPolicy
+		self.readerTrustPolicy = readerTrustPolicy
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew

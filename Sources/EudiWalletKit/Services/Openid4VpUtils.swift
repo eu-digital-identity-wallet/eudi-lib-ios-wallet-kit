@@ -70,12 +70,13 @@ class OpenId4VpUtils {
 		var zkSpecsRequested: [DocType: [ZkSystemSpec]]?
 		for credQuery in dcql.credentials {
 			let formatRequested: DocDataFormat = credQuery.dataFormat
-			guard let docType = credQuery.docTypeOrVct else { continue }
-			if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
-			inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
-			if let zkSpecs = credQuery.zkSpecs {
-				if zkSpecsRequested == nil { zkSpecsRequested = [:] }
-				zkSpecsRequested![docType] = zkSpecs
+			for docType in credQuery.docTypesOrVcts {
+				if !idsToDocTypes.values.contains(docType) {logger?.warning("Document type \(docType) not in supported document types \(idsToDocTypes.values)")}
+				inputDescriptorMap[docType] = credQuery.id.value; formatsRequested[docType] = formatRequested
+				if let zkSpecs = credQuery.zkSpecs {
+					if zkSpecsRequested == nil { zkSpecsRequested = [:] }
+					zkSpecsRequested![docType] = zkSpecs
+				}
 			}
 		}
 		return (formatsRequested, inputDescriptorMap, zkSpecsRequested)
@@ -111,33 +112,6 @@ class OpenId4VpUtils {
 	}
 
 
-	static func getTransactionDataRequested(_ credentialSetOptions: CredentialSelectionSetOptions, transactionDataList: [TransactionData]) throws -> [(String, RequestTransactionData)] {
-		var result = [(String, RequestTransactionData)]()
-		for (requestName, credentialSet) in credentialSetOptions {
-			var requestTransactionData: RequestTransactionData = [:]
-			for transactionData in transactionDataList {
-				let type = try transactionData.type()
-				let credentialIds = try transactionData.credentialIds()
-				let parameters = try transactionData.decode()
-				for credentialId in credentialIds {
-					if let document = credentialSet.first(
-						where: { value in value.queryId.value == credentialId.value
-						}) {
-						if (requestTransactionData[document.credentialId] == nil) {
-							requestTransactionData[document.credentialId] = [:]
-						}
-						requestTransactionData[document.credentialId]![type.value] = parameters
-						break
-					} else {
-						throw WalletError(description: "Failed to find document for transaction data \(type) with credential id \(credentialId.value)", code: .credentialNotFound)
-					}
-				}
-			}
-			result.append((requestName, requestTransactionData))
-		}
-		return result
-	}
-	
 	static func getVerifierInfoRequested(_ credentialSetOptions: CredentialSelectionSetOptions, verifierInfoList: [VerifierInfo]) -> [(String, RequestVerifierInfo)] {
 		var result = [(String, RequestVerifierInfo)]()
 		for (requestName, credentialSet) in credentialSetOptions {
@@ -170,16 +144,18 @@ class OpenId4VpUtils {
 	static func makeCborClaimData(
 		from docsCbor: [Document.ID: IssuerSigned]?,
 		claimPaths: inout [Document.ID: [ClaimPath]],
-		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+		claimValues: inout [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 	) {
-		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+		var paths = [ClaimPath](); var values = [ClaimPath: [DCQLClaimValue]]()
 		for (docId, issuerSigned) in docsCbor ?? [:] {
 			paths.removeAll(); values.removeAll()
 			guard let isNs = issuerSigned.issuerNameSpaces else { continue }
 			for (ns, items) in isNs.nameSpaces {
 				for item in items {
 					paths.append(ClaimPath([.claim(name: String(ns)), .claim(name: item.elementIdentifier)]))
-					values[paths.last!] = [item.description]
+					if let value = DcqlClaimValueConversion.fromCbor(item.elementValue) {
+						values[paths.last!] = [value]
+					}
 				}
 			}
 			claimPaths[docId] = paths
@@ -190,14 +166,15 @@ class OpenId4VpUtils {
 	static func makeSdJwtClaimData(
 		from docsSdJwt: [Document.ID: SignedSDJWT]?,
 		claimPaths: inout [Document.ID: [ClaimPath]],
-		claimValues: inout [Document.ID: [ClaimPath: [String]]]
+		claimValues: inout [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 	) {
-		var paths = [ClaimPath](); var values = [ClaimPath: [String]]()
+		var paths = [ClaimPath](); var values = [ClaimPath: [DCQLClaimValue]]()
 
 		for (docId, sdjwt) in docsSdJwt ?? [:] {
-			guard let allPathsDict = (try? sdjwt.recreateClaims())?.disclosuresPerClaimPath else { continue }
+			guard let recreated = try? sdjwt.recreateClaims(),
+				  let allPathsDict = recreated.disclosuresPerClaimPath else { continue }
 			paths.removeAll(); values.removeAll()
-			for (p, disclosures) in allPathsDict {
+			for (p, _) in allPathsDict {
 				let mappedElements = p.value.map { element in
 					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
 					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
@@ -205,12 +182,7 @@ class OpenId4VpUtils {
 				}
 				let path = ClaimPath(mappedElements)
 				paths.append(path)
-				values[path] = disclosures.map { disclosure in
-					guard let data = Data(base64URLEncoded: disclosure),
-						  let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
-						  json.count >= 3 else { return disclosure }
-					return if let strValue = json[2] as? String { strValue } else { "\(json[2])" }
-				}
+				values[path] = DcqlClaimValueConversion.fromJson(recreated.recreatedClaims, at: path)
 			}
 			claimPaths[docId] = paths
 			claimValues[docId] = values
@@ -231,7 +203,7 @@ class OpenId4VpUtils {
 		return nil
 	}
 
-	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [TransactionData]?) async throws -> SignedSDJWT? {
+	static func getSdJwtPresentation(_ sdJwt: SignedSDJWT, hashingAlg: HashingAlgorithm, signer: SecureAreaSigner, signAlg: JSONWebAlgorithms.SigningAlgorithm, requestItems: [RequestItem], nonce: String, aud: String, transactionData: [PresentationTransactionData]?, supportedTransactionDataTypes: [SupportedTransactionDataType] = []) async throws -> SignedSDJWT? {
 		guard let allPathsDict = (try sdJwt.recreateClaims()).disclosuresPerClaimPath else { throw WalletError(description: "No disclosures found", code: .internalError) }
 		let allPaths = Array(allPathsDict.keys)
 		print(allPaths.map { p in p.value.map { $0.description } })
@@ -244,10 +216,8 @@ class OpenId4VpUtils {
 		let issuedAtTimestamp = Int(Date().timeIntervalSince1970.rounded())
 		var payload = [Keys.nonce.rawValue: nonce, Keys.aud.rawValue: aud, Keys.iat.rawValue: issuedAtTimestamp, Keys.sdHash.rawValue: sdHash] as [String : Any]
 		  // Process transaction data hashes if available
-		if let transactionData, !transactionData.isEmpty {
-			let transactionDataHashes = transactionData.map { sha256Hash($0.value) }
-			payload["transaction_data_hashes_alg"] = "sha-256"
-			payload["transaction_data_hashes"] = transactionDataHashes
+		if let transactionData {
+			payload.merge(try PresentationTransactionData.keyBindingClaims(transactionData, supportedTypes: supportedTransactionDataTypes)) { _, new in new }
 		}
 		let kbJwt: KBJWT = try KBJWT(header: DefaultJWSHeaderImpl(algorithm: signAlg), kbJwtPayload: JSON(payload))
 		let holderPresentation = try await SDJWTIssuer.presentation(holdersPrivateKey: signer, signedSDJWT: presentedSdJwt, disclosuresToPresent: presentedSdJwt.disclosures, keyBindingJWT: kbJwt)
@@ -281,12 +251,26 @@ extension ClaimPathElement {
 }
 
 extension CredentialQuery {
-	public var docTypeOrVct: String? {
+	/// The first requested type, retained for callers that need a single display value.
+	public var docTypeOrVct: String? { docTypesOrVcts.first }
+
+	/// All accepted document types or SD-JWT VC types for this query.
+	public var docTypesOrVcts: [String] {
 		let mdocTypeValue = meta.dictionaryObject?["doctype_value"]
 		let vctValues = meta.dictionaryObject?["vct_values"]
 		let metaDocType = mdocTypeValue ?? vctValues ?? meta.dictionaryObject?.first?.value
-		let docType = metaDocType as? String ?? (metaDocType as? [String])?.first
-		return docType
+		if let docType = metaDocType as? String { return [docType] }
+		return metaDocType as? [String] ?? []
+	}
+
+	/// Matches every accepted type while preserving each credential's actual type.
+	func matchingCredentials(queryable: any DcqlQueryable) -> [(id: Document.ID, docType: DocType)] {
+		var seen = Set<Document.ID>()
+		return docTypesOrVcts.flatMap { docType in
+			queryable.getCredentials(docOrVctType: docType, docDataFormat: dataFormat)
+				.filter { seen.insert($0).inserted }
+				.map { (id: $0, docType: docType) }
+		}
 	}
 
 	// https://developers.google.com/wallet/identity/verify/accepting-ids-from-wallet-online#zkp
@@ -318,7 +302,7 @@ extension CredentialSelectionSet {
 			let mergedPaths = existing.claimQueries + sel.claimQueries
 			let uniquePaths = Array(Set(mergedPaths.map(\.path.value))).compactMap { p in mergedPaths.first { $0.path.value == p } }
 			remove(existing)
-			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths))
+			append(CredentialSelection(credentialId: sel.credentialId, docType: sel.docType, queryId: existing.queryId, optionId: existing.optionId, claimQueries: uniquePaths, queryIds: existing.queryIds + sel.queryIds.filter { !existing.queryIds.contains($0) }))
 		} else {
 			append(sel)
 		}
@@ -368,14 +352,14 @@ extension OpenId4VpUtils {
 		// Step 1: Process individual credential queries
 		for credQuery in dcql.credentials {
 			guard let docType = credQuery.docTypeOrVct else { throw WalletError(description: "Credential query \(credQuery.id.value) does not have a doc type", code: .invalidQueryResolution) }
-			let format = credQuery.dataFormat
 			let isMultiple = credQuery.multiple == true
 			// Find matching credentials
-			let matchingCredIds = queryable.getCredentials(docOrVctType: docType, docDataFormat: format)
-			let docTypeDisplayName = docTypeDisplayNames[docType] ?? docType
-			if matchingCredIds.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential of type \(docTypeDisplayName) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
+			let matchingCredentials = credQuery.matchingCredentials(queryable: queryable)
+			let docTypeDisplayName = credQuery.docTypesOrVcts.map { docTypeDisplayNames[$0] ?? $0 }.joined(separator: ", ")
+			if matchingCredentials.isEmpty, dcql.credentialSets == nil { throw WalletError(description: "Credential of type \(docTypeDisplayName) cannot be found.", code: .credentialNotFound, context: ["docType": docType]) }
 			// Try to find credentials that satisfy the claim requirements
-			for (credIndex, credId) in matchingCredIds.enumerated() {
+			for (credIndex, credential) in matchingCredentials.enumerated() {
+				let (credId, docType) = credential
 				do {
 					let optionId = !isMultiple ? "\(credQuery.id.value)-\(credIndex)" : credQuery.id.value
 					let claimPaths = try resolveClaimsForCredential(credQuery: credQuery, credId: credId, queryable: queryable)
@@ -493,7 +477,7 @@ extension OpenId4VpUtils {
 		}
 		if resultDict.isEmpty {
 			let notFoundCred = dcql.credentials.first { c in credentialQueryResults[c.id]?.isEmpty != false }
-			if let notFoundCred {logger.warning("No credential found matching docType/vct: \(notFoundCred.docTypeOrVct ?? "") with format: \(notFoundCred.format)")}
+			if let notFoundCred {logger.warning("No credential found matching docType/vct: \(notFoundCred.docTypesOrVcts.joined(separator: ", ")) with format: \(notFoundCred.format)")}
 			throw lastError ?? WalletError(description: "DCQL query could not be satisfied", code: .dcqlQueryNotSatisfied)
 		}
 		return resultDict
@@ -546,7 +530,7 @@ extension OpenId4VpUtils {
 
 	/// Resolves claims for a specific credential query and credential
 	/// - Throws: WalletError if claims cannot be satisfied, with details about the first missing claim
-	private static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) throws(WalletError) -> [ClaimsQuery] {
+	static func resolveClaimsForCredential(credQuery: CredentialQuery, credId: String, queryable: DcqlQueryable) throws(WalletError) -> [ClaimsQuery] {
 		// If no claims specified, return empty array (only mandatory claims)
 		guard let claims = credQuery.claims, !claims.isEmpty else {
 			return []

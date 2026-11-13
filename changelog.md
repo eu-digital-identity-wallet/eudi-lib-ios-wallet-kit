@@ -1,3 +1,29 @@
+## Unreleased
+
+- Synchronize shared issuer and authorization-server metadata caches across OpenID4VCI service actors, including cache clearing.
+
+- Add `OpenId4VpConfiguration.jarSigningAlgorithms` to set the JWS algorithms accepted for signed request objects and advertised in `wallet_metadata`. `nil` keeps the library default (ES256).
+
+- Add `OpenId4VpConfiguration.requiresJarEncryption`, defaulting to `true` (current behavior). With `false`, the wallet accepts a signed, unencrypted request object fetched with `request_uri_method=post`; the signature and verifier certificate are still validated.
+
+- Add `TrustConfiguration.readerTrustPolicy` for OpenID4VP reader access certificates, defaulting to `.enforce`. With `.warning`, valid signed requests may proceed with an untrusted certificate chain; signature verification and certificate-chain parsing remain required.
+
+- Add `ReaderAuthenticationStatus.authenticatedWithUntrustedCertificate` to distinguish policy-accepted requests from trusted reader authentication. Update exhaustive switches over this enum and use `PresentationSession.readerAuthenticationStatus` for reader authentication
+
+- Update `eudi-lib-ios-iso18013-data-transfer` and the resolved `eudi-lib-ios-iso18013-security` dependency to version 0.28.0.
+- Update the transitive `EudiEtsi1196x2` library to v0.4.0-alpha.4 through the security package, allowing certificates with non-critical `basicConstraints` to be accepted.
+
+- Remove the unused `cacheIssuerMetadata` argument from `OpenId4VciConfiguration.init` and `verifierApiUri` from the preregistered verifier convenience initializer. Callers must remove these arguments; existing runtime behavior is unchanged.
+
+- Add `jarSigningAlg` to the preregistered verifier convenience initializer, defaulting to RS256, to support verifiers using other request signing algorithms such as ES256.
+
+## v0.54.0
+
+- Add optional Trust Mark support through `EudiWallet.trustMarkManager`, configured with static information or a dynamic `TrustMarkProvider` via `trustMarkSource`.
+- Add `TrustMarkManager.getTrustMark()` to retrieve Trust Mark display resources and certification links using the wallet's networking client.
+- Make `EudiWallet.extractCredentialIssuerURL(from:)` public.
+
+
 ## v0.53.4
 
 - Update `eudi-lib-ios-openid4vp-swift` to version 0.43.0.
@@ -1638,7 +1664,7 @@ OS16 offer url parsing issue
 d4VP fixes and updates
 The flow is supported by existing methods:
 - Update eudi-lib-ios-siop-openid4vp to version 0.1.1
-1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`nid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
+1 - An issue offer url is scanned. The following method is called: `public func resolveOfferUrlDocTypes(uriOffer: String) async throws -> OfferedIssueModel`nid4vp certificate chain verification (PresentationSession's `readerCertIssuer` property)
 ### (Breaking change, the return value type is `OfferedIssueModel` instead of `[OfferedDocModel]`)y to PresentationSession
 
 2 - If `OfferedIssueModel.isTxCodeRequired` is true, the call to `` must include the transaction code (parameter `txCodeValue`).
@@ -1658,7 +1684,7 @@ The flow is supported by existing methods:
 ### Openid4VP fixes and updatesking change - docModels contains not-nil items (SwiftUI breaks with nil items)
 
 - Update eudi-lib-ios-siop-openid4vp to version 0.1.1
-- Fix openid4vp certificate chain verification (PresentationSession's  `readerCertIssuerValid` and `readerCertIssuer` properties)
+- Fix openid4vp certificate chain verification (PresentationSession's `readerCertIssuer` property)
 - Add `readerLegalName` property to PresentationSession
 
 ## v0.4.8- PresentationSession / func sendResponse: itemsToSend dictionary is keyed by docId (and not docType)
@@ -1734,7 +1760,7 @@ DisplayStrings is recursive (cbor elements can be dictionaries)
 ## v0.3.2
 - Internal updates for security checks
 
-## v0.3.1- `PresentationSession`: add `readerCertIssuerValid`` (is verifier certificate trusted)
+## v0.3.1
 - Updated presentation definition parsingtationSession`: change `readerCertIssuer`` (has verifier certificate common name)
 () -> [String: Any]`
 ## v0.3.0
@@ -1754,7 +1780,6 @@ ocumentation in README.md ([#81](https://github.com/eu-digital-identity-wallet/e
 ## v0.1.6allet-kit/pull/68)) via [@phisakel](https://github.com/phisakel)
 - Add isMandatory property to DocElementsViewModel structure via [@phisakel](https://github.com/phisakel)
 - `PresentationSession` methods do not run on main actor) via [@phisakel](https://github.com/phisakel)
-- `PresentationSession`: add `readerCertIssuerValid`` (is verifier certificate trusted)com/phisakel)
 - `PresentationSession`: change `readerCertIssuer`` (has verifier certificate common name)
 - `MdocDecodable`: add extension method: `public func toJson() -> [String: Any]`
 

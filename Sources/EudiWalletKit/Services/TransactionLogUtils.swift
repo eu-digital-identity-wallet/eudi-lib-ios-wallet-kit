@@ -125,7 +125,7 @@ enum TransactionLogUtils {
 	/// Preserves the transaction identifier and time, resets the result and presented claims,
 	/// and leaves other transaction types unchanged.
 	static func withRequest(_ claims: [ClaimInfo],
-		policy: WrpRegistrationPolicy?, name: String?, identifier: String? = nil, transactionLog: inout TransactionEntry) {
+		policy: WrpRegistrationPolicy?, name: String?, identifier: String? = nil, transactionalData: TransactionalData? = nil, transactionLog: inout TransactionEntry) {
 		guard case let .presentation(previous) = transactionLog else { return }
 		let dpa = policy?.supervisoryAuthority
 		transactionLog = .presentation(.init(
@@ -144,7 +144,8 @@ enum TransactionLogUtils {
 			purpose: policy.flatMap { transactionPurposes($0) },
 			privacyPolicy: policy?.privacyPolicy.map { [.init(type: Policy.privacyPolicy, policyURI: $0)] },
 			dpaName: dpa?.name.map { .init(lang: defaultLang, content: $0) },
-			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } }
+			dpaContact: dpa.map { [$0.email, $0.phone, $0.uri].compactMap { $0 } },
+			transactionalData: transactionalData
 		))
 	}
 
@@ -247,6 +248,7 @@ enum TransactionLogUtils {
 			privacyPolicy: previous.privacyPolicy,
 			dpaName: previous.dpaName,
 			dpaCountry: previous.dpaCountry,
-			dpaContact: previous.dpaContact))
+			dpaContact: previous.dpaContact,
+			transactionalData: previous.transactionalData))
 	}
 }

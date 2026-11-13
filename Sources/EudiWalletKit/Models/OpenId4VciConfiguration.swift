@@ -38,6 +38,12 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let authFlowRedirectionURI: URL
 	/// Configuration that determines how authorization issuance should be handled
 	public let authorizeIssuanceConfig: AuthorizeIssuanceConfig
+	/// Policy for validating the authorization response `iss` parameter (RFC 9207).
+	///
+	/// - `.never` (default): skips issuer validation.
+	/// - `.ifSupported`: requires `iss` when the authorization server advertises support; any received `iss` must match its issuer.
+	/// - `.required`: additionally fails issuance if the authorization server does not advertise support.
+	public let authResponseIssChecking: AuthorizationResponseIssChecking
 	/// Whether to use Pushed Authorization Request (PAR) for enhanced security
 	public let parUsage: ParUsage
 	/// Whether to accept plain JWT proofs without key attestation; otherwise only attested proofs are accepted
@@ -60,6 +66,17 @@ public struct OpenId4VciConfiguration: Sendable {
 	public let userAuthenticationRequired: Bool
 	/// Key options for generating DPoP keys, if DPoP is used
 	public let dpopKeyOptions: KeyOptions?
+	/// Sign DPoP proofs with the client-attestation proof-of-possession key instead of a
+	/// separate per-issuer DPoP key, for authorization servers that bind the sender-constrained
+	/// access token to the wallet instance attestation's `cnf` key. Only applies when the client
+	/// is attested (``keyAttestationsConfig`` set and the server advertises attestation algorithms).
+	public let dpopUsesClientAttestationKey: Bool
+	/// Builder used to create client-attestation proofs of possession.
+	public let clientAttestationPoPBuilder: (any ClientAttestationPoPBuilder)
+	/// Wallet-side configuration of credential request / response encryption.
+	public let encryptionSupportConfig: EncryptionSupportConfig
+	/// Presents the authorization URL to the user during the authorization code flow and returns the redirect.
+	public let authorizationFlowHandler: (any AuthorizationFlowHandler)
 
 	public init(
 		credentialIssuerURL: String?,
@@ -67,21 +84,26 @@ public struct OpenId4VciConfiguration: Sendable {
 		keyAttestationsConfig: KeyAttestationConfiguration? = nil,
 		authFlowRedirectionURI: URL? = nil,
 		authorizeIssuanceConfig: AuthorizeIssuanceConfig = .favorScopes,
+		authResponseIssChecking: AuthorizationResponseIssChecking = .never,
 		parUsage: ParUsage = .required(authorizationCodeDPoPBinding: true),
 		allowPlainJwtProof: Bool = false,
 		requireDpop: Bool = true,
 		issuerMetadataPolicy: IssuerMetadataPolicy = .ignoreSigned,
 		validateRegistrationCertificate: Bool = false,
-		cacheIssuerMetadata: Bool = true,
 		userAuthenticationRequired: Bool = false,
 		dpopKeyOptions: KeyOptions? = nil,
-		trustedIssuerCertificates: [x5chain]? = nil
+		dpopUsesClientAttestationKey: Bool = false,
+		trustedIssuerCertificates: [x5chain]? = nil,
+		clientAttestationPoPBuilder: any ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder(),
+		encryptionSupportConfig: EncryptionSupportConfig = .init(),
+		authorizationFlowHandler: (any AuthorizationFlowHandler)? = nil
 	) {
 		self.credentialIssuerURL = credentialIssuerURL
 		self.clientId = clientId
 		self.keyAttestationsConfig = keyAttestationsConfig
 		self.authFlowRedirectionURI = authFlowRedirectionURI ?? URL(string: "eudi-openid4ci://authorize")!
 		self.authorizeIssuanceConfig = authorizeIssuanceConfig
+		self.authResponseIssChecking = authResponseIssChecking
 		self.parUsage = parUsage
 		self.allowPlainJwtProof = allowPlainJwtProof
 		self.requireDpop = requireDpop
@@ -89,6 +111,10 @@ public struct OpenId4VciConfiguration: Sendable {
 		self.validateRegistrationCertificate = validateRegistrationCertificate
 		self.userAuthenticationRequired = userAuthenticationRequired
 		self.dpopKeyOptions = dpopKeyOptions
+		self.dpopUsesClientAttestationKey = dpopUsesClientAttestationKey
+		self.clientAttestationPoPBuilder = clientAttestationPoPBuilder
+		self.encryptionSupportConfig = encryptionSupportConfig
+		self.authorizationFlowHandler = authorizationFlowHandler ?? ASWebAuthenticationSessionFlowHandler()
 	}
 }
 
@@ -188,10 +214,22 @@ extension OpenId4VciConfiguration {
 		} else {
 			try makePublicClient()
 		}
-		let clientAttestationPoPBuilder: ClientAttestationPoPBuilder = DefaultClientAttestationPoPBuilder()
 		let jwsAlgorithms = [CoseEcCurve.P256, .P384, .P521].compactMap { $0.jwsAlgorithm }
 		let proofTypesPolicy: ProofTypesPolicy = allowPlainJwtProof ? .acceptAll(supportedAlgorithms: jwsAlgorithms) : .haipCompliant(algorithms: jwsAlgorithms)
-		return OpenId4VCIConfig(client: client, authFlowRedirectionURI: authFlowRedirectionURI, authorizeIssuanceConfig: authorizeIssuanceConfig, requirePAR: parUsage, clientAttestationPoPBuilder: clientAttestationPoPBuilder, issuerMetadataPolicy: issuerMetadataPolicy, proofTypesPolicy: proofTypesPolicy, requireDpop: requireDpop, supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies, registrationCertificatePolicy: registrationCertificatePolicy)
+		return OpenId4VCIConfig(
+			client: client,
+			authFlowRedirectionURI: authFlowRedirectionURI,
+			authorizeIssuanceConfig: authorizeIssuanceConfig,
+			requirePAR: parUsage,
+			clientAttestationPoPBuilder: clientAttestationPoPBuilder,
+			issuerMetadataPolicy: issuerMetadataPolicy,
+			proofTypesPolicy: proofTypesPolicy,
+			requireDpop: requireDpop,
+			supportedCredentialReusePolicies: Self.supportedCredentialReusePolicies,
+			registrationCertificatePolicy: registrationCertificatePolicy,
+			encryptionSupportConfig: encryptionSupportConfig,
+			authResponseIssChecking: authResponseIssChecking
+		)
 	}
 
 	private func makePublicClient() throws -> Client {
@@ -212,11 +250,11 @@ extension OpenId4VciConfiguration {
 			throw WalletError(description: "Unsupported DPoP algorithm: \(popConstructor.algorithm.name) for client attestation", code: .unsupportedAlgorithm)
 		}
 		let popJwtSpec = try ClientAttestationPoPJWTSpec(signingAlgorithm: signatureAlgorithm, duration: config.popKeyDuration ?? 300.0, typ: "oauth-client-attestation-pop+jwt")
-		let attestation = try await attestationsProvider.getWalletAttestation(signingKey: signingKey)
-		let attestationJWT = try ClientAttestationJWT(jws: JWS(compactSerialization: attestation))
+		let attestationCache = WalletAttestationCache(provider: attestationsProvider, signingKey: signingKey)
+		let attestationJWT = try await attestationCache.attestation()
 		let resolvedClientId = try clientId ?? attestationJWT.decodeAsClientAttestationClaims().subject.value
 		let client: Client = .attested(id: resolvedClientId, alg: popConstructor.algorithm, jwk: popConstructor.jwk, popJwtSpec: popJwtSpec, clientAttestationProvider: { _ in
-			return (attestationJWT, signingKey)
+			return (try await attestationCache.attestation(), signingKey)
 		})
 		return client
 	}
@@ -232,6 +270,25 @@ extension OpenId4VciConfiguration {
 	///
 	/// - Parameter credentialIssuerId: The credential issuer identifier to hash
 	/// - Returns: A deterministic, stable key alias for the given issuer
+	/// The key DPoP proofs are signed with: the client-attestation proof-of-possession key when
+	/// ``dpopUsesClientAttestationKey`` is set and the client is attested, the per-issuer DPoP
+	/// key otherwise.
+	func dpopKey(credentialIssuerId: String, clientAttestationAlgorithms: [JWSAlgorithm]?) -> (id: String, keyOptions: KeyOptions?) {
+		if dpopUsesClientAttestationKey, let keyAttestationsConfig, clientAttestationAlgorithms != nil {
+			return (Self.generatePopKeyId(popUsage: .clientAttestation, credentialIssuerId: credentialIssuerId), keyAttestationsConfig.popKeyOptions)
+		}
+		return (Self.generatePopKeyId(popUsage: .dpop, credentialIssuerId: credentialIssuerId), dpopKeyOptions)
+	}
+
+	/// A missing or unknown stored key id selects the per-issuer DPoP key.
+	func deferredDpopKey(storedKeyId: String?, credentialIssuerId: String) -> (id: String, keyOptions: KeyOptions?) {
+		let attestationKeyId = Self.generatePopKeyId(popUsage: .clientAttestation, credentialIssuerId: credentialIssuerId)
+		if storedKeyId == attestationKeyId, let keyAttestationsConfig {
+			return (attestationKeyId, keyAttestationsConfig.popKeyOptions)
+		}
+		return (Self.generatePopKeyId(popUsage: .dpop, credentialIssuerId: credentialIssuerId), dpopKeyOptions)
+	}
+
 	static func generatePopKeyId(popUsage: PopUsage, credentialIssuerId: String) -> String {
 		// Create a hash of the issuer ID to get a stable, URL-safe identifier
 		let data = Data(credentialIssuerId.utf8)

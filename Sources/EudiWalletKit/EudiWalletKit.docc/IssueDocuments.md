@@ -1,4 +1,4 @@
-## Issue document using OpenID4VCI
+# Issue documents using OpenID4VCI
 
 The library provides the functionality to issue documents using OpenID4VCI. 
 
@@ -94,7 +94,10 @@ do {
     credentialOptions: credentialOptions,
     keyOptions: keyOptions
   )
-  // all documents (response.documents) have been added to wallet storage
+  // All returned documents (response.documents) have been added to wallet storage.
+  for failure in response.failures {
+    print("Not issued: \(failure.configurationIdentifier): \(failure.error.localizedDescription)")
+  }
 }
 catch {
   // display error
@@ -102,6 +105,11 @@ catch {
 ```
 
 This method efficiently issues multiple documents from the same issuer by creating a single credential offer with all requested document types.
+
+If one credential configuration fails, the other issuance tasks continue. `response.documents` contains the documents already saved in the wallet, and `response.failures` identifies each failed configuration with its document type (or VCT) and original error. Run post-issuance registration for the returned documents and retry only the failed configurations to avoid duplicates.
+
+Setup and authorization failures still throw. If every issuance task fails, the original error for the first requested configuration is thrown. Callers using `OpenId4VciService` directly can use `issueDocumentsWithResults` to receive the same per-configuration results; the existing `issueDocuments` method continues to return the successfully stored documents.
+
 
 #### Get Default Credential Options
 
@@ -215,6 +223,20 @@ let newDocs = try await wallet.issueDocumentsByOfferUrl(
 
 For the authorization code flow to work, the redirect URI must be specified via the `authFlowRedirectionURI` parameter of ``OpenId4VciConfiguration``.
 The user is redirected in an authorization web view to the issuer's authorization endpoint. After the user authenticates and authorizes the request, the issuer redirects the user back to the application with an authorization code. The library exchanges the authorization code for an access token and issues the document.
+
+Use ``OpenId4VciConfiguration/authResponseIssChecking`` to control validation of the authorization response `iss` parameter (RFC 9207). The default, `.never`, skips validation. With `.ifSupported`, `iss` is required when the authorization server advertises support, and any received `iss` must match the server's issuer. With `.required`, issuance also fails if the server does not advertise support.
+
+```swift
+let config = OpenId4VciConfiguration(
+    credentialIssuerURL: "https://issuer.example",
+    clientId: "wallet-client",
+    authResponseIssChecking: .required
+)
+```
+
+#### Client-driven web authorization
+
+By default the library presents the authorization flow in an `ASWebAuthenticationSession`. An application can take over this step by providing its own ``AuthorizationFlowHandler`` in the ``OpenId4VciConfiguration/authorizationFlowHandler`` property. The handler receives the authorization URL and the configured redirect URI, presents the authorization flow however it wants (external browser, `SFSafariViewController`, or in any other custom way) and returns the full redirect URL once the authorization server redirects back. The redirect URL may alternatively contain a presentation request in case of <doc:IssueDocuments#Dynamic-issuance>.
 
 ### Pre-Authorization code flow
 

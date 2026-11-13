@@ -39,7 +39,7 @@ public enum ClientIdScheme: Sendable {
 	/// whitelisted with their credentials and metadata.
 	///
 	/// - Parameter preregisteredClients: List of pre-approved client configurations with their
-	///   client IDs, legal names, API endpoints, and cryptographic parameters
+	///   client IDs, legal names, and cryptographic parameters
 	case preregistered([PreregisteredClient])
 
 	/// Client identifier scheme using X.509 certificate validation with DNS Subject Alternative Names.
@@ -111,6 +111,24 @@ public struct OpenId4VpConfiguration: Sendable {
 	/// `.onlyAuthenticatedClients` to restrict these notifications to authenticated verifiers.
 	/// Responses are only attempted when the OpenID4VP library provides dispatch details.
 	public let errorDispatchPolicy: ErrorDispatchPolicy
+	/// Whether the wallet requires the request object fetched with `request_uri_method=post` to be encrypted (JWE).
+	///
+	/// Defaults to `true`: a verifier answering with a plain signed request object (JWS) is rejected.
+	/// Setting `false` lets the wallet accept a signed, unencrypted request object. The signature and the
+	/// verifier certificate are validated in both modes; only the confidentiality of the request object in transit is lowered.
+	///
+	/// - Note: With `false`, OpenID4VP does not currently include `authorization_encryption_alg_values_supported` and
+	///   `authorization_encryption_enc_values_supported` in `wallet_metadata`, even if response encryption is configured.
+	public let requiresJarEncryption: Bool
+	/// JWS algorithms the wallet accepts for a signed request object fetched through `request_uri`.
+	///
+	/// `nil` keeps the library default (ES256). An empty list is invalid: the presentation request fails with
+	/// ``WalletError/Code/unsupportedAlgorithm``. The list is also advertised to the verifier in
+	/// `wallet_metadata.request_object_signing_alg_values_supported`.
+	///
+	/// - Note: OpenID4VP does not currently apply this list to a request object passed by value (`request`).
+	///   The signature of such a request is still verified.
+	public let jarSigningAlgorithms: [JWSAlgorithm]?
 	
 	public static let defaultClientIdSchemes: [ClientIdScheme] = [.x509SanDns, .x509Hash, .redirectUri]
 
@@ -121,20 +139,30 @@ public struct OpenId4VpConfiguration: Sendable {
 		self.preferredResponseMode = nil
 		self.validateRegistrationCertificate = true
 		self.errorDispatchPolicy = .allClients
+		self.requiresJarEncryption = true
+		self.jarSigningAlgorithms = nil
 	}
 
-	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients) {
+	public init(clientIdSchemes: [ClientIdScheme]? = nil, responseEncryptionConfiguration: ResponseEncryptionConfiguration? = nil, preferredResponseMode: PreferredResponseMode? = nil, supportedTransactionDataTypes: [SupportedTransactionDataType] = [], validateRegistrationCertificate: Bool = true, errorDispatchPolicy: ErrorDispatchPolicy = .allClients, requiresJarEncryption: Bool = true, jarSigningAlgorithms: [JWSAlgorithm]? = nil) {
 		self.clientIdSchemes = clientIdSchemes ?? Self.defaultClientIdSchemes
 		self.responseEncryptionConfiguration = responseEncryptionConfiguration
 		self.preferredResponseMode = preferredResponseMode
 		self.supportedTransactionDataTypes = supportedTransactionDataTypes
 		self.validateRegistrationCertificate = validateRegistrationCertificate
 		self.errorDispatchPolicy = errorDispatchPolicy
+		self.requiresJarEncryption = requiresJarEncryption
+		self.jarSigningAlgorithms = jarSigningAlgorithms
 	}
 }
 
 extension PreregisteredClient {
-	public init(clientId: String, verifierApiUri: String, verifierLegalName: String, webKeys: WebKeySet) {
-		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: JWSAlgorithm(.RS256), jwkSetSource: WebKeySource.passByValue(webKeys: webKeys))
+	/// Creates a preregistered verifier using an inline JSON Web Key Set.
+	/// - Parameters:
+	///   - clientId: The registered verifier client identifier.
+	///   - verifierLegalName: The verifier name displayed to the user.
+	///   - webKeys: Public keys used to verify signed authorization requests.
+	///   - jarSigningAlg: The expected request signing algorithm. Defaults to RS256.
+	public init(clientId: String, verifierLegalName: String, webKeys: WebKeySet, jarSigningAlg: JWSAlgorithm = JWSAlgorithm(.RS256)) {
+		self.init(clientId: clientId, legalName: verifierLegalName, jarSigningAlg: jarSigningAlg, jwkSetSource: WebKeySource.passByValue(webKeys: webKeys))
 	}
 }
