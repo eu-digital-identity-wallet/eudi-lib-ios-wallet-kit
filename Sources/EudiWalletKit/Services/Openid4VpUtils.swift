@@ -286,7 +286,8 @@ extension CredentialQuery {
 }
 
 extension ClaimPath {
-	public func contains2(_ that: ClaimPath) -> Bool { zip(self.value, that.value).allSatisfy { (selfElement, thatElement) in selfElement.contains(thatElement) } }
+	/// True when `that` is this path or a path below it. A longer path never contains a shorter path.
+	public func contains2(_ that: ClaimPath) -> Bool { self.value.count <= that.value.count && zip(self.value, that.value).allSatisfy { (selfElement, thatElement) in selfElement.contains(thatElement) } }
 }
 
 extension DCQL {
