@@ -880,25 +880,21 @@ public actor OpenId4VciService {
 			logger.notice(configuration.format == .cbor ? "Base64URL mdoc data:\n\(str)" : "sd-jwt credential data:\n\(str)")
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
 		}
-		let credData: [(Data, Data)] = try credentials.enumerated().flatMap { index, credential in
+		let issued: [String] = try credentials.flatMap { credential in
 		if case let .string(str) = credential  {
 			logger.notice("Issued credential data:\n\(str)")
-			return [(toData(str), try bindingKey(publicKeys, at: index))]
+			return [str]
 		} else if case let .json(json) = credential, json.type == .array, json.first != nil {
 			let compactParser = CompactParser()
 			let parseJsonToJwt = { (json: JSON) -> String in
 				do { return try compactParser.stringFromJwsJsonObject(json) }
 				catch { return json.stringValue }
 			}
-			let response = try json.enumerated().map { j in
-				let str = parseJsonToJwt(j.element.1["credential"])
-				return (toData(str), try bindingKey(publicKeys, at: j.offset))
-			}
-			logger.notice("Issued credential data:\n\(String(data: response.first!.0, encoding: .utf8) ?? "")")
-			return response
+			return json.map { parseJsonToJwt($0.1["credential"]) }
 		} else {
 			throw WalletError(description: "Invalid credential", code: .issuanceRequestFailed)
 		} }
+		let credData: [(Data, Data)] = try issued.enumerated().map { index, str in (toData(str), try bindingKey(publicKeys, at: index)) }
 		return .issued(credData, configuration, authorized, notificationId: notificationId)
 	}
 

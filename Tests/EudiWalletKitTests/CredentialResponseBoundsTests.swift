@@ -86,6 +86,34 @@ struct CredentialResponseBoundsTests {
 		#expect(data.map(\.publicKey) == [Data([0]), Data([1])])
 	}
 
+	@Test func eachCredentialInSeveralArraysGetsItsKey() async throws {
+		let first = JSON([["credential": "a"], ["credential": "b"]])
+		let second = JSON([["credential": "c"]])
+		let outcome = try await handle([.json(first), .string("d"), .json(second)], keyCount: 4)
+		guard case let .issued(data, _, _, _) = outcome else {
+			Issue.record("Expected an issued outcome")
+			return
+		}
+		#expect(data.map(\.publicKey) == [Data([0]), Data([1]), Data([2]), Data([3])])
+	}
+
+	@Test func moreCredentialsInSeveralArraysThanKeysThrows() async throws {
+		let first = JSON([["credential": "a"], ["credential": "b"]])
+		let second = JSON([["credential": "c"], ["credential": "d"]])
+		await #expect(throws: WalletError.self) {
+			_ = try await handle([.json(first), .json(second)], keyCount: 2)
+		}
+	}
+
+	@Test func fewerCredentialsThanKeysIsAccepted() async throws {
+		let outcome = try await handle([.string("a")], keyCount: 3)
+		guard case let .issued(data, _, _, _) = outcome else {
+			Issue.record("Expected an issued outcome")
+			return
+		}
+		#expect(data.map(\.publicKey) == [Data([0])])
+	}
+
 	@Test func deferredIssuanceWithoutEndpointThrows() throws {
 		let metadata = try JSONDecoder().decode(
 			CredentialIssuerMetadata.self,
