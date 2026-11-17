@@ -512,8 +512,9 @@ extension DocClaimsModelConfiguration {
 extension MdocDataModel18013.CoseKey {
 	var jwk: JSONWebKey.JWK {
 		get throws {
-			guard let curve = JSONWebKey.JWK.CryptographicCurve(rawValue: crv.jwkName) else {
-			throw WalletError(description: "Unsupported CoseKey curve for JWK conversion: \(crv.jwkName)", code: .unsupportedAlgorithm)
+			let curveName = try crv.jwkName
+			guard let curve = JSONWebKey.JWK.CryptographicCurve(rawValue: curveName) else {
+			throw WalletError(description: "Unsupported CoseKey curve for JWK conversion: \(curveName)", code: .unsupportedAlgorithm)
 			}
 			return JSONWebKey.JWK(keyType: .ellipticCurve, curve: curve, x: Data(x), y: Data(y))
 		}
