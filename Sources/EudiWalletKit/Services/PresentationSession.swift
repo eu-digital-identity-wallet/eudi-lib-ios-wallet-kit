@@ -225,7 +225,7 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 	func updateKeyBatchInfoAndDeleteCredentialIfNeeded(presentedIds: [Document.ID], zkpDocumentIds: [Document.ID]?) async throws {
 		for (id, dpi) in docIdToPresentInfo where presentedIds.contains(id) {
 			if let zkpDocumentIds, zkpDocumentIds.contains(id) { continue }
-			let secureArea = SecureAreaRegistry.shared.get(name: dpi.secureAreaName)
+			let secureArea = try SecureAreaRegistry.shared.get(name: dpi.secureAreaName)
 			guard let keyIndex = documentKeyIndexes[id] else { continue }
 			let newKeyBatchInfo = try await secureArea.updateKeyBatchInfo(id: id, keyIndex: keyIndex)
 			if newKeyBatchInfo.credentialPolicy == .oneTimeUse {
