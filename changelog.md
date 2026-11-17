@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Synchronize shared issuer and authorization-server metadata caches across OpenID4VCI service actors, including cache clearing.
+
 - Add `OpenId4VpConfiguration.jarSigningAlgorithms` to set the JWS algorithms accepted for signed request objects and advertised in `wallet_metadata`. `nil` keeps the library default (ES256).
 
 - Add `OpenId4VpConfiguration.requiresJarEncryption`, defaulting to `true` (current behavior). With `false`, the wallet accepts a signed, unencrypted request object fetched with `request_uri_method=post`; the signature and verifier certificate are still validated.

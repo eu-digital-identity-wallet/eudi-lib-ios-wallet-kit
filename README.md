@@ -678,21 +678,36 @@ On view appearance the attestations are presented with the receiveRequest method
 	 _ = await presentationSession.receiveRequest()
 }
 ```
-After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each element is a `[DocElements]` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code. The optional `deviceNameSpacesToSend` parameter can be used to include device-signed namespaces in the response:
+After the request is received the ``presentationSession.disclosedDocumentSets`` contains an array of credential selection options. Each `DisclosedDocumentSet` contains `docElements` representing one valid combination of credentials that satisfies the query. The selected state of the items can be modified via UI binding. Finally, the response is sent with the following code. The optional `deviceNameSpacesToSend` parameter can be used to include device-signed namespaces in the response:
 
 ```swift
 // Use the first credential selection option (or let the user choose)
-let selectedOption = presentationSession.disclosedDocumentSets.first ?? []
+guard let selectedOption = presentationSession.disclosedDocumentSets.first else { return }
 
 // Send the disclosed document items after biometric authentication (FaceID or TouchID)
 // if the user cancels biometric authentication, onCancel method is called
- await presentationSession.sendResponse(userAccepted: true,
-  itemsToSend: selectedOption.items, onCancel: { dismiss() }, onSuccess: {
+ try await presentationSession.sendResponse(userAccepted: true,
+  itemsToSend: selectedOption.docElements.items, requestName: selectedOption.requestName, onCancel: { dismiss() }, onSuccess: {
 			if let url = $0 { 
         // handle URL
        }
 		})
 ```
+
+For DCQL requests, `credentialSelections` maps each document's `credentialId` to its `queryIds`. `credentialQueries` exposes each query's `multiple` and `required` constraints within the option; `credentialSets` preserves the original grouped alternatives and required flags. These fields are empty or `nil` for proximity requests.
+
+For a `multiple: true` query, let the user choose matching documents and pass their items with the option's `requestName`:
+
+```swift
+let chosenDocuments = selectedOption.docElements.filter { chosenDocumentIds.contains($0.docId) }
+try await presentationSession.sendResponse(
+  userAccepted: true,
+  itemsToSend: chosenDocuments.items,
+  requestName: selectedOption.requestName
+)
+```
+
+The kit rejects empty selections, documents outside the option, and selections that leave required credential sets unsatisfied. It preserves every selected document's query IDs, including when queries share a document type. Transaction data is reassigned to eligible selected documents before signing; the response fails if those documents cannot authorize every transaction. The option's `transactionData` shows the initial assignments for consent, so display all transactions even when the user deselects an initially assigned document.
 
 ### Registration Certificate (WRPRC)
 

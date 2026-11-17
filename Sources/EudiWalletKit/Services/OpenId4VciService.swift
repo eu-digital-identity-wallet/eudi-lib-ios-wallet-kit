@@ -15,6 +15,7 @@
  */
 
 import Foundation
+import struct os.OSAllocatedUnfairLock
 import OpenID4VCI
 import JOSESwift
 import MdocDataModel18013
@@ -45,8 +46,12 @@ public actor OpenId4VciService {
 	let logger: Logger
 	var config: OpenId4VciConfiguration
 	static nonisolated(unsafe) var credentialOfferCache = [String: CredentialOffer]()
-	static nonisolated(unsafe) var issuerMetadataCache = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
-	static nonisolated(unsafe) var authorizationServerMetadataCache = [String: IdentityAndAccessManagementMetadata]()
+	private struct MetadataCache: Sendable {
+		var issuers = [String: (CredentialIssuerId, CredentialIssuerMetadata)]()
+		var authorizationServers = [String: IdentityAndAccessManagementMetadata]()
+	}
+	// Static caches are shared across service actors. Keep all access under the same lock.
+	private static let metadataCache = OSAllocatedUnfairLock(initialState: MetadataCache())
 	var networking: Networking
 	var authRequested: AuthorizationRequested?
 	var keyBatchSize: Int { issueReq.credentialOptions.batchSize }
@@ -214,8 +219,10 @@ public actor OpenId4VciService {
 
 	/// Clear the issuer and authorization server metadata caches
 	static func clearIssuerAndAuthorizationMetadataCache() {
-		Self.issuerMetadataCache.removeAll()
-		Self.authorizationServerMetadataCache.removeAll()
+		Self.metadataCache.withLock {
+			$0.issuers.removeAll()
+			$0.authorizationServers.removeAll()
+		}
 	}
 
 	public nonisolated func beginIssueDocument(id: String, credentialOptions: CredentialOptions, keyOptions: KeyOptions?, bDeferred: Bool = false) throws -> IssueRequest {
@@ -257,7 +264,7 @@ public actor OpenId4VciService {
 		let code: Grants.PreAuthorizedCode? = switch offer.grants {	case .preAuthorizedCode(let preAuthorizedCode): preAuthorizedCode; case .both(_, let preAuthorizedCode): preAuthorizedCode; case .authorizationCode(_), .none: nil	}
 		Self.credentialOfferCache[offerUri] = offer
 		if let authorizationServer = offer.authorizationServerMetadata.issuerURL {
-			Self.authorizationServerMetadataCache[authorizationServer.absoluteString] = offer.authorizationServerMetadata
+			Self.metadataCache.withLock { $0.authorizationServers[authorizationServer.absoluteString] = offer.authorizationServerMetadata }
 		}
 		let credentialInfo = try getCredentialOfferedModels(credentialsSupported: offer.credentialIssuerMetadata.credentialsSupported.filter { offer.credentialConfigurationIdentifiers.contains($0.key) }, batchCredentialIssuance: offer.credentialIssuerMetadata.batchCredentialIssuance)
 		let issuerName = offer.credentialIssuerMetadata.display.map(\.displayMetadata).getName(uiCulture) ?? offer.credentialIssuerIdentifier.url.host ?? offer.credentialIssuerIdentifier.url.absoluteString
@@ -501,26 +508,27 @@ public actor OpenId4VciService {
 	}
 
 	static func resolveAuthorizationServerMetadata(url: URL, networking: any Networking) async throws -> IdentityAndAccessManagementMetadata {
-		if let cachedMetadata = authorizationServerMetadataCache[url.absoluteString] {
+		if let cachedMetadata = Self.metadataCache.withLock({ $0.authorizationServers[url.absoluteString] }) {
 			return cachedMetadata
 		}
 		let resolver = AuthorizationServerMetadataResolver(oidcFetcher: Fetcher<OIDCProviderMetadata>(session: networking), oauthFetcher: Fetcher<AuthorizationServerMetadata>(session: networking))
 		let metadata = try await resolver.resolve(url: url).get()
-		authorizationServerMetadataCache[url.absoluteString] = metadata
+		Self.metadataCache.withLock { $0.authorizationServers[url.absoluteString] = metadata }
 		return metadata
 	}
 
 	func resolveIssuerMetadata() async throws -> (CredentialIssuerId, CredentialIssuerMetadata) {
+		let issuerURL = config.credentialIssuerURL!
 		// Check cache first
-		if let cachedResult = Self.issuerMetadataCache[config.credentialIssuerURL!] {
+		if let cachedResult = Self.metadataCache.withLock({ $0.issuers[issuerURL] }) {
 			return cachedResult
 		}
-		let credentialIssuerIdentifier = try CredentialIssuerId(config.credentialIssuerURL!)
+		let credentialIssuerIdentifier = try CredentialIssuerId(issuerURL)
 		let issuerMetadata = try await Self.makeMetadataResolver(networking).resolve(source: .credentialIssuer(credentialIssuerIdentifier), policy: config.issuerMetadataPolicy)
 		switch issuerMetadata {
 		case .success(let metaData):
 			let result = (credentialIssuerIdentifier, metaData)
-			Self.issuerMetadataCache[config.credentialIssuerURL!] = result
+			Self.metadataCache.withLock { $0.issuers[issuerURL] = result }
 			return result
 		case .failure(let error):
 			let errorDescription = error.localizedDescription

@@ -3,8 +3,7 @@ import OpenID4VCI
 import Testing
 @testable import EudiWalletKit
 
-@Suite(.serialized)
-struct AuthorizationServerMetadataCacheTests {
+extension MetadataCacheTests.AuthorizationServerMetadataCacheTests {
     @Test func reusesMetadataPerServerUntilIssuerCacheIsCleared() async throws {
         OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
         defer { OpenId4VciService.clearIssuerAndAuthorizationMetadataCache() }
