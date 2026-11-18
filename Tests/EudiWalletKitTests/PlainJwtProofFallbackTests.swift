@@ -52,7 +52,9 @@ struct PlainJwtProofFallbackTests {
     }
 
     private func makeKeys(provider: Provider, allowPlainJwt: Bool = true,
-                          supportsPlainJwt: Bool = true, requiresJwtAttestation: Bool = false) async throws -> [BindingKey] {
+                          supportsPlainJwt: Bool = true, requiresJwtAttestation: Bool = false,
+                          formatIdentifier: String? = nil, attestationAlgorithms: [String] = ["ES256"],
+                          jwtAlgorithms: [String] = ["ES256"], preferredCurve: CoseEcCurve = .P256) async throws -> [BindingKey] {
         SecureAreaRegistry.shared.register(secureArea: KeyAttestationTestSecureArea.shared)
         let storageService = TestDataStorageService()
         #if canImport(EudiEtsi1196x2)
@@ -69,17 +71,59 @@ struct PlainJwtProofFallbackTests {
             networking: TestNetworking(metadata: Data()),
             storage: StorageManager(storageService: storageService), storageService: storageService,
             trustConfig: trust, localAuthenticationContext: ThreadSafeAuthContext())
-        let configuration = CredentialConfiguration(
+        var configuration = CredentialConfiguration(
             configurationIdentifier: try CredentialConfigurationIdentifier(value: "test"),
             credentialIssuerIdentifier: "https://issuer.example.com",
             supportsAttestationProofType: true,
             supportsJwtProofTypeWithAttestation: requiresJwtAttestation,
             supportsPlainJwtProof: supportsPlainJwt,
             credentialSigningAlgValuesSupported: ["ES256"],
+            jwtProofSigningAlgValuesSupported: jwtAlgorithms,
             dpopSigningAlgValuesSupported: nil, clientAttestationPopSigningAlgValuesSupported: nil,
             issuerDisplay: [], display: [], claims: [], format: .sdjwt,
             defaultCredentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 2))
-        return try await service.preparePlainJwtFallbackTest(configuration)
+        if let formatIdentifier {
+            let data = try #require(Data(name: "pid-demo-openid-credential-issuer", ext: "json", from: Bundle.module))
+            var json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            var credentials = try #require(json["credential_configurations_supported"] as? [String: [String: Any]])
+            credentials[formatIdentifier]?["proof_types_supported"] = [
+                "attestation": ["proof_signing_alg_values_supported": attestationAlgorithms, "key_attestations_required": [:]] as [String: Any],
+                "jwt": ["proof_signing_alg_values_supported": jwtAlgorithms]
+            ]
+            json["credential_configurations_supported"] = credentials
+            let metadata = try JSONDecoder().decode(CredentialIssuerMetadata.self, from: JSONSerialization.data(withJSONObject: json))
+            configuration = try await service.getCredentialConfiguration(
+                credentialIssuerIdentifier: metadata.credentialIssuerIdentifier.url.absoluteString,
+                issuerDisplay: metadata.display, credentialsSupported: metadata.credentialsSupported,
+                identifier: formatIdentifier, docType: nil, vct: nil, batchCredentialIssuance: nil,
+                dpopSigningAlgValuesSupported: nil, clientAttestationPopSigningAlgValuesSupported: nil)
+            #expect(configuration.jwtProofSigningAlgValuesSupported == jwtAlgorithms)
+            #expect(configuration.credentialSigningAlgValuesSupported == attestationAlgorithms)
+        }
+        return try await service.preparePlainJwtFallbackTest(configuration, preferredCurve: preferredCurve)
+    }
+
+    @Test("Disjoint proof algorithms prevent fallback in both credential formats", arguments: ["pid-mso-mdoc", "pid-sd-jwt"])
+    func disjointAlgorithms(identifier: String) async throws {
+        let keys = try await makeKeys(provider: Provider(), formatIdentifier: identifier, jwtAlgorithms: ["ES384"])
+        await expectProviderFailure(keys)
+    }
+
+    @Test("Shared proof algorithms allow same-key fallback in both formats", arguments: ["pid-mso-mdoc", "pid-sd-jwt"])
+    func sharedAlgorithms(identifier: String) async throws {
+        let provider = Provider()
+        let keys = try await makeKeys(provider: provider, formatIdentifier: identifier,
+                                      attestationAlgorithms: ["ES384", "ES256"], jwtAlgorithms: ["ES256"], preferredCurve: .P384)
+        let fallback = try await OpenId4VciService.withPlainJwtProofFallback(bindingKeys: keys) { keys in
+            if case let .attestation(attest) = keys.first { _ = try await attest("nonce") }
+            return keys
+        }
+        let thumbprints = try fallback.map { key -> String in
+            guard case let .jwt(_, jwk, _, _) = key else { throw Failure.requestFailed }
+            #expect(jwk.parameters["alg"] == "ES256")
+            return try jwk.thumbprint(algorithm: .SHA256)
+        }
+        #expect(thumbprints == (await provider.thumbprints))
     }
 
     @Test("A failed attestation retries with every original credential key")
@@ -196,10 +240,10 @@ struct PlainJwtProofFallbackTests {
 }
 
 private extension OpenId4VciService {
-    func preparePlainJwtFallbackTest(_ configuration: CredentialConfiguration) async throws -> [BindingKey] {
+    func preparePlainJwtFallbackTest(_ configuration: CredentialConfiguration, preferredCurve: CoseEcCurve) async throws -> [BindingKey] {
         issueReq = try beginIssueDocument(id: UUID().uuidString,
             credentialOptions: configuration.defaultCredentialOptions,
-            keyOptions: KeyOptions(curve: .P256, secureAreaName: KeyAttestationTestSecureArea.name))
+            keyOptions: KeyOptions(curve: preferredCurve, secureAreaName: KeyAttestationTestSecureArea.name))
         return try await initSecurityKeys(configuration, clientId: "test-client").0
     }
 }
