@@ -113,7 +113,8 @@ public actor OpenId4VciService {
 		let permitsPlainJwtFallback = config.allowPlainJwtProof && configuration.supportsPlainJwtProof
 			&& !configuration.supportsJwtProofTypeWithAttestation
 		let jwtAlgorithms = Set(configuration.jwtProofSigningAlgValuesSupported ?? [])
-		let sharedTypes = algTypes.filter { jwtAlgorithms.contains($0.rawValue) }
+		let secureAreaAlgorithms = type(of: issueReq.secureArea).supportedEcCurves.compactMap { Self.mapToJWSAlgorithmType($0.defaultSigningAlgorithm) }
+		let sharedTypes = algTypes.filter { jwtAlgorithms.contains($0.rawValue) && secureAreaAlgorithms.contains($0) }
 		// Prefer a shared algorithm so a retry can reuse the attested keys.
 		let sharedAlgorithm = permitsPlainJwtFallback ? try? findCompatibleSigningAlgorithm(algSupported: sharedTypes) : nil
 		let selectedAlgorithm = try sharedAlgorithm ?? findCompatibleSigningAlgorithm(algSupported: algTypes)
@@ -138,11 +139,15 @@ public actor OpenId4VciService {
 				return try await self.getKeyAttestationJWT(publicKeys, signingKeys: signingKeys, nonce: nonce)
 			} catch {
 				try Task.checkCancellation()
-				let isAuthenticationCancellation = (error as? LAError).map {
-					[LAError.Code.userCancel, .appCancel, .systemCancel].contains($0.code)
-				} ?? false
+				let isAuthenticationCancellation = (error as? LAError).map {
+
+					[LAError.Code.userCancel, .appCancel, .systemCancel].contains($0.code)
+
+				} ?? false
+
 				guard !(error is CancellationError), (error as? URLError)?.code != .cancelled,
-					!isAuthenticationCancellation, !fallbackKeys.isEmpty else { throw error }
+					!isAuthenticationCancellation, !fallbackKeys.isEmpty else { throw error }
+
 				// Only this callback can signal a retry: no credential request has been sent yet.
 				throw PlainJwtProofFallback(bindingKeys: fallbackKeys)
 			}
