@@ -42,6 +42,7 @@ extension MetadataCacheTests.DeferredIssuerMetadataTests {
 			configurationIdentifier: try CredentialConfigurationIdentifier(value: "eu.europa.ec.eudi.pid.1"),
 			credentialIssuerIdentifier: issuerURL, vct: "urn:eu:europa:ec:eudi:pid:1",
 			supportsAttestationProofType: false, supportsJwtProofTypeWithAttestation: false,
+			supportsPlainJwtProof: true,
 			credentialSigningAlgValuesSupported: ["ES256"], dpopSigningAlgValuesSupported: nil, clientAttestationPopSigningAlgValuesSupported: nil,
 			issuerDisplay: [], display: [], claims: [], format: .sdjwt,
 			defaultCredentialOptions: CredentialOptions(credentialPolicy: .rotateUse, batchSize: 1))

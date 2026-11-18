@@ -91,6 +91,7 @@ struct IssuanceNotificationTests {
 			vct: "urn:eu:europa:ec:eudi:pid:1",
 			supportsAttestationProofType: true,
 			supportsJwtProofTypeWithAttestation: true,
+			supportsPlainJwtProof: false,
 			credentialSigningAlgValuesSupported: ["ES256"],
 			dpopSigningAlgValuesSupported: nil,
 			clientAttestationPopSigningAlgValuesSupported: nil,

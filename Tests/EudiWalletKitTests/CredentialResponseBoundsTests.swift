@@ -31,6 +31,7 @@ struct CredentialResponseBoundsTests {
 			vct: "urn:eu:europa:ec:eudi:pid:1",
 			supportsAttestationProofType: false,
 			supportsJwtProofTypeWithAttestation: false,
+			supportsPlainJwtProof: true,
 			credentialSigningAlgValuesSupported: ["ES256"],
 			dpopSigningAlgValuesSupported: nil,
 			clientAttestationPopSigningAlgValuesSupported: nil,
