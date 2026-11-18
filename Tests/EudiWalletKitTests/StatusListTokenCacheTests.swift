@@ -50,6 +50,23 @@ struct StatusListTokenCacheTests {
 		return fetcher.count
 	}
 
+    @Test("Verified claims cannot cross owners, trust configurations or formats")
+    func isolatesTrustContexts() async {
+        let cache = StatusListTokenCache(now: { Self.start })
+        let fetcher = Fetcher(.success(Self.claims(ttl: 720, exp: nil)))
+        let scope = UUID()
+        let pid = StatusListOwner.credential(docType: "urn:eudi:pid:1")
+        for _ in 0..<2 {
+            _ = await cache.claims(format: .jwt, url: Self.url, clockSkew: 0, owner: pid, trustScope: scope, fetch: fetcher.handler)
+        }
+        #expect(fetcher.count == 1)
+        _ = await cache.claims(format: .jwt, url: Self.url, clockSkew: 0, owner: .credential(docType: "org.iso.18013.5.1.mDL"), trustScope: scope, fetch: fetcher.handler)
+        _ = await cache.claims(format: .jwt, url: Self.url, clockSkew: 0, owner: .registrationCertificate, trustScope: scope, fetch: fetcher.handler)
+        _ = await cache.claims(format: .jwt, url: Self.url, clockSkew: 0, owner: pid, trustScope: UUID(), fetch: fetcher.handler)
+        _ = await cache.claims(format: .cwt, url: Self.url, clockSkew: 0, owner: pid, trustScope: scope, fetch: fetcher.handler)
+        #expect(fetcher.count == 5)
+    }
+
 	@Test("a token is reused until its ttl ends")
 	func reusesUntilTtl() async {
 		#expect(await Self.fetchCount(.success(Self.claims(ttl: 720, exp: nil)), secondsBetween: 719) == 1)

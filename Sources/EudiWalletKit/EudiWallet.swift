@@ -768,9 +768,10 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		return try await authorizedAction(isFallBack: false, action: action, disabled: disabled, dismiss: dismiss, localizedReason: localizedReason, authenticationContext: authenticationContext)
 	}
 
-	/// Get document status
-	public func getDocumentStatus(for statusList: StatusList) async throws -> CredentialStatus {
-		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig, cache: statusTokenCache)
+	/// Get document status. Pass the owning mdoc docType or SD-JWT vct to select its status trust context.
+	/// With ETSI trust, a missing or unmapped type fails under the default `.enforce` status policy.
+	public func getDocumentStatus(for statusList: StatusList, docType: String? = nil) async throws -> CredentialStatus {
+		let actor = DocumentStatusService(statusList: statusList, trustConfig: trustConfig, cache: statusTokenCache, owner: docType.map { .credential(docType: $0) })
 		let status = try await actor.getStatus()
 		return status
 	}

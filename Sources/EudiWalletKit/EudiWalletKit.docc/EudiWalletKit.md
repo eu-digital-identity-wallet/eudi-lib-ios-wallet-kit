@@ -34,6 +34,7 @@ The library depends on the following EUDI libraries:
 
 - <doc:GetStarted>
 - <doc:ManageDocuments>
+- <doc:StatusLists>
 - <doc:IssueDocuments>
 - <doc:SecureAreas>
 - <doc:PresentationService>

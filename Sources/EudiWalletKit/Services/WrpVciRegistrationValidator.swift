@@ -25,7 +25,7 @@ import struct OpenID4VCI.PolicyViolation
 typealias WrprcStatusCheck = @Sendable (StatusList, TrustConfiguration) async throws -> CredentialStatus
 
 func checkWrprcStatus(_ statusList: StatusList, _ trustConfig: TrustConfiguration) async throws -> CredentialStatus {
-	try await DocumentStatusService(statusList: statusList, trustConfig: trustConfig).getStatus()
+	try await DocumentStatusService(statusList: statusList, trustConfig: trustConfig, owner: .registrationCertificate).getStatus()
 }
 
 /// Validates the WRP registration certificate (WRPRC) of a credential issuer during OpenID4VCI issuance.
