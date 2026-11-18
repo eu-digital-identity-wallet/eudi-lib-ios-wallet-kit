@@ -677,6 +677,8 @@ struct OpenId4VpAuthenticationTests {
                 0xa0, UInt8(crlURI.count + 4), 0xa0, UInt8(crlURI.count + 2),
                 0x86, UInt8(crlURI.count)
             ] + crlURI
+            let alternativeNames = SubjectAlternativeNames([.dnsName("verifier.example")])
+            let encodedAlternativeNames = try Certificate.Extension(alternativeNames, critical: false)
             let certificate = try Certificate(version: .v3, serialNumber: .init(bytes: [1]), publicKey: .init(key.publicKey),
                 notValidBefore: Date().addingTimeInterval(-3600), notValidAfter: Date().addingTimeInterval(86400),
                 issuer: name, subject: name, signatureAlgorithm: .ecdsaWithSHA256,
@@ -688,7 +690,10 @@ struct OpenId4VpAuthenticationTests {
                     try ExtendedKeyUsage([.init(oid: [1, 0, 18013, 5, 1, 6])])
                     Certificate.Extension(oid: [2, 5, 29, 31], critical: false,
                         value: crlDistributionPoints[...])
-                    SubjectAlternativeNames([.dnsName("verifier.example")])
+                    alternativeNames
+                    // This self-signed fixture is also the root, so its issuer names match its subject names.
+                    Certificate.Extension(oid: [2, 5, 29, 18], critical: false,
+                        value: encodedAlternativeNames.value)
                 }, issuerPrivateKey: .init(key))
             var serializer = DER.Serializer()
             try serializer.serialize(certificate)
