@@ -1349,7 +1349,7 @@ public actor OpenId4VciService {
 		}
 		let result = try verifier.verifyIssuance(
 			issuersSignatureVerifier: { jws in try SignatureVerifier(signedJWT: jws, publicKey: issuerKey) },
-			claimVerifier: { nbf, exp in ClaimsVerifier(nbf: nbf, exp: exp) }
+			claimVerifier: { nbf, exp, _, _ in ClaimsVerifier(nbf: nbf, exp: exp) }
 		)
 		try validateVerificationResult(result)
 	}
