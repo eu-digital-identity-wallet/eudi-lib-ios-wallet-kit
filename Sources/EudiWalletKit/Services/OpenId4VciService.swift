@@ -845,7 +845,7 @@ public actor OpenId4VciService {
 					logger.info("Credential issuance deferred with transactionId: \(transactionId), interval: \(interval) seconds")
 					// Prepare model for deferred issuance
 					let derKeyData: Data? = if let encryptionSpec = await issuer.deferredResponseEncryptionSpec, let key = encryptionSpec.privateKey { try secCall { SecKeyCopyExternalRepresentation(key, $0)} as Data } else { nil }
-					let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
+					let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: try Self.deferredCredentialEndpoint(of: issuer.issuerMetadata), transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
 					return .deferred(deferredModel, configuration, authorized)
 				case .issued(_, _, let notificationId, _):
 					let credentials =  response.credentialResponses.compactMap { if case let .issued(_, cr, _, _) = $0 { cr } else { nil } }
@@ -861,30 +861,42 @@ public actor OpenId4VciService {
 		}
 	}
 
-	private static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, notificationId: String?, logger: Logger) async throws -> IssuanceOutcome {
+	/// The issuer metadata must have a deferred credential endpoint when the issuer defers issuance.
+	static func deferredCredentialEndpoint(of metadata: CredentialIssuerMetadata) throws -> CredentialIssuerEndpoint {
+		guard let endpoint = metadata.deferredCredentialEndpoint else {
+			throw WalletError(description: "The issuer deferred issuance but has no deferred credential endpoint", code: .issuanceRequestFailed)
+		}
+		return endpoint
+	}
+
+	/// Each issued credential binds to one of the keys in the request (OpenID4VCI section 8.3).
+	static func bindingKey(_ publicKeys: [Data], at index: Int) throws -> Data {
+		guard publicKeys.indices.contains(index) else {
+			throw WalletError(description: "The issuer returned more credentials than the request had keys", code: .issuanceRequestFailed)
+		}
+		return publicKeys[index]
+	}
+
+	static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, notificationId: String?, logger: Logger) async throws -> IssuanceOutcome {
 		let toData: (String) -> Data = { str in
 			logger.notice(configuration.format == .cbor ? "Base64URL mdoc data:\n\(str)" : "sd-jwt credential data:\n\(str)")
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
 		}
-		let credData: [(Data, Data)] = try credentials.enumerated().flatMap { index, credential in
+		let issued: [String] = try credentials.flatMap { credential in
 		if case let .string(str) = credential  {
 			logger.notice("Issued credential data:\n\(str)")
-			return [(toData(str), publicKeys[index])]
+			return [str]
 		} else if case let .json(json) = credential, json.type == .array, json.first != nil {
 			let compactParser = CompactParser()
 			let parseJsonToJwt = { (json: JSON) -> String in
 				do { return try compactParser.stringFromJwsJsonObject(json) }
 				catch { return json.stringValue }
 			}
-			let response = json.enumerated().map { j in
-				let str = parseJsonToJwt(j.element.1["credential"])
-				return (toData(str), publicKeys[j.offset])
-			}
-			logger.notice("Issued credential data:\n\(String(data: response.first!.0, encoding: .utf8) ?? "")")
-			return response
+			return json.map { parseJsonToJwt($0.1["credential"]) }
 		} else {
 			throw WalletError(description: "Invalid credential", code: .issuanceRequestFailed)
 		} }
+		let credData: [(Data, Data)] = try issued.enumerated().map { index, str in (toData(str), try bindingKey(publicKeys, at: index)) }
 		return .issued(credData, configuration, authorized, notificationId: notificationId)
 	}
 
@@ -1050,11 +1062,11 @@ public actor OpenId4VciService {
 			return try await Self.handleCredentialResponse(credentials: [credential], publicKeys: publicKeys, configuration: configuration, authorized: authorized, notificationId: nil, logger: logger)
 		case .issuancePending(let transactionId, let interval):
 			logger.info("Credential not ready yet. Try after \(interval)")
-			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
+			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: try Self.deferredCredentialEndpoint(of: issuer.issuerMetadata), transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
 			return .deferred(deferredModel, configuration, authorized)
 		case .issuanceStillPending(let interval):
 			logger.info("Credential still not ready. Try again after \(interval)")
-			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: issuer.issuerMetadata.deferredCredentialEndpoint!, transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
+			let deferredModel = await DeferredIssuanceModel(deferredCredentialEndpoint: try Self.deferredCredentialEndpoint(of: issuer.issuerMetadata), transactionId: transactionId, publicKeys: publicKeys, derKeyData: derKeyData, timeStamp: authorized.timeStamp, interval: interval, dpopKeyId: dpopKeyId)
 			return .deferred(deferredModel, configuration, authorized)
 		case .errored(_, let errorDescription):
 			throw WalletError(description: "\(errorDescription ?? "Something went wrong with your deferred request response")", code: .issuanceRequestFailed)

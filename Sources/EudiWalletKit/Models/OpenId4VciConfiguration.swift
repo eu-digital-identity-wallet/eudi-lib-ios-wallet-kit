@@ -151,7 +151,7 @@ extension OpenId4VciConfiguration {
 		logger.info("Constructing POP for keyId: \(privateKeyId), usage: \(popUsage)")
 		if let keyOptions {
 			// If keyOptions is specified, use it to determine key generation parameters
-			let secureArea = SecureAreaRegistry.shared.get(name: keyOptions.secureAreaName)
+			let secureArea = try SecureAreaRegistry.shared.get(name: keyOptions.secureAreaName)
 			let ecCurve = keyOptions.curve
 			let ecAlgorithm = await secureArea.defaultSigningAlgorithm(ecCurve: keyOptions.curve)
 			guard let jwsAlg = ecCurve.jwsAlgorithm, algorithms.map(\.name).contains(jwsAlg.name) else {
