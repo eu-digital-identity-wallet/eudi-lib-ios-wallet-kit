@@ -742,12 +742,68 @@ public actor OpenId4VciService {
 			logger.info("msoMdoc with scope \(String(describing: msoMdocConf.scope)), cryptographic suites: \(msoMdocConf.credentialSigningAlgValuesSupported)")
 			let proofTypesSupported = msoMdocConf.proofTypesSupported ?? [:]
 			let (jwtProofType, _, _, supportsAttestationProofType, supportsJwtProofTypeWithAttestation) = resolveProofTypeAttestationSupport(proofTypesSupported: proofTypesSupported)
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: msoMdocConf.docType, vct: nil, scope: msoMdocConf.scope, supportsAttestationProofType: supportsAttestationProofType, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation, supportsPlainJwtProof: jwtProofType != nil && !supportsJwtProofTypeWithAttestation, credentialSigningAlgValuesSupported: resolveProofSigningAlgorithms(proofTypesSupported: proofTypesSupported, useAttestation: config.keyAttestationsConfig != nil && supportsAttestationProofType), jwtProofSigningAlgValuesSupported: jwtProofType?.algorithms, dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: msoMdocConf.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: msoMdocConf.credentialMetadata?.claims ?? [], credentialMetadata: msoMdocConf.credentialMetadata, format: .cbor, defaultCredentialOptions: try resolveCredentialOptions(batchCredentialIssuance: batchCredentialIssuance, credentialReusePolicy: msoMdocConf.credentialMetadata?.credentialReusePolicy))
+			let supportsPlainJwtProof = jwtProofType != nil && !supportsJwtProofTypeWithAttestation
+			let useAttestation = config.keyAttestationsConfig != nil && supportsAttestationProofType
+			let signingAlgorithms = resolveProofSigningAlgorithms(proofTypesSupported: proofTypesSupported, useAttestation: useAttestation)
+			let credentialMetadata = msoMdocConf.credentialMetadata
+			let issuerDisplayMetadata = issuerDisplay.map(\.displayMetadata)
+			let displayMetadata = credentialMetadata?.display.map(\.displayMetadata) ?? []
+			let claims = credentialMetadata?.claims ?? []
+			let defaultCredentialOptions = try resolveCredentialOptions(
+				batchCredentialIssuance: batchCredentialIssuance,
+				credentialReusePolicy: credentialMetadata?.credentialReusePolicy)
+			return CredentialConfiguration(
+				configurationIdentifier: credential.key,
+				credentialIssuerIdentifier: credentialIssuerIdentifier,
+				docType: msoMdocConf.docType,
+				vct: nil,
+				scope: msoMdocConf.scope,
+				supportsAttestationProofType: supportsAttestationProofType,
+				supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation,
+				supportsPlainJwtProof: supportsPlainJwtProof,
+				credentialSigningAlgValuesSupported: signingAlgorithms,
+				jwtProofSigningAlgValuesSupported: jwtProofType?.algorithms,
+				dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported,
+				clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported,
+				issuerDisplay: issuerDisplayMetadata,
+				display: displayMetadata,
+				claims: claims,
+				credentialMetadata: credentialMetadata,
+				format: .cbor,
+				defaultCredentialOptions: defaultCredentialOptions)
 		} else if case let credentials = credentialsSupported.filter({ if case .sdJwtVc(let sdJwtVc) = $0.value, vct != nil || identifier != nil, sdJwtVc.vct == vct || vct == nil, $0.key.value == identifier || identifier == nil { true } else { false } }), let credential = credentials.first(where: { !$0.key.value.hasSuffix("_deferred")}) ?? credentials.first, case let .sdJwtVc(sdJwtVc) = credential.value {
 			logger.info("sdJwtVc with vct \(sdJwtVc.vct ?? ""), identifier: \(credential.key.value), cryptographic suites: \(sdJwtVc.credentialSigningAlgValuesSupported)")
 			let proofTypesSupported = sdJwtVc.proofTypesSupported ?? [:]
 			let (jwtProofType, _, _, supportsAttestationProofType, supportsJwtProofTypeWithAttestation) = resolveProofTypeAttestationSupport(proofTypesSupported: proofTypesSupported)
-			return CredentialConfiguration(configurationIdentifier: credential.key, credentialIssuerIdentifier: credentialIssuerIdentifier, docType: nil, vct: sdJwtVc.vct, scope: sdJwtVc.scope,  supportsAttestationProofType: supportsAttestationProofType, supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation, supportsPlainJwtProof: jwtProofType != nil && !supportsJwtProofTypeWithAttestation, credentialSigningAlgValuesSupported: resolveProofSigningAlgorithms(proofTypesSupported: proofTypesSupported, useAttestation: config.keyAttestationsConfig != nil && supportsAttestationProofType), jwtProofSigningAlgValuesSupported: jwtProofType?.algorithms, dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported, clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported, issuerDisplay: issuerDisplay.map(\.displayMetadata), display: sdJwtVc.credentialMetadata?.display.map(\.displayMetadata) ?? [], claims: sdJwtVc.credentialMetadata?.claims ?? [], credentialMetadata: sdJwtVc.credentialMetadata, format: .sdjwt, defaultCredentialOptions: try resolveCredentialOptions(batchCredentialIssuance: batchCredentialIssuance, credentialReusePolicy: sdJwtVc.credentialMetadata?.credentialReusePolicy))
+			let supportsPlainJwtProof = jwtProofType != nil && !supportsJwtProofTypeWithAttestation
+			let useAttestation = config.keyAttestationsConfig != nil && supportsAttestationProofType
+			let signingAlgorithms = resolveProofSigningAlgorithms(proofTypesSupported: proofTypesSupported, useAttestation: useAttestation)
+			let credentialMetadata = sdJwtVc.credentialMetadata
+			let issuerDisplayMetadata = issuerDisplay.map(\.displayMetadata)
+			let displayMetadata = credentialMetadata?.display.map(\.displayMetadata) ?? []
+			let claims = credentialMetadata?.claims ?? []
+			let defaultCredentialOptions = try resolveCredentialOptions(
+				batchCredentialIssuance: batchCredentialIssuance,
+				credentialReusePolicy: credentialMetadata?.credentialReusePolicy)
+			return CredentialConfiguration(
+				configurationIdentifier: credential.key,
+				credentialIssuerIdentifier: credentialIssuerIdentifier,
+				docType: nil,
+				vct: sdJwtVc.vct,
+				scope: sdJwtVc.scope,
+				supportsAttestationProofType: supportsAttestationProofType,
+				supportsJwtProofTypeWithAttestation: supportsJwtProofTypeWithAttestation,
+				supportsPlainJwtProof: supportsPlainJwtProof,
+				credentialSigningAlgValuesSupported: signingAlgorithms,
+				jwtProofSigningAlgValuesSupported: jwtProofType?.algorithms,
+				dpopSigningAlgValuesSupported: dpopSigningAlgValuesSupported,
+				clientAttestationPopSigningAlgValuesSupported: clientAttestationPopSigningAlgValuesSupported,
+				issuerDisplay: issuerDisplayMetadata,
+				display: displayMetadata,
+				claims: claims,
+				credentialMetadata: credentialMetadata,
+				format: .sdjwt,
+				defaultCredentialOptions: defaultCredentialOptions)
 		}
 		let requestedParams = [docType.map { "docType: \($0)" }, vct.map { "vct: \($0)" }, identifier.map { "identifier: \($0)" }].compactMap { $0 }.joined(separator: ", ")
 		logger.error("No credential configuration found with \(requestedParams). Available credential identifiers: \(credentialsSupported.keys.map(\.value).joined(separator: ", "))")
