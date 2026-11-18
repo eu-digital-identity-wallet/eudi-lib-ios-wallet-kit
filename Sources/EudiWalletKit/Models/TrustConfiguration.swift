@@ -57,23 +57,11 @@ public struct TrustConfiguration: Sendable {
 	let accessTrustManager: EtsiTrustManager
 	/// Trust manager for reader/relying-party registration certificates. Uses the WRPRC verification context.
 	let registrationTrustManager: EtsiTrustManager
-	private let statusTrustSource: TrustSource
-	private let statusFallbackTrustSource: TrustSource?
+	private let statusTrustManagers: StatusTrustManagerCache
 
-	/// Each check gets its own manager, so concurrent document checks cannot change its context.
-	func statusTrustManager(for owner: StatusListOwner?) -> EtsiTrustManager {
-		func manager(_ source: TrustSource, fallback: EtsiTrustManager? = nil) -> EtsiTrustManager {
-			let context: EtsiContextType?
-			switch owner {
-			case .credential(let docType):
-				context = (source.contextTypeMappings ?? .default)[docType]?.statusContext
-			case .registrationCertificate: context = .wrprcStatus
-			case nil: context = nil
-			}
-			return EtsiTrustManager(source: source.withContextTypeMappings(nil),
-				defaultVerificationContext: context?.verificationContext, fallback: fallback)
-		}
-		return manager(statusTrustSource, fallback: statusFallbackTrustSource.map { manager($0) })
+	/// Reuses a fixed-context validator for the lifetime of this configuration and its copies.
+	func statusTrustManager(for owner: StatusListOwner?) -> StatusTrustManager {
+		statusTrustManagers.manager(for: owner)
 	}
 
 	public init(
@@ -96,8 +84,7 @@ public struct TrustConfiguration: Sendable {
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew
-		statusTrustSource = trustSource
-		statusFallbackTrustSource = fallbackTrustSource
+		statusTrustManagers = StatusTrustManagerCache(source: trustSource, fallback: fallbackTrustSource)
 		let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
 		let fallbackTrustManager: EtsiTrustManager?
 		if let fts = fallbackTrustSource {
