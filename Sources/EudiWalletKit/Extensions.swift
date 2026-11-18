@@ -699,3 +699,8 @@ extension RegistrationCertificatePolicy {
 	}
 
 }
+
+/// Use the algorithms advertised for the proof that will be sent.
+func resolveProofSigningAlgorithms(proofTypesSupported: [String: ProofTypeSupportedMeta], useAttestation: Bool) -> [String] {
+	proofTypesSupported[useAttestation ? "attestation" : "jwt"]?.algorithms ?? []
+}
