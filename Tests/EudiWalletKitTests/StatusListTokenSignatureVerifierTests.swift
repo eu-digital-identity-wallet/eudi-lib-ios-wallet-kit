@@ -11,6 +11,37 @@ import X509
 @testable import EudiWalletKit
 
 struct StatusListTokenSignatureVerifierTests {
+    #if canImport(EudiEtsi1196x2)
+    @Test("A status signer trusted only for its owner succeeds; WRPAC trust does not suffice",
+          arguments: [EtsiContextType.pidStatus, .mdlStatus, .qeaaStatus, .pubEaaStatus, .wrprcStatus])
+    func statusOwnerTrust(context: EtsiContextType) async throws {
+        let fixture = try fixture()
+        let unsigned = try token(algorithm: "ES256", certificates: [fixture.certificate.base64EncodedString()])
+        let parts = String(decoding: unsigned, as: UTF8.self).split(separator: ".", omittingEmptySubsequences: false)
+        let signature = try fixture.key.signature(for: Data("\(parts[0]).\(parts[1])".utf8)).rawRepresentation
+        let signed = try token(algorithm: "ES256", certificates: [fixture.certificate.base64EncodedString()], signature: signature)
+        let owner: StatusListOwner = context == .wrprcStatus ? .registrationCertificate : .credential(docType: "custom")
+        let config = TrustConfiguration(trustSource: .staticList(.init(
+            anchorsPerContext: [context: [fixture.certificate]], method: .directTrust,
+            contextTypeMappings: ["custom": context], revocationPolicy: .disabled)))
+        try await StatusListTokenSignatureVerifier(trustConfig: config, owner: owner)
+            .verify(statusListToken: signed, format: .jwt, at: Date())
+        let wrong = TrustConfiguration(trustSource: .staticList(.init(
+            anchorsPerContext: [.wrpac: [fixture.certificate]], method: .directTrust,
+            contextTypeMappings: ["custom": context], revocationPolicy: .disabled)))
+        await #expect(throws: (any Error).self) {
+            try await StatusListTokenSignatureVerifier(trustConfig: wrong, owner: owner)
+                .verify(statusListToken: signed, format: .jwt, at: Date())
+        }
+        for missingOwner in [nil, StatusListOwner.credential(docType: "unknown")] {
+            await #expect(throws: (any Error).self) {
+                try await StatusListTokenSignatureVerifier(trustConfig: config, owner: missingOwner)
+                    .verify(statusListToken: signed, format: .jwt, at: Date())
+            }
+        }
+    }
+    #endif
+
     private func configuration(_ policy: TrustPolicy, anchors: [Data] = [], wrprcPolicy: TrustPolicy = .enforce) -> TrustConfiguration {
         #if canImport(EudiEtsi1196x2)
         TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), statusTrustPolicy: policy, wrprcVpTrustPolicy: wrprcPolicy, wrprcVciTrustPolicy: wrprcPolicy)
@@ -55,7 +86,7 @@ struct StatusListTokenSignatureVerifierTests {
     func rejectsNone(policy: TrustPolicy) async throws {
         let fixture = try fixture()
         let token = try token(algorithm: "none", certificates: [fixture.certificate.base64EncodedString()])
-        let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]))
+        let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]), owner: .credential(docType: "urn:eudi:pid:1"))
         await #expect(throws: (any Error).self) {
             try await verifier.verify(statusListToken: token, format: .jwt, at: Date())
         }
@@ -66,7 +97,7 @@ struct StatusListTokenSignatureVerifierTests {
         let fixture = try fixture()
         for algorithm in [nil, "HS256", "HS384", "HS512", "invalid", "unknown", "NONE"] as [String?] {
             let token = try token(algorithm: algorithm, certificates: [fixture.certificate.base64EncodedString()], signature: Data([1]))
-            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]))
+            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]), owner: .credential(docType: "urn:eudi:pid:1"))
             await #expect(throws: (any Error).self) {
                 try await verifier.verify(statusListToken: token, format: .jwt, at: Date())
             }
@@ -77,7 +108,7 @@ struct StatusListTokenSignatureVerifierTests {
     func rejectsCertificates(policy: TrustPolicy) async throws {
         for certificates in [nil, [], ["bad certificate"]] as [[String]?] {
             let token = try token(algorithm: "ES256", certificates: certificates, signature: Data([1]))
-            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy))
+            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy), owner: .credential(docType: "urn:eudi:pid:1"))
             await #expect(throws: (any Error).self) {
                 try await verifier.verify(statusListToken: token, format: .jwt, at: Date())
             }
@@ -106,14 +137,14 @@ struct StatusListTokenSignatureVerifierTests {
         #expect(!readerTrust.0)
         #expect(readerTrust.1?.contains("mdlReaderAuth") == true)
         #endif
-        try await StatusListTokenSignatureVerifier(trustConfig: trusted).verify(statusListToken: signed, format: .jwt, at: now)
-        let warningVerifier = StatusListTokenSignatureVerifier(trustConfig: configuration(.warning))
+        try await StatusListTokenSignatureVerifier(trustConfig: trusted, owner: .credential(docType: "urn:eudi:pid:1")).verify(statusListToken: signed, format: .jwt, at: now)
+        let warningVerifier = StatusListTokenSignatureVerifier(trustConfig: configuration(.warning), owner: .credential(docType: "urn:eudi:pid:1"))
         try await warningVerifier.verify(statusListToken: signed, format: .jwt, at: now)
         await #expect(throws: (any Error).self) {
-            try await StatusListTokenSignatureVerifier(trustConfig: configuration(.enforce)).verify(statusListToken: signed, format: .jwt, at: now)
+            try await StatusListTokenSignatureVerifier(trustConfig: configuration(.enforce), owner: .credential(docType: "urn:eudi:pid:1")).verify(statusListToken: signed, format: .jwt, at: now)
         }
         for policy in [TrustPolicy.enforce, .warning] {
-            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]))
+            let verifier = StatusListTokenSignatureVerifier(trustConfig: configuration(policy, anchors: [fixture.certificate]), owner: .credential(docType: "urn:eudi:pid:1"))
             let badSignature = try token(algorithm: "ES256", certificates: [fixture.certificate.base64EncodedString()], payload: payload, signature: Data(repeating: 0, count: 64))
             await #expect(throws: (any Error).self) {
                 try await verifier.verify(statusListToken: badSignature, format: .jwt, at: now)
@@ -152,7 +183,7 @@ struct StatusListTokenSignatureVerifierTests {
         ])
         let signed = try signedToken(key: signer.key, certificate: signer.certificate, payload: payload)
         let reference = MdocDataModel18013.StatusList(idx: 0, uri: "https://status.example/list")
-        let service = DocumentStatusService(statusList: reference, trustConfig: configuration(.enforce))
+        let service = DocumentStatusService(statusList: reference, trustConfig: configuration(.enforce), owner: .credential(docType: "urn:eudi:pid:1"))
         do {
             _ = try await service.getStatus(networkingService: StubNetworking(data: signed))
             Issue.record("Untrusted token returned status bits")
@@ -160,7 +191,7 @@ struct StatusListTokenSignatureVerifierTests {
             #expect(error.code == .trustError)
             #expect((error.innerError as? WalletError)?.code == .trustError)
         }
-        let warningService = DocumentStatusService(statusList: reference, trustConfig: configuration(.warning))
+        let warningService = DocumentStatusService(statusList: reference, trustConfig: configuration(.warning), owner: .credential(docType: "urn:eudi:pid:1"))
         let status = try await warningService.getStatus(networkingService: StubNetworking(data: signed))
         #expect(status == .valid)
     }
@@ -191,7 +222,7 @@ struct StatusListTokenSignatureVerifierTests {
         let wrprc = try signedToken(key: registrationSigner.key, certificate: registrationSigner.certificate, payload: payload, type: WRPRC_JWT_TYPE)
         let serializedCertificate = encoded ? base64URL(wrprc) : String(decoding: wrprc, as: UTF8.self)
         let statusCheck: WrprcStatusCheck = { reference, config in
-            let service = DocumentStatusService(statusList: reference, trustConfig: config)
+            let service = DocumentStatusService(statusList: reference, trustConfig: config, owner: .credential(docType: "urn:eudi:pid:1"))
             return try await service.getStatus(networkingService: StubNetworking(data: statusToken, fails: networkFailure))
         }
         let issuer = WrpVciRegistrationValidator(trustConfig: trustConfig, statusCheck: statusCheck)

@@ -20,6 +20,8 @@ import OpenID4VCI
 
 /// Configuration that describes where trust anchors come from and how trust failures are handled.
 public struct TrustConfiguration: Sendable {
+	// Verified cache entries must not cross trust configurations, even for the same URL.
+	let statusCacheScope = UUID()
 	/// The policy applied to doc types without a specific entry in `docTypePolicies`.
 	public let defaultPolicy: TrustPolicy
 	/// Per doc-type overrides of `defaultPolicy`, keyed by doc type.
@@ -55,8 +57,24 @@ public struct TrustConfiguration: Sendable {
 	let accessTrustManager: EtsiTrustManager
 	/// Trust manager for reader/relying-party registration certificates. Uses the WRPRC verification context.
 	let registrationTrustManager: EtsiTrustManager
-	/// Preserve the ETSI trust context used for status-token signing certificates.
-	var statusTrustManager: EtsiTrustManager { accessTrustManager }
+	private let statusTrustSource: TrustSource
+	private let statusFallbackTrustSource: TrustSource?
+
+	/// Each check gets its own manager, so concurrent document checks cannot change its context.
+	func statusTrustManager(for owner: StatusListOwner?) -> EtsiTrustManager {
+		func manager(_ source: TrustSource, fallback: EtsiTrustManager? = nil) -> EtsiTrustManager {
+			let context: EtsiContextType?
+			switch owner {
+			case .credential(let docType):
+				context = (source.contextTypeMappings ?? .default)[docType]?.statusContext
+			case .registrationCertificate: context = .wrprcStatus
+			case nil: context = nil
+			}
+			return EtsiTrustManager(source: source.withContextTypeMappings(nil),
+				defaultVerificationContext: context?.verificationContext, fallback: fallback)
+		}
+		return manager(statusTrustSource, fallback: statusFallbackTrustSource.map { manager($0) })
+	}
 
 	public init(
 		trustSource: TrustSource,
@@ -78,6 +96,8 @@ public struct TrustConfiguration: Sendable {
 		self.wrprcVpTrustPolicy = wrprcVpTrustPolicy
 		self.wrprcVciTrustPolicy = wrprcVciTrustPolicy
 		self.clockSkew = clockSkew
+		statusTrustSource = trustSource
+		statusFallbackTrustSource = fallbackTrustSource
 		let issuerSource = trustSource.contextTypeMappings == nil ? trustSource.withContextTypeMappings(.default) : trustSource
 		let fallbackTrustManager: EtsiTrustManager?
 		if let fts = fallbackTrustSource {
@@ -108,7 +128,7 @@ public struct TrustConfiguration: Sendable {
 	/// Trust manager for reader/relying-party access certificates backed by platform `SecTrust`.
 	let accessTrustManager: SecTrustSource
 	/// Status signers use the configured anchors without the mdoc reader certificate profile.
-	var statusTrustManager: SecTrustSource {
+	func statusTrustManager(for owner: StatusListOwner?) -> SecTrustSource {
 		SecTrustSource(rootIaca: accessTrustManager.rootIaca, usage: .mdocAuth,
 			revocationPolicy: accessTrustManager.revocationPolicy)
 	}
