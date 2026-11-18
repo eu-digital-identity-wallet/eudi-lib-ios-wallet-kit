@@ -13,9 +13,7 @@ let package = Package(
 			targets: ["EudiWalletKit"])
 	],
 	dependencies: [
-		// Temporary revision for security PR #151; replace with its release before merging.
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git", revision: "dd8bbee17bd19d3136e83d520822ddbfc99b37b5"),
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.30.1"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.31.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.27.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.15.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift.git", exact: "0.44.3"),
@@ -30,7 +28,6 @@ let package = Package(
 			name: "EudiWalletKit",
 			dependencies: [
 				.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
-				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "OpenID4VP", package: "eudi-lib-ios-openid4vp-swift"),
 				.product(name: "OpenID4VCI", package: "eudi-lib-ios-openid4vci-swift"),
