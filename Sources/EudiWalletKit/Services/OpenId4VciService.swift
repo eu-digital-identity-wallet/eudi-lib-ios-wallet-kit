@@ -133,8 +133,11 @@ public actor OpenId4VciService {
 				return try await self.getKeyAttestationJWT(publicKeys, signingKeys: signingKeys, nonce: nonce)
 			} catch {
 				try Task.checkCancellation()
+				let isAuthenticationCancellation = (error as? LAError).map {
+					[LAError.Code.userCancel, .appCancel, .systemCancel].contains($0.code)
+				} ?? false
 				guard !(error is CancellationError), (error as? URLError)?.code != .cancelled,
-					!fallbackKeys.isEmpty else { throw error }
+					!isAuthenticationCancellation, !fallbackKeys.isEmpty else { throw error }
 				// Only this callback can signal a retry: no credential request has been sent yet.
 				throw PlainJwtProofFallback(bindingKeys: fallbackKeys)
 			}
