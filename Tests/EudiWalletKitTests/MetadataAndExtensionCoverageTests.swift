@@ -162,6 +162,19 @@ struct MetadataAndExtensionCoverageTests {
         #expect(result.display?.first?.logo?.urlString == "https://issuer.example/logo.png")
     }
 
+    @Test("Signing algorithms follow the selected proof type")
+    func resolvesProofSigningAlgorithms() {
+        let attestation = ProofTypeSupportedMeta(algorithms: ["ES256"], keyAttestationRequirement: .requiredNoConstraints)
+        let jwt = ProofTypeSupportedMeta(algorithms: ["ES384"], keyAttestationRequirement: .notRequired)
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: ["attestation": attestation], useAttestation: true) == ["ES256"])
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: ["jwt": jwt], useAttestation: false) == ["ES384"])
+        let both = ["attestation": attestation, "jwt": jwt]
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: both, useAttestation: true) == ["ES256"])
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: both, useAttestation: false) == ["ES384"])
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: [:], useAttestation: true).isEmpty)
+        #expect(resolveProofSigningAlgorithms(proofTypesSupported: ["attestation": attestation], useAttestation: false).isEmpty)
+    }
+
     @Test("Detects attestation proof support only when metadata requires it")
     func resolvesProofTypeAttestationSupport() {
         let optionalJwt = ProofTypeSupportedMeta(algorithms: ["ES256"], keyAttestationRequirement: .notRequired)
