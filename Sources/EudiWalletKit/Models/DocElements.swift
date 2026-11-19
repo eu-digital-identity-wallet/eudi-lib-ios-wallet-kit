@@ -205,7 +205,7 @@ extension RequestItem {
 
 	public func extractMsoMdocElement(ns: String, nsItems: [IssuerSignedItem], docClaims: [DocClaim], isMandatory: Bool) -> MsoMdocElement {
 		let issuedElement = nsItems.first { $0.elementIdentifier == rootIdentifier }
-		let stringValue = issuedElement?.description
+		let stringValue = issuedElement?.displayString
 		let docClaim = docClaims.first { $0.namespace == ns && $0.name == rootIdentifier }
 		return MsoMdocElement(elementIdentifier: elementIdentifier, isOptional: !isMandatory, intentToRetain: intentToRetain ?? false, stringValue: stringValue, docClaim: docClaim, isValid: issuedElement != nil)
 	}
