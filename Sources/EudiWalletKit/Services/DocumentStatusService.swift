@@ -26,6 +26,7 @@ import struct MdocDataModel18013.StatusList
 
 public actor DocumentStatusService {
 	let statusList: StatusList
+	let owner: StatusListOwner?
 	/// Trust configuration used to validate the status-list token certificate chain.
 	public let trustConfig: TrustConfiguration
 	let dateProvider: @Sendable () -> Date
@@ -34,16 +35,19 @@ public actor DocumentStatusService {
 	private static let logger = Logger(label: "DocumentStatusService")
 
 	/// Supplies a fresh validation time for each status check by default.
-	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration, cache: StatusListTokenCache? = nil) {
+	/// Provide `owner` to select the ETSI status-signing context. Missing or unmapped owners
+	/// cannot establish ETSI trust and fail when `statusTrustPolicy` is `.enforce`.
+	public init(statusList: StatusList, dateProvider: @escaping @Sendable () -> Date = { Date() }, trustConfig: TrustConfiguration, cache: StatusListTokenCache? = nil, owner: StatusListOwner? = nil) {
 		self.statusList = statusList
+		self.owner = owner
 		self.trustConfig = trustConfig
 		self.dateProvider = dateProvider
 		self.cache = cache
 	}
 
 	/// Uses a fixed validation time, for callers that explicitly supply a date.
-	public init(statusList: StatusList, date: Date, trustConfig: TrustConfiguration) {
-		self.init(statusList: statusList, dateProvider: { date }, trustConfig: trustConfig)
+	public init(statusList: StatusList, date: Date, trustConfig: TrustConfiguration, owner: StatusListOwner? = nil) {
+		self.init(statusList: statusList, dateProvider: { date }, trustConfig: trustConfig, owner: owner)
 	}
 
 	public func getStatus() async throws -> CredentialStatus {
@@ -55,14 +59,16 @@ public actor DocumentStatusService {
 			throw WalletError(description: "Invalid status identifier", code: .invalidStatusToken)
 		}
 		let getStatus = GetStatus()
-		let verifier = StatusListTokenSignatureVerifier(trustConfig: trustConfig)
+		let verifier = StatusListTokenSignatureVerifier(trustConfig: trustConfig, owner: owner)
 		let tokenFetcher = StatusListTokenFetcher(
 			networkingService: networkingService,
 			verifier: verifier,
 			dateProvider: dateProvider
 		)
+		let statusOwner = owner
+		let trustScope = trustConfig.statusCacheScope
 		let fetchClaims: FetchClaimsHandler = if let cache {
-			{ format, url, clockSkew in await cache.claims(format: format, url: url, clockSkew: clockSkew, fetch: tokenFetcher.getStatusClaims) }
+			{ format, url, clockSkew in await cache.claims(format: format, url: url, clockSkew: clockSkew, owner: statusOwner, trustScope: trustScope, fetch: tokenFetcher.getStatusClaims) }
 		} else {
 			tokenFetcher.getStatusClaims
 		}
@@ -81,10 +87,12 @@ public actor DocumentStatusService {
 }
 
 actor StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
+	let owner: StatusListOwner?
 	let trustConfig: TrustConfiguration
 	private(set) var verificationError: (any Error)?
 
-	init(trustConfig: TrustConfiguration) {
+	init(trustConfig: TrustConfiguration, owner: StatusListOwner? = nil) {
+		self.owner = owner
 		self.trustConfig = trustConfig
 	}
 
@@ -117,7 +125,7 @@ actor StatusListTokenSignatureVerifier: VerifyStatusListTokenSignature {
 				throw WalletError(description: "Unsupported status JWT signature algorithm: \(algorithm.rawValue)", code: .unsupportedAlgorithm)
 			}
 		}
-		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.statusTrustManager)
+		let (isValid, reason) = try await x5cVerifyJwtOrCwt.validateTrust(att, trustValidator: trustConfig.statusTrustManager(for: owner))
 		guard isValid else {
 			let message = "\(format) status token trust error: \(reason ?? "")"
 			switch trustConfig.statusTrustPolicy {

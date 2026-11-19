@@ -55,7 +55,7 @@ let vciConfig = OpenId4VciConfiguration(
 The ``TrustConfiguration`` supplies the trust material for WRPRC validation:
 
 - **``TrustConfiguration/registrationTrustManager``** — validates the certificate's signer chain (the registration-certificate provider's e-seal). Derived from the trust source with the WRPRC verification context.
-- **Status-list trust** — validates the status-list token used for the revocation check, also resolved through the trust configuration.
+- **Status-list trust** — validates the status-list token using the WRPRC status context, independently of the WRPAC access-certificate context. Both issuance and presentation select this context automatically.
 
 ```swift
 let trustConfig = TrustConfiguration(

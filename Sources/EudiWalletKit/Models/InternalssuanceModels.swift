@@ -28,6 +28,7 @@ struct CredentialConfiguration: Codable, Sendable {
     let scope: String?
 	let supportsAttestationProofType: Bool
 	let supportsJwtProofTypeWithAttestation: Bool
+	let supportsPlainJwtProof: Bool
     let credentialSigningAlgValuesSupported: [String]
 	let dpopSigningAlgValuesSupported: [String]?
 	let clientAttestationPopSigningAlgValuesSupported: [String]?
@@ -46,6 +47,7 @@ struct CredentialConfiguration: Codable, Sendable {
 		scope: String? = nil,
 		supportsAttestationProofType: Bool,
 		supportsJwtProofTypeWithAttestation: Bool,
+		supportsPlainJwtProof: Bool,
 		credentialSigningAlgValuesSupported: [String],
 		dpopSigningAlgValuesSupported: [String]?,
 		clientAttestationPopSigningAlgValuesSupported: [String]?,
@@ -63,6 +65,7 @@ struct CredentialConfiguration: Codable, Sendable {
 		self.scope = scope
 		self.supportsAttestationProofType = supportsAttestationProofType
 		self.supportsJwtProofTypeWithAttestation = supportsJwtProofTypeWithAttestation
+		self.supportsPlainJwtProof = supportsPlainJwtProof
 		self.credentialSigningAlgValuesSupported = credentialSigningAlgValuesSupported
 		self.dpopSigningAlgValuesSupported = dpopSigningAlgValuesSupported
 		self.clientAttestationPopSigningAlgValuesSupported = clientAttestationPopSigningAlgValuesSupported
