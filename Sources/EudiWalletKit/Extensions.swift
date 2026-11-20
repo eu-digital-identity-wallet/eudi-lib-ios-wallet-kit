@@ -287,7 +287,7 @@ extension JSON {
 		case .number:
 			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
 				let locSexValue = NSLocalizedString(isex == 1 ? "male" : "female", comment: "")
-				return (.string(locSexValue), locSexValue)
+				return (.integer(UInt64(intValue)), locSexValue)
 			}
 			if name == JWTClaimNames.issuedAt || name == JWTClaimNames.expirationTime {
 				let date = Date(timeIntervalSince1970: TimeInterval(intValue))
@@ -298,10 +298,6 @@ extension JSON {
 		case .string:
 			if isBase64ByteClaim(name: name, value: stringValue, valueType: valueType), let d = decodeBase64ByteClaim(stringValue) {
 				return (.bytes(d.bytes), "\(d.count) bytes")
-			}
-			if name == "sex", let isex = Int(stringValue), isex >= 0, isex <= 2 {
-				let locSexValue = NSLocalizedString(isex == 1 ? "male" : "female", comment: "")
-				return (.string(locSexValue), locSexValue)
 			}
 			return (.string(stringValue), stringValue)
 		case .bool: return (.boolean(boolValue), boolValue ? "Y" : "N")
