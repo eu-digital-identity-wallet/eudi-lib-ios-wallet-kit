@@ -418,9 +418,8 @@ extension OpenId4VpUtils {
 			if requiredSetsOptions.contains(where: \.isEmpty) {
 				throw WalletError(description: "Required credential_set cannot be satisfied", code: .credentialSetNotSatisfied)
 			}
-			// Cartesian product across all required sets
-			let requiredCombinations = requiredSetsOptions.reduce([(String, CredentialSelectionSet)]()) { acc, setOptions in
-				if acc.isEmpty { return setOptions }
+			// Seed with one empty combination so optional-only sets can expand.
+			let requiredCombinations = requiredSetsOptions.reduce([("", CredentialSelectionSet())]) { acc, setOptions in
 				return acc.flatMap { (existingKey, existingSet) in
 					setOptions.map { (optKey, optSet) in
 						let combinedKey = existingKey.isEmpty ? optKey : "\(existingKey)|\(optKey)"
@@ -444,7 +443,8 @@ extension OpenId4VpUtils {
 					}
 				}
 			}
-			for (key, set) in combinations {
+			// Presentation requires at least one credential; omit the skip-all variant.
+			for (key, set) in combinations where !set.isEmpty {
 				resultDict[key] = set
 			}
 		} else {
