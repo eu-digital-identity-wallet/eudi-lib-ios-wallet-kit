@@ -898,8 +898,7 @@ public actor OpenId4VciService {
 	private func handleAuthorizationCode(issuer: Issuer, offer: CredentialOffer, request: AuthorizationRequested, authorizationCode: String, serverState: String?, iss: String?) async throws -> AuthorizedRequest {
 		let typedAuthorizationCode = try AuthorizationCode(value: authorizationCode)
 		let authorized = try await issuer.authorizeWithAuthorizationCode(serverState: try Self.authorizationResponseState(serverState), request: request, authorizationCode: typedAuthorizationCode, authorizationDetailsInTokenRequest: .doNotInclude, grant: try offer.grants ?? .authorizationCode(try Grants.AuthorizationCode(authorizationServer: nil)), issuerFromRedirect: iss.flatMap(URL.init(string:)))
-		let at = authorized.accessToken
-		logger.info("--> [AUTHORIZATION] Authorization code exchanged with access token : \(at)")
+		logger.info("--> [AUTHORIZATION] Authorization code exchanged for access token")
 		_ = authorized.accessToken.isExpired(issued: authorized.timeStamp, at: Date().timeIntervalSinceReferenceDate)
 		return authorized
 	}
@@ -1177,7 +1176,7 @@ public actor OpenId4VciService {
 			self.logger.info("Dynamic issuance url: \(redirectURL)")
 			return .presentation_request(redirectURL)
 		} else if let code = redirectURL.getQueryStringParameter("code") {
-			self.logger.info("Authorization code: \(code)")
+			self.logger.info("Authorization code received")
 			let state = redirectURL.getQueryStringParameter("state")
 			let iss = redirectURL.getQueryStringParameter("iss")
 			return .code(code, state: state, iss: iss)
