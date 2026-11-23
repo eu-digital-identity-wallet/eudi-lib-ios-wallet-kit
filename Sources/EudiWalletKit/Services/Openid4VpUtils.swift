@@ -176,13 +176,19 @@ class OpenId4VpUtils {
 			paths.removeAll(); values.removeAll()
 			for (p, _) in allPathsDict {
 				var node = recreated.recreatedClaims
-				let mappedElements = p.value.map { element in
+				let mappedElements = p.value.compactMap { element -> ClaimPathElement? in
 					if case .claim(let name) = element { node = node[name]; return ClaimPathElement.claim(name: name) }
 					// sd-jwt parses numeric object keys (e.g. age_equal_or_over/16) as array indices
-					if case .arrayElement(let index) = element, node.type == .dictionary { node = node["\(index)"]; return ClaimPathElement.claim(name: "\(index)") }
+					if case .arrayElement(let index) = element, node.type == .dictionary {
+						let key = String(index)
+						guard let value = node.dictionary?[key] else { return nil }
+						node = value
+						return ClaimPathElement.claim(name: key)
+					}
 					if case .arrayElement(let index) = element { node = node[index]; return ClaimPathElement.arrayElement(index: index) }
 					return ClaimPathElement.allArrayElements
 				}
+				guard mappedElements.count == p.value.count else { continue }
 				let path = ClaimPath(mappedElements)
 				paths.append(path)
 				values[path] = DcqlClaimValueConversion.fromJson(recreated.recreatedClaims, at: path)
