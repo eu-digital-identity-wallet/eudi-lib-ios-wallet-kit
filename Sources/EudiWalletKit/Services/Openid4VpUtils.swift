@@ -175,9 +175,12 @@ class OpenId4VpUtils {
 				  let allPathsDict = recreated.disclosuresPerClaimPath else { continue }
 			paths.removeAll(); values.removeAll()
 			for (p, _) in allPathsDict {
+				var node = recreated.recreatedClaims
 				let mappedElements = p.value.map { element in
-					if case .claim(let name) = element { return ClaimPathElement.claim(name: name) }
-					if case .arrayElement(let index) = element { return ClaimPathElement.arrayElement(index: index) }
+					if case .claim(let name) = element { node = node[name]; return ClaimPathElement.claim(name: name) }
+					// sd-jwt parses numeric object keys (e.g. age_equal_or_over/16) as array indices
+					if case .arrayElement(let index) = element, node.type == .dictionary { node = node["\(index)"]; return ClaimPathElement.claim(name: "\(index)") }
+					if case .arrayElement(let index) = element { node = node[index]; return ClaimPathElement.arrayElement(index: index) }
 					return ClaimPathElement.allArrayElements
 				}
 				let path = ClaimPath(mappedElements)
