@@ -975,12 +975,10 @@ public actor OpenId4VciService {
 
 	static func handleCredentialResponse(credentials: [Credential], publicKeys: [Data], configuration: CredentialConfiguration, authorized: AuthorizedRequest, notificationId: String?, logger: Logger) async throws -> IssuanceOutcome {
 		let toData: (String) -> Data = { str in
-			logger.notice(configuration.format == .cbor ? "Base64URL mdoc data:\n\(str)" : "sd-jwt credential data:\n\(str)")
 			if configuration.format == .cbor { return Data(base64URLEncoded: str) ?? Data() } else { return str.data(using: .utf8) ?? Data() }
 		}
 		let issued: [String] = try credentials.flatMap { credential in
 		if case let .string(str) = credential  {
-			logger.notice("Issued credential data:\n\(str)")
 			return [str]
 		} else if case let .json(json) = credential, json.type == .array, json.first != nil {
 			let compactParser = CompactParser()
@@ -993,6 +991,7 @@ public actor OpenId4VciService {
 			throw WalletError(description: "Invalid credential", code: .issuanceRequestFailed)
 		} }
 		let credData: [(Data, Data)] = try issued.enumerated().map { index, str in (toData(str), try bindingKey(publicKeys, at: index)) }
+		logger.notice("Credential response processed")
 		return .issued(credData, configuration, authorized, notificationId: notificationId)
 	}
 
