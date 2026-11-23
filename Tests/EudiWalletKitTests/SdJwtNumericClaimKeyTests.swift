@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CryptoKit
 import MdocDataModel18013
 import OpenID4VP
 import WalletStorage
@@ -33,6 +34,28 @@ struct SdJwtNumericClaimKeyTests {
 		#expect(paths.contains(ageOver("16")))
 		#expect(!paths.contains(ClaimPath([.claim(name: "age_equal_or_over"), .arrayElement(index: 16)])))
 		#expect(queryable.hasClaim(id: pidId, claimPath: ageOver("16")))
+	}
+
+	@Test func noncanonicalNumericObjectKeyDoesNotCreateCanonicalClaim() throws {
+		let disclosure = Data(#"["salt", "016", true]"#.utf8).base64URLEncodedString()
+		let digest = Data(SHA256.hash(data: Data(disclosure.utf8))).base64URLEncodedString()
+		let header = Data(#"{"alg":"ES256"}"#.utf8).base64URLEncodedString()
+		let payload = Data("""
+		{"_sd_alg":"sha-256","age_equal_or_over":{"_sd":["\(digest)"]}}
+		""".utf8).base64URLEncodedString()
+		let signature = Data(repeating: 0, count: 64).base64URLEncodedString()
+		let sdJwt = try CompactParser().getSignedSdJwt(serialisedString: "\(header).\(payload).\(signature)~\(disclosure)~")
+		let recreated = try sdJwt.recreateClaims()
+		#expect(recreated.recreatedClaims["age_equal_or_over"].dictionary?.keys.sorted() == ["016"])
+		#expect(recreated.disclosuresPerClaimPath?.keys.contains {
+			$0.value.last == .arrayElement(index: 16)
+		} == true)
+
+		var claimPaths = [WalletStorage.Document.ID: [ClaimPath]]()
+		var claimValues = [WalletStorage.Document.ID: [ClaimPath: [DCQLClaimValue]]]()
+		OpenId4VpUtils.makeSdJwtClaimData(from: [pidId: sdJwt], claimPaths: &claimPaths, claimValues: &claimValues)
+		#expect(claimPaths[pidId]?.contains(ageOver("16")) == false)
+		#expect(claimValues[pidId]?[ageOver("16")] == nil)
 	}
 
 	@Test func numericObjectKeysMatchRequestedValues() throws {
