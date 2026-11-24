@@ -873,7 +873,7 @@ public actor OpenId4VciService {
 			logger.info("PAR not supported, Pushed Authorization Request Endpoint is nil")
 		}
 		logger.info("--> [AUTHORIZATION] Placing Request to AS server's endpoint \(pushedAuthorizationRequestEndpoint)")
-		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer)
+		let parPlaced = try await issuer.prepareAuthorizationRequest(credentialOffer: offer, additionalAuthorizationParameters: [:])
 
 		self.authRequested = parPlaced
 		logger.info("--> [AUTHORIZATION] Placed Request. Authorization code URL is: \(parPlaced.authorizationCodeURL)")
