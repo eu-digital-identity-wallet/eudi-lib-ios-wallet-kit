@@ -151,11 +151,18 @@ extension SignedSDJWT {
 		let allPaths = OrderedSet(allPathsDict.keys).union(docClaims.flatMap(\.claimPaths))
 		let isMandatory: (RequestItem) -> Bool = { if let o = $0.isOptional { !o } else { false } }
 		let itemsReq = itemsRequested[""] ?? []
-		let sdJwtArray = Self.buildSdJwtElementTree(itemsReq: itemsReq, allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory, parentPath: [])
+		let sdJwtArray = Self.buildSdJwtElementTree(itemsReq: itemsReq, allPaths: allPaths, docClaims: docClaims, isMandatory: isMandatory, parentPath: [], disclosuresPerClaimPath: allPathsDict)
 		return SdJwtElements(docId: docId, vct: vct, displayName: displayName, sdJwtElements: sdJwtArray)
 	}
 
-	static func buildSdJwtElementTree(itemsReq: [RequestItem], allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: (RequestItem) -> Bool, parentPath: [String]) -> [SdJwtElement] {
+	static func buildSdJwtElementTree(itemsReq: [RequestItem], allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: (RequestItem) -> Bool, parentPath: [String], disclosuresPerClaimPath: [ClaimPath: [Disclosure]]? = nil) -> [SdJwtElement] {
+		// Each path includes its ancestor disclosures. Selecting a container does not
+		// select the additional disclosures needed by its children.
+		let selectedDisclosures = Set(itemsReq.flatMap { item in
+			disclosuresPerClaimPath?.filter { path, _ in
+				path.value.count == item.claimPath.value.count && item.claimPath.contains2(path)
+			}.values.flatMap { $0 } ?? []
+		}.filter { !$0.isEmpty })
 		let depth = parentPath.count + 1
 		// Group request items by the element at current depth
 		var groupedByCurrentLevel = OrderedDictionary<String, [RequestItem]>()
@@ -172,16 +179,20 @@ extension SignedSDJWT {
 			let exactItem = groupItems.first { $0.elementPath.count == depth } ?? groupItems.first!
 			// Recursively build nested elements from deeper request items
 			let deeperItems = groupItems.filter { $0.elementPath.count > depth }
-			let docClaim = exactItem.findDocClaimByPath(docClaims: docClaims, requestPath: currentPath)
+			let storedClaim = exactItem.findDocClaimByPath(docClaims: docClaims, requestPath: currentPath)
+			let docClaim = storedClaim.map { claim in
+				guard let disclosuresPerClaimPath else { return claim }
+				return Self.filterDisplayedClaim(claim, disclosuresPerClaimPath: disclosuresPerClaimPath, selectedDisclosures: selectedDisclosures)
+			}
 			var nestedElements: [SdJwtElement]?
 			var filteredDocClaim = docClaim
 			if !deeperItems.isEmpty {
 				let nestedDocClaims = docClaim?.children ?? docClaims
-				nestedElements = Self.buildSdJwtElementTree(itemsReq: deeperItems, allPaths: allPaths, docClaims: nestedDocClaims, isMandatory: isMandatory, parentPath: currentPath)
+				nestedElements = Self.buildSdJwtElementTree(itemsReq: deeperItems, allPaths: allPaths, docClaims: nestedDocClaims, isMandatory: isMandatory, parentPath: currentPath, disclosuresPerClaimPath: disclosuresPerClaimPath)
 				// Filter docClaim children to only include those matching nested elements
-				if let children = docClaim?.children, let nested = nestedElements {
+				if disclosuresPerClaimPath == nil, let docClaim, let children = docClaim.children, let nested = nestedElements {
 					let nestedNames = Set(nested.map { $0.elementPath.last! })
-					filteredDocClaim?.children = children.filter { nestedNames.contains($0.name) }
+					filteredDocClaim = Self.replacingDisplayedChildren(of: docClaim, with: children.filter { nestedNames.contains($0.name) })
 				}
 			}
 			let element = exactItem.extractSdJwtElement(allPaths: allPaths, docClaim: filteredDocClaim, isMandatory: isMandatory(exactItem), overridePath: currentPath, nestedElements: nestedElements)
@@ -189,6 +200,34 @@ extension SignedSDJWT {
 		}
 		return sdJwtArray
 	}
+
+	private static func filterDisplayedClaim(_ claim: DocClaim, disclosuresPerClaimPath: [ClaimPath: [Disclosure]], selectedDisclosures: Set<Disclosure>) -> DocClaim {
+		guard let children = claim.children else { return claim }
+		let visibleChildren = children.compactMap { child -> DocClaim? in
+			let required = disclosuresPerClaimPath.first { path, _ in
+				path.value.map(\.claimName) == child.path
+			}?.value ?? []
+			guard required.filter({ !$0.isEmpty }).allSatisfy({ selectedDisclosures.contains($0) }) else { return nil }
+			return filterDisplayedClaim(child, disclosuresPerClaimPath: disclosuresPerClaimPath, selectedDisclosures: selectedDisclosures)
+		}
+		return replacingDisplayedChildren(of: claim, with: visibleChildren)
+	}
+
+	private static func replacingDisplayedChildren(of claim: DocClaim, with children: [DocClaim]) -> DocClaim {
+		let summary: String
+		switch claim.dataValue {
+		case .dictionary:
+			summary = "{\(children.map { "\($0.name): \($0.stringValue)" }.joined(separator: ","))}"
+		case .array:
+			summary = children.isEmpty ? "[]" : children.map(\.stringValue).joined(separator: ",")
+		default:
+			summary = claim.stringValue
+		}
+		var result = DocClaim(name: claim.name, path: claim.path, displayName: claim.displayName, dataValue: claim.dataValue, stringValue: summary, isOptional: claim.isOptional, order: claim.order, namespace: claim.namespace, children: children)
+		result.style = claim.style
+		return result
+	}
+
 }
 
 extension eudi_lib_sdjwt_swift.ClaimPathElement {
