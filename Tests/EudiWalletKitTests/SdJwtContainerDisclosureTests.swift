@@ -28,19 +28,42 @@ struct SdJwtContainerDisclosureTests {
         #expect(fixture.claims.first { $0.name == "place_of_birth" }?.children?.count == 3)
     }
 
-    @Test("Array container summaries omit undisclosed entries", arguments: [false, true])
+    @Test("Array containers have empty display values and visible entries display their own values", arguments: [false, true])
     func nationalities(includeEntry: Bool) throws {
         let fixture = try makeFixture()
         var paths = [["nationalities"]]
         if includeEntry { paths.append(["nationalities", "0"]) }
         let element = try extract(fixture, paths: paths)
-        #expect(element.docClaim?.children?.map(\.stringValue) == (includeEntry ? ["LU"] : []))
-        #expect(element.stringValue == (includeEntry ? "LU" : "[]"))
-        #expect(element.docClaim?.stringValue == element.stringValue)
+        let claim = try #require(element.docClaim)
+        #expect(element.stringValue == "")
+        #expect(claim.displayString.isEmpty)
+        #expect(claim.children?.map(\.displayString) == (includeEntry ? ["LU"] : []))
+        #expect(element.nestedElements?.map(\.stringValue) == (includeEntry ? ["LU"] : nil))
         let presented = try #require(try fixture.token.present(query: Set(paths.map { RequestItem(elementPath: $0).claimPath })))
         let recreated = try presented.recreateClaims().recreatedClaims
         let resolved = SdJwtUtils.resolveNestedSdClaims(recreated, disclosures: presented.disclosures, hashingAlg: "sha-256")
         #expect(resolved["nationalities"].arrayValue.map(\.stringValue) == (includeEntry ? ["LU"] : []))
+    }
+
+    @Test("A trailing null shows the array values in one selectable row")
+    func terminalArrayWildcard() throws {
+        let fixture = try makeFixture()
+        let path = try JSONDecoder().decode(ClaimPath.self, from: Data(#"["mixed",null]"#.utf8))
+        let request = ClaimsQuery(id: nil, path: path, values: nil, intentToRetain: nil)
+        let item = try #require(OpenId4VpUtils.parseClaim(request, .sdjwt)?.1)
+        let elements = try #require(fixture.token.extractSdJwtElements(
+            docId: "pid", vct: "pid", displayName: nil, docClaims: fixture.claims, itemsRequested: ["": [item]]
+        ))
+
+        #expect(elements.sdJwtElements.count == 1)
+        let element = try #require(elements.sdJwtElements.first)
+        let claim = try #require(element.docClaim)
+        #expect(element.stringValue == "private,visible")
+        #expect(claim.displayString == "private,visible")
+        #expect(claim.children == nil)
+        #expect(element.nestedElements == nil)
+        #expect(claim.path == ["mixed", ""])
+        #expect(elements.selectedItemsDictionary[""]?.map(\.claimPath) == [item.claimPath])
     }
 
     @Test("Inline children remain visible and nested summaries omit separate disclosures")

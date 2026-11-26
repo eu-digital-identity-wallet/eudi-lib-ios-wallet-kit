@@ -301,7 +301,7 @@ extension JSON {
 			}
 			return (.string(stringValue), stringValue)
 		case .bool: return (.boolean(boolValue), boolValue ? "Y" : "N")
-		case .array: return (.array, stringValue)
+		case .array: return (.array, "")
 		case .dictionary:	return (.dictionary, stringValue)
 		case .null:	return nil
 		case .unknown: return nil
@@ -371,7 +371,7 @@ extension JSON {
 					a.append(di)
 				}
 			}
-			return (a, type == .array ? "\(a.map(\.stringValue).joined(separator: ","))" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ","))}")
+			return (a, type == .array ? "" : "{\(a.map { "\($0.name): \($0.stringValue)" }.joined(separator: ","))}")
 		default: return nil
 		}
 	}
