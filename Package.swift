@@ -13,8 +13,7 @@ let package = Package(
 			targets: ["EudiWalletKit"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.32.2"),
-		.package(url: "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git", branch: "fix/lote-signer-trust-anchors"),
+		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-data-transfer.git", exact: "0.33.0"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-wallet-storage.git", exact: "0.27.1"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-sdjwt-swift.git", exact: "0.15.3"),
 		.package(url: "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-openid4vp-swift.git", exact: "0.44.3"),
@@ -29,7 +28,6 @@ let package = Package(
 			name: "EudiWalletKit",
 			dependencies: [
 				.product(name: "MdocDataTransfer18013", package: "eudi-lib-ios-iso18013-data-transfer"),
-				.product(name: "MdocSecurity18013", package: "eudi-lib-ios-iso18013-security"),
 				.product(name: "WalletStorage", package: "eudi-lib-ios-wallet-storage"),
 				.product(name: "OpenID4VP", package: "eudi-lib-ios-openid4vp-swift"),
 				.product(name: "OpenID4VCI", package: "eudi-lib-ios-openid4vci-swift"),
