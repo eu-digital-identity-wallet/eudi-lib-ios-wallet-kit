@@ -158,11 +158,14 @@ extension SignedSDJWT {
 	static func buildSdJwtElementTree(itemsReq: [RequestItem], allPaths: OrderedSet<ClaimPath>, docClaims: [DocClaim], isMandatory: (RequestItem) -> Bool, parentPath: [String], disclosuresPerClaimPath: [ClaimPath: [Disclosure]]? = nil) -> [SdJwtElement] {
 		// Each path includes its ancestor disclosures. Selecting a container does not
 		// select the additional disclosures needed by its children.
-		let selectedDisclosures = Set(itemsReq.flatMap { item in
-			disclosuresPerClaimPath?.filter { path, _ in
-				path.value.count == item.claimPath.value.count && item.claimPath.contains2(path)
-			}.values.flatMap { $0 } ?? []
-		}.filter { !$0.isEmpty })
+		func disclosures(for items: [RequestItem]) -> Set<Disclosure> {
+			Set(items.flatMap { item in
+				disclosuresPerClaimPath?.filter { path, _ in
+					path.value.count == item.claimPath.value.count && item.claimPath.contains2(path)
+				}.values.flatMap { $0 } ?? []
+			}.filter { !$0.isEmpty })
+		}
+		let selectedDisclosures = disclosures(for: itemsReq)
 		let depth = parentPath.count + 1
 		// Group request items by the element at current depth
 		var groupedByCurrentLevel = OrderedDictionary<String, [RequestItem]>()
@@ -173,13 +176,26 @@ extension SignedSDJWT {
 			groupedByCurrentLevel[key]!.append(reqItem)
 		}
 		var sdJwtArray = [SdJwtElement]()
-		for (key, groupItems) in groupedByCurrentLevel {
+		for (key, requests) in groupedByCurrentLevel {
 			let currentPath = parentPath + [key]
-			// Find the request item that matches exactly this level (for element metadata)
-			let exactItem = groupItems.first { $0.elementPath.count == depth } ?? groupItems.first!
-			// Recursively build nested elements from deeper request items
+			let storedClaim = requests[0].findDocClaimByPath(docClaims: docClaims, requestPath: currentPath)
+			var groupItems = requests
+			if let storedClaim, case .array = storedClaim.dataValue,
+			   let wildcard = requests.first(where: { $0.elementPath == currentPath + [""] }) {
+				// A terminal wildcard is one selectable row for the entire array.
+				let visibleClaim = disclosuresPerClaimPath.map {
+					Self.filterDisplayedClaim(storedClaim, disclosuresPerClaimPath: $0, selectedDisclosures: disclosures(for: [wildcard]))
+				} ?? storedClaim
+				let claim = Self.replacingDisplayedChildren(of: visibleClaim, with: visibleClaim.children ?? [], flattenedArrayPath: wildcard.elementPath)
+				sdJwtArray.append(wildcard.extractSdJwtElement(
+					allPaths: allPaths, docClaim: claim, isMandatory: isMandatory(wildcard),
+					overridePath: wildcard.elementPath, nestedElements: nil
+				))
+				groupItems.removeAll { $0.elementPath == wildcard.elementPath }
+			}
+			// Prefer the request item that matches exactly this level for element metadata.
+			guard let exactItem = groupItems.first(where: { $0.elementPath.count == depth }) ?? groupItems.first else { continue }
 			let deeperItems = groupItems.filter { $0.elementPath.count > depth }
-			let storedClaim = exactItem.findDocClaimByPath(docClaims: docClaims, requestPath: currentPath)
 			let docClaim = storedClaim.map { claim in
 				guard let disclosuresPerClaimPath else { return claim }
 				return Self.filterDisplayedClaim(claim, disclosuresPerClaimPath: disclosuresPerClaimPath, selectedDisclosures: selectedDisclosures)
@@ -213,17 +229,19 @@ extension SignedSDJWT {
 		return replacingDisplayedChildren(of: claim, with: visibleChildren)
 	}
 
-	private static func replacingDisplayedChildren(of claim: DocClaim, with children: [DocClaim]) -> DocClaim {
+	private static func replacingDisplayedChildren(
+		of claim: DocClaim, with children: [DocClaim], flattenedArrayPath: [String]? = nil
+	) -> DocClaim {
 		let summary: String
 		switch claim.dataValue {
 		case .dictionary:
 			summary = "{\(children.map { "\($0.name): \($0.stringValue)" }.joined(separator: ","))}"
 		case .array:
-			summary = children.isEmpty ? "[]" : children.map(\.stringValue).joined(separator: ",")
+			summary = flattenedArrayPath == nil ? "" : children.map(\.displayString).joined(separator: ",")
 		default:
 			summary = claim.stringValue
 		}
-		var result = DocClaim(name: claim.name, path: claim.path, displayName: claim.displayName, dataValue: claim.dataValue, stringValue: summary, isOptional: claim.isOptional, order: claim.order, namespace: claim.namespace, children: children)
+		var result = DocClaim(name: claim.name, path: flattenedArrayPath ?? claim.path, displayName: claim.displayName, dataValue: claim.dataValue, stringValue: summary, isOptional: claim.isOptional, order: claim.order, namespace: claim.namespace, children: flattenedArrayPath == nil ? children : nil)
 		result.style = claim.style
 		return result
 	}
