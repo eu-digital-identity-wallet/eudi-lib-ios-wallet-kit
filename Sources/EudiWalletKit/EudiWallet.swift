@@ -244,14 +244,20 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - credentialOptions: Credential options specifying batch size and credential policy. If nil, defaults are fetched from issuer metadata.
 	///   - keyOptions: Key options (secure area name and other options) for the document issuing (optional)
 	///   - promptMessage: Prompt message for biometric authentication (optional)
+	///   - additionalAuthorizationParameters: custom OAuth/OpenID authorization request parameters to be included in the Authorization Request or Pushed Authorization Request (PAR) (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
-	@available(*, deprecated, message: "Use issueDocuments(issuerName:, configuration:, promptMessage:)")
-	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil) async throws -> IssuerResponse {
+	@available(*, deprecated, message: "Use issueDocuments(issuerName:, configuration:, promptMessage:, additionalAuthorizationParameters:)")
+	@discardableResult public func issueDocuments(issuerName: String, docTypeIdentifiers: [DocTypeIdentifier], credentialOptions: CredentialOptions? = nil, keyOptions: KeyOptions? = nil, promptMessage: String? = nil, additionalAuthorizationParameters: [String: String]? = nil) async throws -> IssuerResponse {
 		let configuration: [DocumentIssuanceConfiguration] = docTypeIdentifiers.map {
 			.init(docTypeIdentifier: $0, credentialOptions: credentialOptions, keyOptions: keyOptions)
 		}
 		
-		return try await issueDocuments(issuerName: issuerName, configuration: configuration, promptMessage: promptMessage)
+		return try await issueDocuments(
+			issuerName: issuerName,
+			configuration: configuration,
+			promptMessage: promptMessage,
+			additionalAuthorizationParameters: additionalAuthorizationParameters
+		)
 	}
 	
 	/// Issue multiple documents using OpenId4Vci protocol
@@ -261,14 +267,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - issuerName: The name of the issuer service
 	///   - configuration: Per issuance document configuration defining ``DocTypeIdentifier``, CredentialOptions and KeyOptions
 	///   - promptMessage: Prompt message for biometric authentication (optional)
+	///   - additionalAuthorizationParameters: custom OAuth/OpenID authorization request parameters to be included in the Authorization Request or Pushed Authorization Request (PAR) (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
-	@discardableResult public func issueDocuments(issuerName: String, configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil) async throws -> IssuerResponse {
+	@discardableResult public func issueDocuments(issuerName: String, configuration: [DocumentIssuanceConfiguration], promptMessage: String? = nil, additionalAuthorizationParameters: [String: String]? = nil) async throws -> IssuerResponse {
 		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		localAuthenticationContext = ThreadSafeAuthContext()
 		let vciService = try await resolveVCIService(issuerName: issuerName)
 		let documents = try await vciService.issueDocumentsWithResults(
 			configuration: configuration,
-			promptMessage: promptMessage
+			promptMessage: promptMessage,
+			additionalAuthorizationParameters: additionalAuthorizationParameters
 		)
 		return IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
@@ -336,6 +344,7 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - keyOptions: Key options (secure area name and other options) for the document. If nil, the options from the original issuance metadata are used.
 	///   - promptMessage: Prompt message for biometric authentication (optional).
 	///   - backgroundOnly: When `true`, reissuance proceeds only if stored authorization data is available (no user interaction). Throws if authorization data is absent. Defaults to `false`.
+	///   - additionalAuthorizationParameters: custom OAuth/OpenID authorization request parameters to be included in the Authorization Request or Pushed Authorization Request (PAR) (optional)
 	/// - Returns: An ``IssuerResponse`` with the reissued document (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
 	/// - Throws: An error if the document metadata is not found, if `backgroundOnly` is `true` and no stored authorization data exists, or if reissuance fails.
 	@discardableResult public func reissueDocument(
@@ -343,7 +352,8 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		credentialOptions: CredentialOptions? = nil,
 		keyOptions: KeyOptions? = nil,
 		promptMessage: String? = nil,
-		backgroundOnly: Bool = false
+		backgroundOnly: Bool = false,
+		additionalAuthorizationParameters: [String: String]? = nil
 	) async throws -> IssuerResponse {
 		OpenId4VciService.clearIssuerAndAuthorizationMetadataCache()
 		let docMetadata = try await getDocumentMetadata(documentId: documentId)
@@ -356,7 +366,16 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 		}
 		let resolvedCredentialOptions = credentialOptions ?? docMetadata.credentialOptions
 		let resolvedKeyOptions = keyOptions ?? docMetadata.keyOptions
-		let reissued = try await vciService.reissueDocument(documentId: documentId, docMetadata: docMetadata, authorized: authorized, credentialOptions: resolvedCredentialOptions, keyOptions: resolvedKeyOptions, promptMessage: promptMessage, backgroundOnly: backgroundOnly)
+		let reissued = try await vciService.reissueDocument(
+			documentId: documentId,
+			docMetadata: docMetadata,
+			authorized: authorized,
+			credentialOptions: resolvedCredentialOptions,
+			keyOptions: resolvedKeyOptions,
+			promptMessage: promptMessage,
+			backgroundOnly: backgroundOnly,
+			additionalAuthorizationParameters: additionalAuthorizationParameters
+		)
 		return IssuerResponse(documents: reissued, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 	}
 
@@ -474,14 +493,23 @@ public final class EudiWallet: ObservableObject, @unchecked Sendable {
 	///   - txCodeValue: Transaction code given to user (if available)
 	///   - promptMessage: prompt message for biometric authentication (optional)
 	///  - configuration: Optional OpenId4VciConfiguration to override the default one for this issuance
+	///  - additionalAuthorizationParameters: custom OAuth/OpenID authorization request parameters to be included in the Authorization Request or Pushed Authorization Request (PAR) (optional)
 	/// - Returns: An ``IssuerResponse`` with the issued documents (saved in storage), the decoded issuer registration policy and any WRP registration certificate warnings.
-	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil) async throws -> IssuerResponse {
+	public func issueDocumentsByOfferUrl(offerUri: String, docTypes: [OfferedDocModel], txCodeValue: String? = nil, promptMessage: String? = nil, configuration: OpenId4VciConfiguration? = nil, additionalAuthorizationParameters: [String: String]? = nil) async throws -> IssuerResponse {
 		let issuerMetadataPolicy = configuration?.issuerMetadataPolicy ?? trustConfig.issuerMetadataPolicy
 		let offer = try await resolveCredentialOffer(offerUri: offerUri, policy: issuerMetadataPolicy)
 		let urlString = offer.credentialIssuerIdentifier.url.absoluteString
 		let vciService = try await resolveVCIService(issuerName: urlString)
 		if let configuration {	await vciService.setConfiguration(configuration) }
-		let documents = try await vciService.issueDocumentsByOfferUrl(offerUri: offerUri, docTypes: docTypes, authorized: nil, documentId: nil, txCodeValue: txCodeValue, promptMessage: promptMessage)
+		let documents = try await vciService.issueDocumentsByOfferUrl(
+			offerUri: offerUri,
+			docTypes: docTypes,
+			authorized: nil,
+			documentId: nil,
+			txCodeValue: txCodeValue,
+			promptMessage: promptMessage,
+			additionalAuthorizationParameters: additionalAuthorizationParameters
+		)
 		let issuerResponse = IssuerResponse(documents: documents.documents, failures: documents.failures, wrpIssuerWarnings: await vciService.wrpIssuerWarnings, wrpIssuerPolicy: await vciService.wrpIssuerPolicy)
 		return issuerResponse
 	}
