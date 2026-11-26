@@ -18,7 +18,7 @@ struct StatusTrustContextTests {
             wrprcProviders: registration ? url as NSString : nil,
             pubEaaProviders: nil, qeaProviders: nil,
             eaaProviders: registration ? [:] : [EudiwIosTrust.shared.mdlUseCase: url as NSString]),
-            cacheTtlHours: 24, customJwtSignatureVerifier: verifier, loadLoTE: loader,
+            loteSignerTrustAnchors: [], cacheTtlHours: 24, customJwtSignatureVerifier: verifier, loadLoTE: loader,
             revocationPolicy: .disabled))
         let config = TrustConfiguration(trustSource: source)
         let copy = config

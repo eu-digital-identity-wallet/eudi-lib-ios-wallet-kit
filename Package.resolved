@@ -1,5 +1,5 @@
 {
-  "originHash" : "9e99556d4a2152d94eb88e8f2f25c93ff9d7896cf025683d1e44519c52a7d22a",
+  "originHash" : "12cccaffc285539d3fde940aaf4c7677b0a6535072e3895bef5648dcd5aeed2c",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -31,10 +31,10 @@
     {
       "identity" : "eudi-lib-ios-iso18013-security",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eu-digital-identity-wallet/eudi-lib-ios-iso18013-security.git",
+      "location" : "https://github.com/niscy-eudiw/eudi-lib-ios-iso18013-security.git",
       "state" : {
-        "revision" : "548a4bceba60a8d02a95b6bebe411678b5b81d9b",
-        "version" : "0.32.1"
+        "branch" : "fix/lote-signer-trust-anchors",
+        "revision" : "c00575a2a725fa28bc0f511fb9aa3a84fafb7243"
       }
     },
     {
