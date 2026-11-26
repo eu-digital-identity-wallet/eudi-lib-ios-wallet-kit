@@ -112,7 +112,7 @@ extension MetadataCacheTests.MetadataCacheConcurrencyTests {
 private func makeService(issuer: String, networking: any Networking) throws -> OpenId4VciService {
     let storage = TestDataStorageService()
     #if canImport(EudiEtsi1196x2)
-    let trust = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+    let trust = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning)
     #else
     let trust = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
     #endif

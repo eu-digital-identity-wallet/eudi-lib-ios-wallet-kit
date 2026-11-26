@@ -58,7 +58,7 @@ struct PlainJwtProofFallbackTests {
         SecureAreaRegistry.shared.register(secureArea: KeyAttestationTestSecureArea.shared)
         let storageService = TestDataStorageService()
         #if canImport(EudiEtsi1196x2)
-        let trust = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trust = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trust = TrustConfiguration(rootIaca: [])
         #endif

@@ -10,11 +10,13 @@ The secure area instance must be initialized with a secure key storage area impl
 
 Assuming that the application developer has implemented the SecureArea protocol and registered an instance with the wallet kit, it will be available for custom secure area cryptographic operations. The following example demonstrates how to register a custom secure area with the Wallet Kit:
 
+Supply the DER-encoded LoTE signer or issuing CA certificates as `loteSignerTrustAnchors` (`[Data]`). For the EUDI reference environment, use the `pidissuerca02_eu.der` development CA.
+
 ```swift
 let keyChainStorage = KeyChainSecureKeyStorage(serviceName: self.serviceName, accessGroup: nil)
 let mySecureArea = MySecureArea(storage: keyChainStorage)
 let config = EudiWalletConfiguration(serviceName: "wallet_dev_ui")
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig, secureAreas: [mySecureArea])
 ```
 

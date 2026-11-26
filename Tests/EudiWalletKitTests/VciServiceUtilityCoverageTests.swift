@@ -13,7 +13,7 @@ extension MetadataCacheTests.VciServiceUtilityCoverageTests {
         let storageService = TestDataStorageService()
         let trustConfig: TrustConfiguration
         #if canImport(EudiEtsi1196x2)
-        trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning, wrprcVciTrustPolicy: .warning)
+        trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning, wrprcVciTrustPolicy: .warning)
         #else
         trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning, wrprcVciTrustPolicy: .warning)
         #endif

@@ -214,7 +214,7 @@ struct TransactionDataServiceTests {
             .init(name: "transaction_data", value: String(decoding: try JSONEncoder().encode([transaction]), as: UTF8.self))
         ]
         #if canImport(EudiEtsi1196x2)
-        let trust = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trust = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trust = TrustConfiguration(rootIaca: [])
         #endif
@@ -255,7 +255,7 @@ struct TransactionDataServiceTests {
             .init(name: "transaction_data", value: String(decoding: try JSONEncoder().encode([transaction]), as: UTF8.self))
         ]
         #if canImport(EudiEtsi1196x2)
-        let trust = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trust = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trust = TrustConfiguration(rootIaca: [])
         #endif

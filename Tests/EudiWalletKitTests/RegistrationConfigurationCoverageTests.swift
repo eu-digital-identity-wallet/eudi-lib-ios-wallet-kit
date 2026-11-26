@@ -13,7 +13,7 @@ struct RegistrationConfigurationCoverageTests {
     private func trustConfig(vp: TrustPolicy = .enforce, vci: TrustPolicy = .enforce, signedMetadata: Bool = true) -> TrustConfiguration {
         #if canImport(EudiEtsi1196x2)
         TrustConfiguration(
-            trustSource: .etsi(.eudiRef), defaultPolicy: .warning,
+            trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning,
             docTypePolicies: ["pid": .enforce], requireSignedMetadata: signedMetadata,
             statusTrustPolicy: .warning, wrprcVpTrustPolicy: vp,
             wrprcVciTrustPolicy: vci, clockSkew: 17

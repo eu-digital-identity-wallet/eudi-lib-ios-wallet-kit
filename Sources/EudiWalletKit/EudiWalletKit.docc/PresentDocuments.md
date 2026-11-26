@@ -19,11 +19,13 @@ Set it through ``EudiWalletConfiguration/bleTransferMode`` during initialization
 - **`.client`**: The holder device acts as a GATT central (client). It scans and connects to the reader's peripheral.
 - **`.both`**: The holder device supports both peripheral server and central client modes simultaneously, advertising the supported modes in the device engagement QR code.
 
+Supply the DER-encoded LoTE signer or issuing CA certificates as `loteSignerTrustAnchors` (`[Data]`). For the EUDI reference environment, use the `pidissuerca02_eu.der` development CA.
+
 ```swift
 let config = EudiWalletConfiguration(
     bleTransferMode: .server  // default
 )
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .both
 ```
@@ -56,7 +58,7 @@ let config = EudiWalletConfiguration(
     bleTransferMode: .server,
     bleTransportFactory: L2CAPTransportFactory()
 )
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef),fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)),fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 ```
 
@@ -109,7 +111,7 @@ Use ``PresentationSession/readerAuthenticationStatus`` to display authentication
 
 ```swift
 let trustConfig = TrustConfiguration(
-    trustSource: .etsi(.eudiRef),
+    trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)),
     readerTrustPolicy: .warning
 )
 ```

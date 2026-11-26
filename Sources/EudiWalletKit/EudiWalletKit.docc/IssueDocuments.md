@@ -185,6 +185,8 @@ The method returns an ``IssuerResponse`` containing the issued documents togethe
 
 The following example shows how to issue documents by offer URL:
 
+Supply the DER-encoded LoTE signer or issuing CA certificates as `loteSignerTrustAnchors` (`[Data]`). For the EUDI reference environment, use the `pidissuerca02_eu.der` development CA.
+
 ```swift
 
 let config = OpenId4VciConfiguration(
@@ -193,7 +195,7 @@ let config = OpenId4VciConfiguration(
   issuerMetadataPolicy: issuerMetadataPolicy
 )
 
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try EudiWallet(
   eudiWalletConfig: EudiWalletConfiguration(),
   trustConfig: trustConfig,

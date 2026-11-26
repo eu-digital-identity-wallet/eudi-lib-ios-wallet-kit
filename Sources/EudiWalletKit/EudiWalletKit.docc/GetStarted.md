@@ -21,9 +21,11 @@ dependencies: [
 ## Initialization
 The ``EudiWallet`` class provides a unified API for the two user attestation presentation flows. It is initialized with a document storage manager instance. For SwiftUI apps, the wallet instance can be added as an ``environmentObject`` to be accessible from all views. A KeyChain implementation of document storage is available.
 
+Supply the DER-encoded LoTE signer or issuing CA certificates as `loteSignerTrustAnchors` (`[Data]`). For the EUDI reference environment, use the `pidissuerca02_eu.der` development CA.
+
 ```swift
 let config = EudiWalletConfiguration(serviceName: "my_wallet_app", logFileName: "temp.txt")
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.openID4VpConfig = OpenId4VpConfiguration(clientIdSchemes: [.x509SanDns, .x509Hash])
 wallet.transactionLogger = MyFileTransactionLogger(wallet: wallet)
@@ -65,7 +67,7 @@ let config = EudiWalletConfiguration(
     serviceName: "my_wallet_app",
     bleTransferMode: .server  // default; use .client or .both as needed
 )
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .client
 ```
@@ -83,7 +85,7 @@ let config = EudiWalletConfiguration(
     bleTransferMode: .server,
     bleTransportFactory: MyCustomTransportFactory()
 )
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 ```
 

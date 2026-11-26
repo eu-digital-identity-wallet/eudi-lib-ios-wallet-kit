@@ -42,8 +42,8 @@ struct EudiWalletKitTests {
         let secondConfig = EudiWalletConfiguration(serviceName: "wallet-logging-test-2-\(UUID().uuidString)")
 
         #if canImport(EudiEtsi1196x2)
-        let trustConfig1 = TrustConfiguration(trustSource: .etsi(.eudiRef))
-        let trustConfig2 = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trustConfig1 = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
+        let trustConfig2 = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trustConfig1 = TrustConfiguration(rootIaca: [])
         let trustConfig2 = TrustConfiguration(rootIaca: [])
@@ -510,7 +510,7 @@ struct EudiWalletKitTests {
 		let issuerName = "attested-issuer-\(UUID().uuidString)"
 		let provider = RecordingWalletAttestationsProvider()
 		#if canImport(EudiEtsi1196x2)
-		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		let trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
 		#else
 		let trustConfig = TrustConfiguration(rootIaca: [])
 		#endif
@@ -553,7 +553,7 @@ struct EudiWalletKitTests {
 		let issuerName = "attested-issuer-\(UUID().uuidString)"
 		let provider = ProofCheckingWalletAttestationsProvider()
 		#if canImport(EudiEtsi1196x2)
-		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+		let trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
 		#else
 		let trustConfig = TrustConfiguration(rootIaca: [])
 		#endif
@@ -596,7 +596,7 @@ struct EudiWalletKitTests {
 		let provider = RecordingWalletAttestationsProvider()
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, keyAttestationsConfig: KeyAttestationConfiguration(walletAttestationsProvider: provider), parUsage: .required(authorizationCodeDPoPBinding: true), requireDpop: true)
 		#if canImport(EudiEtsi1196x2)
-		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+		let trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning)
 		#else
 		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
 		#endif
