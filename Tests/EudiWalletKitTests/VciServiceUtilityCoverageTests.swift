@@ -137,7 +137,8 @@ extension MetadataCacheTests.VciServiceUtilityCoverageTests {
                 docTypeModels: resolved.docModels,
                 txCodeValue: nil,
                 authorized: nil,
-                forceRefreshToken: false
+                forceRefreshToken: false,
+				additionalAuthorizationParameters: [:]
             )
             Issue.record("Offers with a transaction-code requirement should not authorize without one")
         } catch let error as WalletError {
@@ -154,7 +155,8 @@ extension MetadataCacheTests.VciServiceUtilityCoverageTests {
                 docTypeModels: [],
                 txCodeValue: nil,
                 authorized: nil,
-                forceRefreshToken: false
+				forceRefreshToken: false,
+				additionalAuthorizationParameters: [:]
             )
             Issue.record("Authorization must require a resolved offer")
         } catch let error as WalletError {
