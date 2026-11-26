@@ -36,7 +36,14 @@ public final class DefaultDcqlQueryable: DcqlQueryable, Sendable {
 	private let claimPaths: [Document.ID: [ClaimPath]]
 	private let claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]]
 
-	public init(credentials: [Document.ID: (DocType, DocDataFormat)], claimPaths: [Document.ID: [ClaimPath]], claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]] = [:]) {
+	let sdJwtDocuments: [Document.ID: String]
+
+	public convenience init(credentials: [Document.ID: (DocType, DocDataFormat)], claimPaths: [Document.ID: [ClaimPath]], claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]] = [:]) {
+		self.init(credentials: credentials, claimPaths: claimPaths, claimValues: claimValues, sdJwtDocuments: [:])
+	}
+
+	init(credentials: [Document.ID: (DocType, DocDataFormat)], claimPaths: [Document.ID: [ClaimPath]], claimValues: [Document.ID: [ClaimPath: [DCQLClaimValue]]], sdJwtDocuments: [Document.ID: String]) {
+		self.sdJwtDocuments = sdJwtDocuments
 		self.credentials = credentials
 		self.claimPaths = claimPaths
 		self.claimValues = claimValues

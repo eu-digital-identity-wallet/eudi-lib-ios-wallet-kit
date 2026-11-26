@@ -22,6 +22,8 @@ import Logging
 import eudi_lib_sdjwt_swift
 import SwiftyJSON
 import OpenID4VCI
+import struct OpenID4VP.ClaimPath
+import enum OpenID4VP.ClaimPathElement
 import JOSESwift
 
 public final class SdJwtUtils {
@@ -64,20 +66,36 @@ public final class SdJwtUtils {
 		let parser = CompactParser()
 		guard let serString = String(data: docData, encoding: .utf8) else { logger.error("Failed to convert document data to UTF8 string"); return nil}
 		guard let sdJwt = try? parser.getSignedSdJwt(serialisedString: serString) else { logger.error("Failed to parse serialized SDJWT"); return nil }
+		return recreateSdJwtClaims(sdJwt)
+	}
+
+	static func presentedClaimPaths(_ sdJwt: SignedSDJWT) -> [ClaimPath: Bool]? {
+		var paths: [ClaimPath: Bool] = [:]
+		guard recreateSdJwtClaims(sdJwt, visit: { path, isContainer in
+			if !path.isEmpty { paths[ClaimPath(path)] = isContainer }
+		}) != nil else { return nil }
+		return paths
+	}
+
+	private static func recreateSdJwtClaims(
+		_ sdJwt: SignedSDJWT, visit: (([ClaimPathElement], Bool) -> Void)? = nil
+	) -> (json: JSON, hashingAlg: String)? {
 		var recreatedClaims: JSON?; var hashingAlg: String?
 		do {
 			let result = try sdJwt.recreateClaims()
 			let (_, payload, _) = extractJWTParts(sdJwt.jwt.compactSerialization)
 			guard let paylodData = Data(base64URLEncoded: payload), let payload = try? JSON(data: paylodData) else { logger.error("Failed to base64url decode payload"); return nil }
 			hashingAlg = try payload.extractDigestAlgorithm()
-			recreatedClaims = resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: hashingAlg ?? "sha-256")
+			recreatedClaims = resolveNestedSdClaims(result.recreatedClaims, disclosures: sdJwt.disclosures, hashingAlg: hashingAlg ?? "sha-256", visit: visit)
 		} catch { logger.error("Failed to recreate claims from SDJWT: \(error)") }
 		guard let recreatedClaims, let hashingAlg else { return nil }
 		return (recreatedClaims, hashingAlg)
 	}
 
 	/// Recursively resolve any remaining `_sd` digest arrays in the JSON tree using the raw disclosures.
-	static func resolveNestedSdClaims(_ json: JSON, disclosures: [String], hashingAlg: String) -> JSON {
+	static func resolveNestedSdClaims(
+		_ json: JSON, disclosures: [String], hashingAlg: String, visit: (([ClaimPathElement], Bool) -> Void)? = nil
+	) -> JSON {
 		// Build a map from base64url-encoded hash → decoded disclosure JSON
 		var hashToDisclosure: [String: JSON] = [:]
 		for disclosure in disclosures {
@@ -85,10 +103,14 @@ public final class SdJwtUtils {
 			guard let decoded = Data(base64URLEncoded: disclosure), let dJson = try? JSON(data: decoded) else { continue }
 			hashToDisclosure[hash] = dJson
 		}
-		return resolveNode(json, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+		return resolveNode(json, hashToDisclosure: hashToDisclosure, path: [], visit: visit)
 	}
 
-	private static func resolveNode(_ json: JSON, hashToDisclosure: [String: JSON], hashingAlg: String) -> JSON {
+	private static func resolveNode(
+		_ json: JSON, hashToDisclosure: [String: JSON], path: [ClaimPathElement],
+		visit: (([ClaimPathElement], Bool) -> Void)?
+	) -> JSON {
+		visit?(path, json.type == .dictionary || json.type == .array)
 		switch json.type {
 		case .dictionary:
 			var dict = json.dictionaryValue
@@ -108,11 +130,12 @@ public final class SdJwtUtils {
 			// Recursively resolve children
 			var result = JSON([:])
 			for (key, value) in dict {
-				result[key] = resolveNode(value, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+				result[key] = resolveNode(value, hashToDisclosure: hashToDisclosure, path: path + [.claim(name: key)], visit: visit)
 			}
 			return result
 		case .array:
-			let resolved = json.arrayValue.compactMap { element -> JSON? in
+			let resolved = json.arrayValue.enumerated().compactMap { index, element -> JSON? in
+				let elementPath = path + [.arrayElement(index: index)]
 				// Selectively disclosable array elements use {"...": "<digest>"}.
 				// If a matching disclosure exists, replace the element with its disclosed value.
 				// If no matching disclosure exists, the element is undisclosed and must be omitted.
@@ -120,9 +143,9 @@ public final class SdJwtUtils {
 					guard let disclosure = hashToDisclosure[dots], disclosure.arrayValue.count >= 2 else {
 						return nil
 					}
-					return resolveNode(disclosure[1], hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+					return resolveNode(disclosure[1], hashToDisclosure: hashToDisclosure, path: elementPath, visit: visit)
 				}
-				return resolveNode(element, hashToDisclosure: hashToDisclosure, hashingAlg: hashingAlg)
+				return resolveNode(element, hashToDisclosure: hashToDisclosure, path: elementPath, visit: visit)
 			}
 			return JSON(resolved)
 		default:

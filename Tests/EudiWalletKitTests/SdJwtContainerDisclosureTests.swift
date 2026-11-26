@@ -2,6 +2,8 @@ import CryptoKit
 import Foundation
 import MdocDataModel18013
 import MdocDataTransfer18013
+import OpenID4VP
+import struct OpenID4VP.ClaimPath
 import SwiftyJSON
 import Testing
 import eudi_lib_sdjwt_swift
@@ -53,6 +55,47 @@ struct SdJwtContainerDisclosureTests {
         #expect(element.docClaim?.style == "profile-style")
     }
 
+    @Test("Over-asking uses the children revealed by an SD-JWT container request")
+    func containerPolicy() throws {
+        let fixture = try makeFixture()
+        try expectPolicy(fixture, requested: [["place_of_birth"]], allowed: [["place_of_birth", "locality"]], warning: false)
+        try expectPolicy(fixture, requested: [["place_of_birth"]], allowed: [["nationalities"]], warning: true)
+        try expectPolicy(fixture, requested: [["place_of_birth"], ["place_of_birth", "region"]],
+                         allowed: [["place_of_birth", "locality"]], warning: true)
+        try expectPolicy(fixture, requested: [["profile"]], allowed: [["profile", "details", "hidden"]], warning: true)
+        try expectPolicy(fixture, requested: [["profile"]], allowed: [["profile", "details", "visible"]], warning: false)
+        try expectPolicy(fixture, requested: [["nationalities"]], allowed: [["nationalities", 0]], warning: false)
+        try expectPolicy(fixture, requested: [["mixed"]], allowed: [["mixed", 0]], warning: true)
+        try expectPolicy(fixture, requested: [["mixed"]], allowed: [["mixed", 1]], warning: false)
+    }
+
+    private func expectPolicy(_ fixture: Fixture, requested: [[String]], allowed: [[Any]], warning: Bool,
+                              sourceLocation: SourceLocation = #_sourceLocation) throws {
+        let policyPaths = try allowed.map { path in
+            try JSONDecoder().decode(MdocDataModel18013.ClaimPath.self, from: JSONSerialization.data(withJSONObject: path))
+        }
+        let policy = WrpRegistrationPolicy(
+            entitlements: [], sub: "test", country: "EU", policyID: [],
+            credentials: [PolicyCredential(
+                format: "dc+sd-jwt", meta: PolicyCredentialMeta(vctValues: ["pid"], doctypeValue: nil),
+                claim: policyPaths.map { PolicyClaim(path: $0) })],
+            purpose: [], registryURI: "https://example.test", certificatePolicy: "test",
+            srvDescriptions: [], supportURI: "https://example.test",
+            supervisoryAuthority: SupervisoryAuthority(email: "test@example.test", phone: "123", uri: "https://example.test"),
+            privacyPolicy: "https://example.test", name: "Test", infoURI: "https://example.test",
+            subLn: "test", iat: 0, status: nil
+        )
+        let claims = requested.map { path in
+            ClaimsQuery(id: nil, path: ClaimPath(path.map { .claim(name: $0) }), values: nil, intentToRetain: nil)
+        }
+        let selection = try CredentialSelection(credentialId: "pid", docType: "pid", queryId: QueryId(value: "q"),
+                                                optionId: "q-0", claimQueries: claims)
+        var warnings = [String: [PresentationPolicyViolation]]()
+        OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: ["q-0": [selection]], policy: policy,
+                                          sdJwtDocuments: ["pid": fixture.token.serialisation], wrpVpWarnings: &warnings)
+        #expect(!warnings.isEmpty == warning, sourceLocation: sourceLocation)
+    }
+
     private func extract(_ fixture: Fixture, paths: [[String]]) throws -> SdJwtElement {
         let elements = try #require(fixture.token.extractSdJwtElements(docId: "pid", vct: "pid", displayName: nil, docClaims: fixture.claims, itemsRequested: ["": paths.map { RequestItem(elementPath: $0) }]))
         return try #require(elements.sdJwtElements.first)
@@ -76,9 +119,12 @@ struct SdJwtContainerDisclosureTests {
         let birthplace = try disclose(["birthplace-salt", "place_of_birth", ["_sd": [country, locality, region]]])
         let nationality = try disclose(["nationality-salt", "LU"])
         let nationalities = try disclose(["nationalities-salt", "nationalities", [["...": nationality]]])
+        let mixedEntry = try disclose(["mixed-entry-salt", "private"])
+        let mixedValues: [Any] = [["...": mixedEntry], "visible"]
+        let mixed = try disclose(["mixed-salt", "mixed", mixedValues])
         let hidden = try disclose(["hidden-salt", "hidden", "secret"])
         let profile = try disclose(["profile-salt", "profile", ["details": ["visible": "included", "_sd": [hidden]]]])
-        let payload = try JSONSerialization.data(withJSONObject: ["_sd_alg": "sha-256", "_sd": [birthplace, nationalities, profile]]).base64URLEncodedString()
+        let payload = try JSONSerialization.data(withJSONObject: ["_sd_alg": "sha-256", "_sd": [birthplace, nationalities, profile, mixed]]).base64URLEncodedString()
         let header = Data(#"{"alg":"ES256"}"#.utf8).base64URLEncodedString()
         let signature = Data(repeating: 0, count: 64).base64URLEncodedString()
         let compact = "\(header).\(payload).\(signature)~\(disclosures.joined(separator: "~"))~"

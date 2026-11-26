@@ -495,11 +495,10 @@ extension OpenId4VpUtils {
 	
 	/// Validates that the request DCQL does not exceed the scope declared in the policy DCQL.
 	/// Issues warnings for any extra claims requested beyond what the policy permits.
-	/// - Parameters:
-	///   - dcql: The DCQL from the authorization request
-	///   - policyDcql: The DCQL declared in the WRPRC (permitted scope)
-	/// - Returns: Warnings for each extra claim path found in the request but not in the policy
-	static func validateDcqlPolicy(credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy, wrpVpWarnings: inout [String: [PresentationPolicyViolation]]) {
+	static func validateDcqlPolicy(
+		credentialSetOptions: CredentialSelectionSetOptions, policy: WrpRegistrationPolicy,
+		sdJwtDocuments: [Document.ID: String] = [:], wrpVpWarnings: inout [String: [PresentationPolicyViolation]]
+	) {
 		for (key, selectionSet) in credentialSetOptions {
 			var violations = [PresentationPolicyViolation]()
 			for selection in selectionSet {
@@ -525,17 +524,33 @@ extension OpenId4VpUtils {
 				let policyPaths: Set<ClaimPath> = Set(pclaims.map { policyClaim -> ClaimPath in
 					policyClaim.path.openID4VPClaimPath
 				})
-				let extraClaims = requestClaims.filter { requestClaim in
-					let claimPath = requestClaim.path
-					return !policyPaths.contains(where: { policyPath in policyPath.contains2(claimPath) })
+				let isCovered: (ClaimPath) -> Bool = { path in policyPaths.contains { $0.contains2(path) } }
+				var extraPaths = requestClaims.map(\.path).filter { !isCovered($0) }
+				if !extraPaths.isEmpty, let document = sdJwtDocuments[selection.credentialId],
+				   let projectedPaths = projectedSdJwtPaths(document, requestClaims: requestClaims) {
+					// A parent may only provide the structure for registered descendants.
+					// Check what it actually reveals, including children embedded in its disclosure.
+					extraPaths.removeAll { requested in
+						let exposed = projectedPaths.filter { requested.contains2($0.key) }
+						guard exposed.keys.contains(where: { $0.value.count == requested.value.count }) else { return false }
+						return exposed.allSatisfy { path, isContainer in
+							isCovered(path) || (isContainer && policyPaths.contains { path.contains2($0) })
+						}
+					}
 				}
-				if !extraClaims.isEmpty {
-					let extraPaths = extraClaims.map(\.path)
+				if !extraPaths.isEmpty {
 					violations.append(PresentationPolicyViolation(reason: .overAskedClaims(docType: selection.docType, claims: extraPaths), message: "Credential '\(selection.docType)' requests claims beyond policy scope. Extra fields: [\(extraPaths.map { $0.value.map(\.description).joined(separator: "/") }.joined(separator: ", "))]"))
 				}
 			}
 			if !violations.isEmpty { wrpVpWarnings[key] = violations }
 		}
+	}
+
+	private static func projectedSdJwtPaths(_ document: String, requestClaims: [ClaimsQuery]) -> [ClaimPath: Bool]? {
+		let query = Set(requestClaims.compactMap { parseClaim($0, .sdjwt)?.1.claimPath })
+		guard let token = try? CompactParser().getSignedSdJwt(serialisedString: document),
+			  let presented = try? token.present(query: query) else { return nil }
+		return SdJwtUtils.presentedClaimPaths(presented)
 	}
 
 	/// Resolves claims for a specific credential query and credential
