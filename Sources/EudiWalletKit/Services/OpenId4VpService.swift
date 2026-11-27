@@ -220,8 +220,11 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 					validatedCertificate == certificate else {
 					let message = "Required reader certificate authentication was not established"
 					readerCertificateValidationMessage = message
-					// tells the verifier it is not trusted
-					await dispatchRequestError(ValidationError.untrustedCertificateChain(message), resolved: rrd)
+					if openID4VpConfig.errorDispatchPolicy == .allClients {
+						await dispatchRequestError(ValidationError.untrustedCertificateChain(message), resolved: rrd)
+					} else {
+						logger.info("Error response to unauthenticated verifier suppressed by errorDispatchPolicy")
+					}
 					throw WalletError(description: message, code: .trustError)
 				}
 			case .preRegistered: isX509 = false // The selected registered key has verified the JAR.

@@ -105,6 +105,34 @@ struct OpenId4VpAuthenticationTests {
         }
     }
 
+    @Test("Only authenticated clients policy suppresses the error when wallet trust evaluation is bypassed")
+    func suppressesBypassedTrustErrorForOnlyAuthenticatedClients() async throws {
+        let fixture = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: true)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                anchors: [fixture.der], errorDispatchPolicy: .onlyAuthenticatedClients)
+            // Same dependency regression as rejectsMissingTrustEvaluation, but nothing may reach the verifier.
+            service.chainVerifier = { _ in true }
+            await assertRejected(service, network: network)
+            #expect(service.readerAuthenticationStatus == .failed)
+        }
+    }
+
+    @Test("Only authenticated clients policy suppresses the error for a mismatched evaluated leaf")
+    func suppressesMismatchedLeafErrorForOnlyAuthenticatedClients() async throws {
+        let fixture = try CertificateFixture()
+        let other = try CertificateFixture()
+        for clientId in fixture.clientIds {
+            let token = try fixture.token(clientId: clientId, validSignature: true)
+            let (service, network) = try await makeService(clientId: clientId, token: token,
+                readerTrustPolicy: .warning, errorDispatchPolicy: .onlyAuthenticatedClients)
+            let validate = service.chainVerifier
+            service.chainVerifier = { _ in await validate([other.der.base64EncodedString()]) }
+            await assertRejected(service, network: network)
+        }
+    }
+
     @Test("Issuer warning policy does not relax reader certificate trust")
     func keepsIssuerAndReaderPoliciesSeparate() async throws {
         let fixture = try CertificateFixture()
@@ -620,7 +648,9 @@ struct OpenId4VpAuthenticationTests {
     private func makeService(clientId: String, token: String?, byReference: Bool = false,
                              anchors: [Data] = [], registration: RegistrationMode = .disabled,
                              readerTrustPolicy: TrustPolicy = .enforce, defaultPolicy: TrustPolicy = .enforce,
-                             clientIdSchemes: [ClientIdScheme]? = nil) async throws -> (OpenId4VpService, RequestNetworking) {
+                             clientIdSchemes: [ClientIdScheme]? = nil,
+                             errorDispatchPolicy: ErrorDispatchPolicy = .allClients
+    ) async throws -> (OpenId4VpService, RequestNetworking) {
         let registrationPolicy: TrustPolicy = registration == .warning ? .warning : .enforce
         #if canImport(EudiEtsi1196x2)
         let trust = TrustConfiguration(trustSource: .staticList(.init(rootCertificates: anchors, method: .directTrust)), defaultPolicy: defaultPolicy, readerTrustPolicy: readerTrustPolicy, wrprcVpTrustPolicy: registrationPolicy)
@@ -648,7 +678,8 @@ struct OpenId4VpAuthenticationTests {
         }
         let network = RequestNetworking(token: token ?? "")
         let service = try await OpenId4VpService(parameters: parameters, qrCode: Data(url.string!.utf8),
-            openID4VpConfig: .init(clientIdSchemes: clientIdSchemes, validateRegistrationCertificate: registration != .disabled), networking: network,
+            openID4VpConfig: .init(clientIdSchemes: clientIdSchemes, validateRegistrationCertificate: registration != .disabled,
+                errorDispatchPolicy: errorDispatchPolicy), networking: network,
             trustConfig: trust, wrpRegistrationValidator: .init(trustConfig: trust))
         return (service, network)
     }
