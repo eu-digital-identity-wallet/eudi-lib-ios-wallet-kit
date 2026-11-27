@@ -82,7 +82,7 @@ struct OpenId4VpResponseCoverageTests {
     private func makeService() async throws -> OpenId4VpService {
         let trustConfig: TrustConfiguration
         #if canImport(EudiEtsi1196x2)
-        trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+        trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning)
         #else
         trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
         #endif

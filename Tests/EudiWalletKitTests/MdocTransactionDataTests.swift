@@ -173,7 +173,7 @@ extension MdocTransactionDataTests {
             .init(name: "dcql_query", value: query), .init(name: "transaction_data", value: String(decoding: try JSONEncoder().encode([transaction.encodedValue]), as: UTF8.self))
         ]
         #if canImport(EudiEtsi1196x2)
-        let trust = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trust = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trust = TrustConfiguration(rootIaca: [])
         #endif

@@ -211,7 +211,7 @@ struct CoverageEdgeTests {
 
     private func trustConfig() -> TrustConfiguration {
         #if canImport(EudiEtsi1196x2)
-        TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+        TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning)
         #else
         TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
         #endif

@@ -30,7 +30,7 @@ extension MetadataCacheTests.DeferredIssuerMetadataTests {
 		let storageService = TestDataStorageService()
 		let config = OpenId4VciConfiguration(credentialIssuerURL: issuerURL, clientId: "wallet-dev", requireDpop: false, issuerMetadataPolicy: .ignoreSigned)
 		#if canImport(EudiEtsi1196x2)
-		let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), defaultPolicy: .warning)
+		let trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource, defaultPolicy: .warning)
 		#else
 		let trustConfig = TrustConfiguration(rootIaca: [], defaultPolicy: .warning)
 		#endif

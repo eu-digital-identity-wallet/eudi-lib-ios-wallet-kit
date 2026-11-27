@@ -132,7 +132,7 @@ public actor WrpVpRegistrationValidator {
 			Self.validateEntitlements(policy: policy, expectedEntitlement: Self.serviceProviderEntitlement, wrpVpWarnings: &wrpVpWarnings)
 			guard let dcqlQueryable else { throw WalletError(description: "DCQL queryable not computed", code: .internalError) }
 			let options = try OpenId4VpUtils.resolveDcql(dcql, queryable: dcqlQueryable)
-			OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, wrpVpWarnings: &wrpVpWarnings)
+			OpenId4VpUtils.validateDcqlPolicy(credentialSetOptions: options, policy: policy, sdJwtDocuments: dcqlQueryable.sdJwtDocuments, wrpVpWarnings: &wrpVpWarnings)
 			let policyViolationWarnings = wrpVpWarnings.mapValues { $0.map { PolicyViolation($0.message) } }
 			return .granted(warnings: policyViolationWarnings)
 		} catch {

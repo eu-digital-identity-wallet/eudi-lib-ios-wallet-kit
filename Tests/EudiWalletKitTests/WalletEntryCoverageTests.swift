@@ -132,7 +132,7 @@ struct WalletEntryCoverageTests {
 
     private func makeWallet(serviceName: String = "wallet-entry-\(UUID().uuidString)") throws -> EudiWallet {
         #if canImport(EudiEtsi1196x2)
-        let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef))
+        let trustConfig = TrustConfiguration(trustSource: ReferenceTrustTestFixtures.trustSource)
         #else
         let trustConfig = TrustConfiguration(rootIaca: [])
         #endif

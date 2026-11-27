@@ -107,11 +107,13 @@ The [EudiWallet](https://eu-digital-identity-wallet.github.io/eudi-lib-ios-walle
 
 The wallet developer can customize cryptographic key operations by passing `SecureArea` instances to the wallet, otherwise the wallet-kit creates 'SecureEnclave' (default) and 'Software' secure areas. The wallet developer can specify key create options per doc-type such as curve type, secure area name, and key unlock policy.
 
+Supply the DER-encoded LoTE signer or issuing CA certificates as `loteSignerTrustAnchors` (`[Data]`). For the EUDI reference environment, use the `pidissuerca02_eu.der` development CA.
+
 ```swift
 // Basic initialization with EudiWalletConfiguration and TrustConfiguration
 let config = EudiWalletConfiguration(serviceName: "my_wallet_app")
 let trustConfig = TrustConfiguration(
-    trustSource: .etsi(.eudiRef),
+    trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)),
 )
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 
@@ -165,7 +167,7 @@ A `TrustConfiguration` is built from one or more `TrustSource` values. A trust s
 
 ```swift
 // ETSI LoTE trust source using a ready-made environment preset
-let trustSource: TrustSource = .etsi(.eudiRef)   // or .etsi(.digiTrust)
+let trustSource: TrustSource = .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors))
 
 // Static, bundled anchors (no LoTE download, no network)
 let staticSource: TrustSource = .staticList(
@@ -218,7 +220,7 @@ let issuerConfigurations: [String: OpenId4VciConfiguration] = [
 ]
 
 let config = EudiWalletConfiguration()
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(
     eudiWalletConfig: config,
     trustConfig: trustConfig,
@@ -277,7 +279,7 @@ let config = OpenId4VciConfiguration(
 )
 
 let walletConfig = EudiWalletConfiguration()
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(
     eudiWalletConfig: walletConfig,
     trustConfig: trustConfig,
@@ -557,7 +559,7 @@ The `TrustConfiguration` derives an `IssuerMetadataPolicy` for you from its `req
 ```swift
 // Require signed issuer metadata, validated against the trust configuration's anchors
 let trustConfig = TrustConfiguration(
-  trustSource: .etsi(.eudiRef),
+  trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)),
   fallbackTrustSource: nil,
   requireSignedMetadata: true
 )
@@ -659,7 +661,7 @@ Set it in `EudiWalletConfiguration` at initialization time, or update it on the 
 let config = EudiWalletConfiguration(
     bleTransferMode: .server  // default
 )
-let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef), fallbackTrustSource: nil)
+let trustConfig = TrustConfiguration(trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)), fallbackTrustSource: nil)
 let wallet = try! EudiWallet(eudiWalletConfig: config, trustConfig: trustConfig)
 wallet.bleTransferMode = .client
 ```
@@ -721,7 +723,7 @@ Trust for WRPRC validation is configured through `TrustConfiguration`:
 
 ```swift
 let trustConfig = TrustConfiguration(
-    trustSource: .etsi(.eudiRef),
+    trustSource: .etsi(.eudiRef(loteSignerTrustAnchors: loteSignerTrustAnchors)),
     fallbackTrustSource: nil,
     wrprcVpTrustPolicy: .enforce,  // presentation: .enforce (default) or .warning
     wrprcVciTrustPolicy: .enforce  // issuance: .enforce (default) or .warning
