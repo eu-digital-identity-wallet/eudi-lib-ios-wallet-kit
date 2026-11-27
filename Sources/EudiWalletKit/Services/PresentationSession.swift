@@ -202,7 +202,12 @@ public final class PresentationSession: @unchecked Sendable, ObservableObject {
 		do {
 			let request = try await presentationService.receiveRequest()
 			await presentationService.persistTransactionLog()
-			try await decodeRequest(request)
+			do {
+				try await decodeRequest(request)
+			} catch {
+				await (presentationService as? OpenId4VpService)?.dispatchUnsatisfiableRequest()
+				throw error
+			}
 			return request
 		} catch {
 			TransactionLogUtils.withResult(.notCompleted, reason: error.localizedDescription, transactionLog: &presentationService.transactionLog)
