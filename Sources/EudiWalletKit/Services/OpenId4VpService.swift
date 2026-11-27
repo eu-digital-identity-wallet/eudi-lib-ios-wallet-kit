@@ -262,6 +262,12 @@ public final class OpenId4VpService: @unchecked Sendable, PresentationService {
 		catch { logger.error("Failed to dispatch error response: \(error.localizedDescription)") }
 	}
 
+	func dispatchUnsatisfiableRequest() async {
+		guard let resolved = resolvedRequestData else { return }
+		await dispatchRequestError(ValidationError.negativeConsent, resolved: resolved)
+		resolvedRequestData = nil
+	}
+
 	private func handleRequestData(_ rrd: ResolvedRequestData) async throws -> [UserRequestInfo] {
 		wrpVerifierPolicy = await wrpRegistrationValidator.wrpVpRegistrationPolicy
 		self.resolvedRequestData = rrd

@@ -182,7 +182,7 @@ struct OpenId4VpAuthenticationTests {
         #expect(await network.posts == 1)
     }
 
-    @Test("A session that cannot decode a request cannot send a response")
+    @Test("A session that cannot decode a request reports it once and cannot send a response")
     @MainActor func rejectsSendingAfterSessionFailure() async throws {
         let fixture = try CertificateFixture()
         let token = try fixture.token(clientId: fixture.clientIds[0], validSignature: true)
@@ -191,10 +191,15 @@ struct OpenId4VpAuthenticationTests {
             documentKeyIndexes: [:], userAuthenticationRequired: false, localAuthenticationContext: ThreadSafeAuthContext())
         #expect(await session.receiveRequest() == nil)
         #expect(session.readerAuthenticationStatus == .failed)
+        #expect(session.uiError?.code == .noDocumentsAvailable)
+        #expect(await network.posts == 1)
+        #expect(await network.postBodies.last?.contains("error=access_denied") == true)
+        #expect(service.resolvedRequestData == nil)
         await #expect(throws: WalletError.self) {
             try await session.sendResponse(userAccepted: true, itemsToSend: [:])
         }
-        #expect(await network.posts == 0)
+        #expect(await network.posts == 1)
+        #expect(await network.postBodies.allSatisfy { !$0.contains("vp_token=") })
     }
 
     @Test("Session authentication covers every document's reader authentication")
